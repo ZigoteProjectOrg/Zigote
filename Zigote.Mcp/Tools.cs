@@ -38,7 +38,10 @@ public static class Tools
             "file and the UI hot-reloads in place. A cold build with the native engine can take " +
             "minutes — raise wait_seconds rather than concluding the launch failed.",
             Schema: Schema(
-                Req(name: "project", prop: Prop(type: "string", description: ".csproj or its directory")),
+                Req(
+                    name: "project",
+                    prop: Prop(type: "string", description: ".csproj or its directory")
+                ),
                 Opt(name: "watch", prop: Prop(type: "boolean", description: "hot reload on save")),
                 Opt(
                     name: "preview",
@@ -70,7 +73,9 @@ public static class Tools
 
         ("stop", new Tool(
             Description: "Stop an app `launch` started — by pid, or all of them.",
-            Schema: Schema(Opt(name: "pid", prop: Prop(type: "integer", description: "omit for all"))),
+            Schema: Schema(
+                Opt(name: "pid", prop: Prop(type: "integer", description: "omit for all"))
+            ),
             Run: args => Text(AppHost.Stop(Int(args: args, name: "pid")))
         )),
 
@@ -79,19 +84,29 @@ public static class Tools
             "What a launched app printed — build errors, log output, unhandled exceptions. Works " +
             "after the app exits, which is how a crash is diagnosed. Repeated lines are folded.",
             Schema: Schema(
-                Opt(name: "lines", prop: Prop(type: "integer", description: "trailing lines (default 50, max 400)")),
+                Opt(
+                    name: "lines",
+                    prop: Prop(type: "integer", description: "trailing lines (default 50, max 400)")
+                ),
                 Opt(
                     name: "filter",
                     prop: Prop(
                         type: "string",
-                        description: "keep only lines matching this case-insensitive regex, e.g. 'error|exception'"
+                        description:
+                        "keep only lines matching this case-insensitive regex, e.g. 'error|exception'"
                     )
                 ),
                 Opt(
                     name: "new_only",
-                    prop: Prop(type: "boolean", description: "only lines printed since the previous `logs` call")
+                    prop: Prop(
+                        type: "boolean",
+                        description: "only lines printed since the previous `logs` call"
+                    )
                 ),
-                Opt(name: "pid", prop: Prop(type: "integer", description: "default: most recent launch"))
+                Opt(
+                    name: "pid",
+                    prop: Prop(type: "integer", description: "default: most recent launch")
+                )
             ),
             Run: args => Text(
                 AppHost.Logs(
@@ -119,7 +134,13 @@ public static class Tools
             "trees, find, tap, type, scroll and the other per-window tools at that window; " +
             "select 0 goes back to the main window. Theme, locale, stats and resize stay app-wide.",
             Schema: Schema(
-                Opt(name: "select", prop: Prop(type: "integer", description: "window id to address from now on; 0 = main")),
+                Opt(
+                    name: "select",
+                    prop: Prop(
+                        type: "integer",
+                        description: "window id to address from now on; 0 = main"
+                    )
+                ),
                 PortProp()
             ),
             Run: Windows
@@ -133,7 +154,10 @@ public static class Tools
             Schema: Schema(
                 Opt(
                     name: "label",
-                    prop: Prop(type: "string", description: "crop to the widget with this semantic label")
+                    prop: Prop(
+                        type: "string",
+                        description: "crop to the widget with this semantic label"
+                    )
                 ),
                 Opt(
                     name: "region",
@@ -145,7 +169,10 @@ public static class Tools
                 ),
                 Opt(
                     name: "scale",
-                    prop: Prop(type: "number", description: "pixel density 0.1–4 (default 1; 2 to read small text)")
+                    prop: Prop(
+                        type: "number",
+                        description: "pixel density 0.1–4 (default 1; 2 to read small text)"
+                    )
                 ),
                 PortProp()
             ),
@@ -159,9 +186,21 @@ public static class Tools
             "tree by type name or description and returns ids for `widget_props`. One line per " +
             "match: what it is, its tappable center, its size.",
             Schema: Schema(
-                Opt(name: "label", prop: Prop(type: "string", description: "substring of a label or value")),
-                Opt(name: "role", prop: Prop(type: "string", description: "e.g. Button, Text, Slider, TextField")),
-                Opt(name: "type", prop: Prop(type: "string", description: "widget type substring, e.g. 'TextField'")),
+                Opt(
+                    name: "label",
+                    prop: Prop(type: "string", description: "substring of a label or value")
+                ),
+                Opt(
+                    name: "role",
+                    prop: Prop(type: "string", description: "e.g. Button, Text, Slider, TextField")
+                ),
+                Opt(
+                    name: "type",
+                    prop: Prop(
+                        type: "string",
+                        description: "widget type substring, e.g. 'TextField'"
+                    )
+                ),
                 PortProp()
             ),
             Run: Find
@@ -173,9 +212,15 @@ public static class Tools
             "first when it is offscreen. An ambiguous label is an error listing the matches; " +
             "narrow with role or index.",
             Schema: Schema(
-                Req(name: "label", prop: Prop(type: "string", description: "substring of the label or value")),
+                Req(
+                    name: "label",
+                    prop: Prop(type: "string", description: "substring of the label or value")
+                ),
                 Opt(name: "role", prop: Prop(type: "string", description: "e.g. 'Button'")),
-                Opt(name: "index", prop: Prop(type: "integer", description: "which match, 0-based")),
+                Opt(
+                    name: "index",
+                    prop: Prop(type: "integer", description: "which match, 0-based")
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -187,9 +232,15 @@ public static class Tools
             "Wait until a label appears (or, with gone=true, disappears) — async dialogs, " +
             "loading pages, toasts. With no label, waits until animations have finished.",
             Schema: Schema(
-                Opt(name: "label", prop: Prop(type: "string", description: "substring of the label or value")),
+                Opt(
+                    name: "label",
+                    prop: Prop(type: "string", description: "substring of the label or value")
+                ),
                 Opt(name: "role", prop: Prop(type: "string", description: "narrow by role")),
-                Opt(name: "gone", prop: Prop(type: "boolean", description: "wait for it to disappear")),
+                Opt(
+                    name: "gone",
+                    prop: Prop(type: "boolean", description: "wait for it to disappear")
+                ),
                 Opt(name: "timeout_seconds", prop: Prop(type: "number", description: "default 10")),
                 ShotProp(),
                 PortProp()
@@ -223,11 +274,23 @@ public static class Tools
             "Single-child wrappers share a line (A > B > C) and bounds are printed only where " +
             "they change. For layout debugging; scope it with root and max_depth.",
             Schema: Schema(
-                Opt(name: "root", prop: Prop(type: "integer", description: "only the subtree under this widget id")),
-                Opt(name: "max_depth", prop: Prop(type: "integer", description: "outline levels to show")),
+                Opt(
+                    name: "root",
+                    prop: Prop(
+                        type: "integer",
+                        description: "only the subtree under this widget id"
+                    )
+                ),
+                Opt(
+                    name: "max_depth",
+                    prop: Prop(type: "integer", description: "outline levels to show")
+                ),
                 Opt(
                     name: "ids",
-                    prop: Prop(type: "boolean", description: "print #id per widget, for `widget_props`")
+                    prop: Prop(
+                        type: "boolean",
+                        description: "print #id per widget, for `widget_props`"
+                    )
                 ),
                 PortProp()
             ),
@@ -239,7 +302,10 @@ public static class Tools
             Schema: Schema(
                 Req(
                     name: "id",
-                    prop: Prop(type: "integer", description: "from `find type=…`, `widget_at` or `widget_tree ids=true`")
+                    prop: Prop(
+                        type: "integer",
+                        description: "from `find type=…`, `widget_at` or `widget_tree ids=true`"
+                    )
                 ),
                 PortProp()
             ),
@@ -263,7 +329,9 @@ public static class Tools
                     y: Num(args: args, name: "y"),
                     withPath: true
                 );
-                return Text(hit.Length > 0 ? hit : "this app predates the `hit` command — rebuild it");
+                return Text(
+                    hit.Length > 0 ? hit : "this app predates the `hit` command — rebuild it"
+                );
             }
         )),
 
@@ -274,7 +342,10 @@ public static class Tools
             Schema: Schema(
                 Req(name: "x", prop: Prop(type: "number", description: "layout-point x")),
                 Req(name: "y", prop: Prop(type: "number", description: "layout-point y")),
-                Opt(name: "button", prop: Prop(type: "string", description: "left (default), right, middle")),
+                Opt(
+                    name: "button",
+                    prop: Prop(type: "string", description: "left (default), right, middle")
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -291,8 +362,14 @@ public static class Tools
                 Req(name: "from_y", prop: Prop(type: "number", description: "start y")),
                 Req(name: "to_x", prop: Prop(type: "number", description: "end x")),
                 Req(name: "to_y", prop: Prop(type: "number", description: "end y")),
-                Opt(name: "touch", prop: Prop(type: "boolean", description: "a finger instead of the mouse")),
-                Opt(name: "steps", prop: Prop(type: "integer", description: "move events (default 8)")),
+                Opt(
+                    name: "touch",
+                    prop: Prop(type: "boolean", description: "a finger instead of the mouse")
+                ),
+                Opt(
+                    name: "steps",
+                    prop: Prop(type: "integer", description: "move events (default 8)")
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -304,10 +381,22 @@ public static class Tools
             "Wheel-scroll whatever is under a point. Positive dy scrolls DOWN (reveals content " +
             "below), negative up; positive dx scrolls right. One tick is about 40 points.",
             Schema: Schema(
-                Req(name: "x", prop: Prop(type: "number", description: "a point over the scrollable")),
-                Req(name: "y", prop: Prop(type: "number", description: "a point over the scrollable")),
-                Opt(name: "dy", prop: Prop(type: "number", description: "vertical ticks, + is down")),
-                Opt(name: "dx", prop: Prop(type: "number", description: "horizontal ticks, + is right")),
+                Req(
+                    name: "x",
+                    prop: Prop(type: "number", description: "a point over the scrollable")
+                ),
+                Req(
+                    name: "y",
+                    prop: Prop(type: "number", description: "a point over the scrollable")
+                ),
+                Opt(
+                    name: "dy",
+                    prop: Prop(type: "number", description: "vertical ticks, + is down")
+                ),
+                Opt(
+                    name: "dx",
+                    prop: Prop(type: "number", description: "horizontal ticks, + is right")
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -335,7 +424,10 @@ public static class Tools
             "Press and release one key with optional modifiers — shortcuts (cmd+S), navigation " +
             "(Tab, Down, Enter), dismissal (Escape).",
             Schema: Schema(
-                Req(name: "key", prop: Prop(type: "string", description: "e.g. Enter, Escape, Tab, Down, A, F5")),
+                Req(
+                    name: "key",
+                    prop: Prop(type: "string", description: "e.g. Enter, Escape, Tab, Down, A, F5")
+                ),
                 Opt(
                     name: "modifiers",
                     prop: Prop(type: "string", description: "'+'-joined: shift, ctrl, alt, cmd")
@@ -356,7 +448,8 @@ public static class Tools
                     name: "steps",
                     prop: Prop(
                         type: "array",
-                        description: "[{\"tool\": \"tap_widget\", \"args\": {\"label\": \"Save\"}}, …]",
+                        description:
+                        "[{\"tool\": \"tap_widget\", \"args\": {\"label\": \"Save\"}}, …]",
                         items: "object"
                     )
                 )
@@ -403,7 +496,13 @@ public static class Tools
             Schema: Schema(
                 Opt(name: "width", prop: Prop(type: "number", description: "1–8192")),
                 Opt(name: "height", prop: Prop(type: "number", description: "1–8192")),
-                Opt(name: "window", prop: Prop(type: "boolean", description: "resize the OS window, not just the layout")),
+                Opt(
+                    name: "window",
+                    prop: Prop(
+                        type: "boolean",
+                        description: "resize the OS window, not just the layout"
+                    )
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -432,7 +531,10 @@ public static class Tools
         ("set_locale", new Tool(
             Description: "Switch the app's locale. Needs the app to use a LocalizationsScope.",
             Schema: Schema(
-                Req(name: "locale", prop: Prop(type: "string", description: "a tag from `locales`, e.g. 'pt-BR'")),
+                Req(
+                    name: "locale",
+                    prop: Prop(type: "string", description: "a tag from `locales`, e.g. 'pt-BR'")
+                ),
                 ShotProp(),
                 PortProp()
             ),
@@ -458,7 +560,10 @@ public static class Tools
             "self/total ms, plus the path of a Chrome-Trace JSON (Perfetto). `stats` says " +
             "whether frames are healthy; this says where the time goes. Blocks ~2 s by default.",
             Schema: Schema(
-                Opt(name: "frames", prop: Prop(type: "integer", description: "1–600 (default 120)")),
+                Opt(
+                    name: "frames",
+                    prop: Prop(type: "integer", description: "1–600 (default 120)")
+                ),
                 PortProp()
             ),
             Run: Profile
@@ -582,7 +687,11 @@ public static class Tools
 
         return new JsonObject {
             ["content"] = new JsonArray(
-                ShotContent(port: port, scale: Num(args: args, name: "scale", fallback: 1), crop: crop)
+                ShotContent(
+                    port: port,
+                    scale: Num(args: args, name: "scale", fallback: 1),
+                    crop: crop
+                )
             ),
         };
     }
@@ -612,7 +721,8 @@ public static class Tools
                     !Has(node: node, field: "desc", needle: type)) continue;
                 if (total++ >= MaxMatches) continue;
                 (double cx, double cy) = Center(node);
-                lines.Append('\n').Append(S(node: node, field: "type")).Append('#').Append(node["id"]);
+                lines.Append('\n').Append(S(node: node, field: "type")).Append('#')
+                    .Append(node["id"]);
                 if (S(node: node, field: "desc") is { } desc) lines.Append(' ').Append(desc);
                 lines.Append($" @{F(cx)},{F(cy)} {Dim(node)}");
             }
@@ -667,9 +777,19 @@ public static class Tools
         for (int attempt = 0; attempt < 12 && Offscreen(node: chosen, w: w, h: h); attempt++)
         {
             (double cx, double cy) = Center(chosen);
-            double px = cx >= 0 && cx <= w ? cx : Math.Clamp(value: cx, min: w * 0.25, max: w * 0.75);
-            double py = cy >= 0 && cy <= h ? cy : Math.Clamp(value: cy, min: h * 0.25, max: h * 0.75);
-            WheelAt(port: port, x: px, y: py, right: Ticks(cx - px), down: Ticks(cy - py));
+            double px = cx >= 0 && cx <= w
+                ? cx
+                : Math.Clamp(value: cx, min: w * 0.25, max: w * 0.75);
+            double py = cy >= 0 && cy <= h
+                ? cy
+                : Math.Clamp(value: cy, min: h * 0.25, max: h * 0.75);
+            WheelAt(
+                port: port,
+                x: px,
+                y: py,
+                right: Ticks(cx - px),
+                down: Ticks(cy - py)
+            );
             Settle(port);
 
             (hits, w, h) = Matches();
@@ -762,7 +882,9 @@ public static class Tools
         if (Int(args: args, name: "root") is { } rootId)
         {
             tree = Nodes(tree).FirstOrDefault(n => n["id"]?.GetValue<long>() == rootId)
-                   ?? throw new ToolError($"no widget with id {rootId} — the tree may have been rebuilt");
+                   ?? throw new ToolError(
+                       $"no widget with id {rootId} — the tree may have been rebuilt"
+                   );
         }
 
         if (tree is not JsonObject root) return Text("(empty tree)");
@@ -781,11 +903,13 @@ public static class Tools
             if (lines++ >= MaxOutlineLines)
             {
                 if (lines == MaxOutlineLines + 1)
-                    outline.Append($"… cut at {MaxOutlineLines} lines — narrow with root or max_depth\n");
+                    outline.Append(
+                        $"… cut at {MaxOutlineLines} lines — narrow with root or max_depth\n"
+                    );
                 return;
             }
 
-            outline.Append(' ', depth);
+            outline.Append(value: ' ', repeatCount: depth);
             // A wrapper with one child says nothing a new line would add: the chain reads as
             // one row, and bounds appear only where a wrapper actually changed them.
             while (true)
@@ -793,7 +917,8 @@ public static class Tools
                 outline.Append(S(node: node, field: "type"));
                 if (Flag(args: args, name: "ids")) outline.Append('#').Append(node["id"]);
                 if (S(node: node, field: "desc") is { } desc) outline.Append(' ').Append(desc);
-                string bounds = $"[{F(N(node: node, field: "x"))},{F(N(node: node, field: "y"))} {Dim(node)}]";
+                string bounds =
+                    $"[{F(N(node: node, field: "x"))},{F(N(node: node, field: "y"))} {Dim(node)}]";
                 if (bounds != lastBounds) outline.Append(' ').Append(bounds);
                 lastBounds = bounds;
 
@@ -804,14 +929,16 @@ public static class Tools
             }
 
             var children = Children(node);
-            if (children.Count > 0 && Int(args: args, name: "max_depth") is { } max && depth + 1 >= max)
+            if (children.Count > 0 && Int(args: args, name: "max_depth") is { } max &&
+                depth + 1 >= max)
             {
                 outline.Append($" …+{Nodes(node).Count() - 1} below\n");
                 return;
             }
 
             outline.Append('\n');
-            foreach (var child in children) Write(node: child, depth: depth + 1, lastBounds: lastBounds);
+            foreach (var child in children)
+                Write(node: child, depth: depth + 1, lastBounds: lastBounds);
         }
     }
 
@@ -839,14 +966,20 @@ public static class Tools
         string at = $"{F(x)} {F(y)} {StrOpt(args: args, name: "button") ?? "left"}";
         // Asked before the press, so the answer is what the press is about to land on — the
         // click itself may well remove it.
-        string hit = HitText(port: port, x: x, y: y, withPath: false);
+        string hit = HitText(
+            port: port,
+            x: x,
+            y: y,
+            withPath: false
+        );
         // The hit is often an anonymous Pressable; the smallest labelled semantics node around
         // the point is what a person would call it.
         var named = Nodes(Tree(port: port, command: "semantics"))
             .Where(n => S(node: n, field: "label") is not null &&
                         x >= N(node: n, field: "x") && y >= N(node: n, field: "y") &&
                         x <= N(node: n, field: "x") + N(node: n, field: "w") &&
-                        y <= N(node: n, field: "y") + N(node: n, field: "h"))
+                        y <= N(node: n, field: "y") + N(node: n, field: "h")
+            )
             .MinBy(n => N(node: n, field: "w") * N(node: n, field: "h"));
         if (named is not null && hit.Length > 0)
             hit += $" ({S(node: named, field: "role")} '{S(node: named, field: "label")}')";
@@ -1011,7 +1144,8 @@ public static class Tools
                 result = Call(
                     new JsonObject {
                         ["name"] = name,
-                        ["arguments"] = ((steps[i] as JsonObject)?["args"] as JsonObject)?.DeepClone(),
+                        ["arguments"] =
+                            ((steps[i] as JsonObject)?["args"] as JsonObject)?.DeepClone(),
                     }
                 );
             }
@@ -1037,7 +1171,10 @@ public static class Tools
             if (!failed) continue;
             int skipped = steps.Count - i - 1;
             if (skipped > 0) content.Add(TextItem($"{skipped} later step(s) not run"));
-            return new JsonObject { ["content"] = content, ["isError"] = true };
+            return new JsonObject {
+                ["content"] = content,
+                ["isError"] = true,
+            };
         }
 
         return new JsonObject { ["content"] = content };
@@ -1070,17 +1207,21 @@ public static class Tools
                 if (lines++ >= MaxOutlineLines)
                 {
                     if (lines == MaxOutlineLines + 1)
-                        outline.Append($"… cut at {MaxOutlineLines} lines — use visible_only or `find`\n");
+                        outline.Append(
+                            $"… cut at {MaxOutlineLines} lines — use visible_only or `find`\n"
+                        );
                     return;
                 }
 
-                outline.Append(' ', depth).Append(Describe(node));
-                if (S(node: node, field: "hint") is { } hint) outline.Append(" (").Append(hint).Append(')');
+                outline.Append(value: ' ', repeatCount: depth).Append(Describe(node));
+                if (S(node: node, field: "hint") is { } hint)
+                    outline.Append(" (").Append(hint).Append(')');
                 string[] states = (S(node: node, field: "flags") ?? "")
                     .Split(separator: ", ", options: StringSplitOptions.RemoveEmptyEntries)
                     .Where(f => f != "None" && !f.EndsWith("able"))
                     .ToArray();
-                if (states.Length > 0) outline.Append(" [").AppendJoin(separator: ',', values: states).Append(']');
+                if (states.Length > 0)
+                    outline.Append(" [").AppendJoin(separator: ',', values: states).Append(']');
                 if (offscreen) outline.Append(" offscreen");
                 outline.Append('\n');
                 depth++;
@@ -1107,14 +1248,18 @@ public static class Tools
             return "";
         }
 
-        if (reply?["hit"] is not JsonObject hit) return $"nothing — no widget takes input at ({F(x)},{F(y)})";
+        if (reply?["hit"] is not JsonObject hit)
+            return $"nothing — no widget takes input at ({F(x)},{F(y)})";
         var text = new StringBuilder($"{S(node: hit, field: "type")}#{hit["id"]}");
         if (S(node: hit, field: "desc") is { } desc) text.Append(' ').Append(desc);
         if (!withPath) return text.ToString();
 
         text.Append($" [{F(N(node: hit, field: "x"))},{F(N(node: hit, field: "y"))} {Dim(hit)}]");
         if (reply["path"] is JsonArray { Count: > 0 } path)
-            text.Append(" in ").AppendJoin(separator: " < ", values: path.Select(p => p?.ToString()));
+            text.Append(" in ").AppendJoin(
+                separator: " < ",
+                values: path.Select(p => p?.ToString())
+            );
         return text.ToString();
     }
 
@@ -1154,7 +1299,8 @@ public static class Tools
         return cx < 0 || cy < 0 || (w > 0 && cx > w) || (h > 0 && cy > h);
     }
 
-    private static JsonNode? Parse(string json) => JsonNode.Parse(json: json, documentOptions: Deep);
+    private static JsonNode? Parse(string json) =>
+        JsonNode.Parse(json: json, documentOptions: Deep);
 
     private static JsonNode? Tree(int port, string command) =>
         Parse(Send(port: port, command: command))?["tree"];
@@ -1201,7 +1347,8 @@ public static class Tools
     {
         (double cx, double cy) = Center(node);
         var text = new StringBuilder(S(node: node, field: "role"));
-        if (S(node: node, field: "label") is { } label) text.Append(" '").Append(label).Append('\'');
+        if (S(node: node, field: "label") is { } label)
+            text.Append(" '").Append(label).Append('\'');
         if (S(node: node, field: "value") is { } value) text.Append(" =").Append(value);
         return text.Append($" @{F(cx)},{F(cy)}").ToString();
     }
@@ -1226,7 +1373,9 @@ public static class Tools
         // and replaced.
         string reply = AppHost.Query(port: port, command: "windows", timeoutSeconds: null);
         uint selected = SelectedWindow.GetValueOrDefault(port);
-        return Text($"{reply}\naddressing: {(selected == 0 ? "main window" : $"window {selected}")}");
+        return Text(
+            $"{reply}\naddressing: {(selected == 0 ? "main window" : $"window {selected}")}"
+        );
     }
 
     /// <summary>One command, one reply — with the app's own error surfaced as a tool error.</summary>
@@ -1292,7 +1441,8 @@ public static class Tools
         if (Flag(args: args, name: "screenshot"))
         {
             var content = result["content"]!.AsArray();
-            foreach (var item in ShotContent(port: Port(args), scale: 1, crop: null)) content.Add(item);
+            foreach (var item in ShotContent(port: Port(args), scale: 1, crop: null))
+                content.Add(item);
         }
 
         return result;
@@ -1319,7 +1469,8 @@ public static class Tools
         {
             pixels = ((int)(c.X * density), (int)(c.Y * density),
                 (int)Math.Ceiling(c.W * density), (int)Math.Ceiling(c.H * density));
-            size += $", cropped to [{F(c.X)},{F(c.Y)} {F(c.W)}x{F(c.H)}] — image pixels are offset by that origin";
+            size +=
+                $", cropped to [{F(c.X)},{F(c.Y)} {F(c.W)}x{F(c.H)}] — image pixels are offset by that origin";
         }
 
         if (density != 1) size += $", {F(density)}x density";
@@ -1345,7 +1496,8 @@ public static class Tools
     }
 
     private static string Str(JsonObject args, string name) =>
-        StrOpt(args: args, name: name) ?? throw new ToolError($"missing required argument '{name}'");
+        StrOpt(args: args, name: name) ??
+        throw new ToolError($"missing required argument '{name}'");
 
     private static string? StrOpt(JsonObject args, string name) => args[name]?.GetValue<string>();
 

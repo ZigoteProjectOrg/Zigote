@@ -16,9 +16,10 @@ public abstract class CommonVerb
     [Option(
         "engine",
         MetaValue = "path",
-        HelpText = "Build against a Zigote CHECKOUT at this path (ProjectReferences) instead of the " +
-                   "released packages. For engine development. A scaffold inside a checkout picks " +
-                   "this up on its own."
+        HelpText =
+            "Build against a Zigote CHECKOUT at this path (ProjectReferences) instead of the " +
+            "released packages. For engine development. A scaffold inside a checkout picks " +
+            "this up on its own."
     )]
     public string? Engine { get; set; }
 
@@ -67,9 +68,14 @@ public abstract class CommonVerb
     /// </summary>
     private static string? FindEnclosingCheckout(string start)
     {
-        for (var dir = new DirectoryInfo(Path.GetFullPath(start)); dir is not null; dir = dir.Parent)
+        for (var dir = new DirectoryInfo(Path.GetFullPath(start));
+             dir is not null;
+             dir = dir.Parent)
+        {
             if (IsCheckout(dir.FullName))
                 return dir.FullName;
+        }
+
         return null;
     }
 
@@ -93,12 +99,14 @@ public abstract class CommonVerb
             return full;
         }
 
-        for (var dir = new DirectoryInfo(Path.GetFullPath(start)); dir is not null; dir = dir.Parent)
+        for (var dir = new DirectoryInfo(Path.GetFullPath(start));
+             dir is not null;
+             dir = dir.Parent)
         {
             if (IsCheckout(dir.FullName)) return dir.FullName;
             // A sibling checkout is as common as an ancestor one: apps usually live next to the
             // engine, not inside it.
-            foreach (string sibling in (ReadOnlySpan<string>) ["Zigote", "zigote"])
+            foreach (string sibling in (ReadOnlySpan<string>)["Zigote", "zigote"])
             {
                 string candidate = Path.Combine(path1: dir.FullName, path2: sibling);
                 if (IsCheckout(candidate)) return candidate;
@@ -150,7 +158,11 @@ public sealed class CreateVerb : ScaffoldVerb
     )]
     public string First { get; set; } = "";
 
-    [Value(index: 1, MetaName = "name", HelpText = "The project name, when a template word was given.")]
+    [Value(
+        index: 1,
+        MetaName = "name",
+        HelpText = "The project name, when a template word was given."
+    )]
     public string? Second { get; set; }
 
     [Option(
@@ -208,15 +220,17 @@ public sealed class RunVerb : CommonVerb
 
     [Option(
         "no-reload",
-        HelpText = "Plain build-and-run. Faster frames (JIT, not the interpreter hot reload needs), " +
-                   "at the cost of a restart per edit."
+        HelpText =
+            "Plain build-and-run. Faster frames (JIT, not the interpreter hot reload needs), " +
+            "at the cost of a restart per edit."
     )]
     public bool NoReload { get; set; }
 
     [Option(
         "inspect",
-        HelpText = "Start the app with the inspect protocol on, and print the port it announces — " +
-                   "what the Rider plugin and the MCP server attach to. Desktop only."
+        HelpText =
+            "Start the app with the inspect protocol on, and print the port it announces — " +
+            "what the Rider plugin and the MCP server attach to. Desktop only."
     )]
     public bool Inspect { get; set; }
 
@@ -246,14 +260,19 @@ public sealed class BuildVerb : CommonVerb
         index: 0,
         MetaName = "target",
         Required = true,
-        HelpText = "apk | aab (Android), ipa (iOS, macOS only), exe (Windows), app (macOS), appimage (Linux)."
+        HelpText =
+            "apk | aab (Android), ipa (iOS, macOS only), exe (Windows), app (macOS), appimage (Linux)."
     )]
     public string Target { get; set; } = "";
 
     [Option("rid", MetaValue = "rid", HelpText = "Override the runtime identifier for the target.")]
     public string? Rid { get; set; }
 
-    [Option("out", MetaValue = "dir", HelpText = "Where to put the artifact. Default: artifacts/<rid>/ beside the app.")]
+    [Option(
+        "out",
+        MetaValue = "dir",
+        HelpText = "Where to put the artifact. Default: artifacts/<rid>/ beside the app."
+    )]
     public string? Output { get; set; }
 
     [Option(
@@ -284,7 +303,8 @@ public sealed class BuildVerb : CommonVerb
         "property",
         MetaValue = "name=value",
         Separator = ';',
-        HelpText = "Extra MSBuild properties, passed straight through (repeat or separate with ';')."
+        HelpText =
+            "Extra MSBuild properties, passed straight through (repeat or separate with ';')."
     )]
     public IEnumerable<string> Properties { get; set; } = [];
 
@@ -297,25 +317,35 @@ public sealed class BuildVerb : CommonVerb
 
     [Option(
         "debug",
-        HelpText = "Debug configuration, and no signing. For a build you install yourself, not one you ship."
+        HelpText =
+            "Debug configuration, and no signing. For a build you install yourself, not one you ship."
     )]
     public bool Debug { get; set; }
 
-    [Option("keystore", MetaValue = "path", HelpText = "Android: the keystore to sign a release with.")]
+    [Option(
+        "keystore",
+        MetaValue = "path",
+        HelpText = "Android: the keystore to sign a release with."
+    )]
     public string? Keystore { get; set; }
 
     [Option(
         "keystore-pass",
         MetaValue = "password",
-        HelpText = "Android: the keystore password. $ZIGOTE_KEYSTORE_PASSWORD is read when this is absent, " +
-                   "which keeps it out of your shell history."
+        HelpText =
+            "Android: the keystore password. $ZIGOTE_KEYSTORE_PASSWORD is read when this is absent, " +
+            "which keeps it out of your shell history."
     )]
     public string? KeystorePassword { get; set; }
 
     [Option("key-alias", MetaValue = "name", HelpText = "Android: the key inside the keystore.")]
     public string? KeyAlias { get; set; }
 
-    [Option("key-pass", MetaValue = "password", HelpText = "Android: the key's password, if it differs from the store's.")]
+    [Option(
+        "key-pass",
+        MetaValue = "password",
+        HelpText = "Android: the key's password, if it differs from the store's."
+    )]
     public string? KeyPassword { get; set; }
 
     [Option("team", MetaValue = "id", HelpText = "iOS: the Apple developer team id to sign with.")]
@@ -330,12 +360,17 @@ public sealed class TestVerb : CommonVerb
 {
     [Option(
         "update-goldens",
-        HelpText = "Accept the rendering as it is now: the harness overwrites the expected images " +
-                   "instead of failing (ZIGOTE_UPDATE_GOLDENS=1)."
+        HelpText =
+            "Accept the rendering as it is now: the harness overwrites the expected images " +
+            "instead of failing (ZIGOTE_UPDATE_GOLDENS=1)."
     )]
     public bool UpdateGoldens { get; set; }
 
-    [Option("filter", MetaValue = "expression", HelpText = "Passed through to `dotnet test --filter`.")]
+    [Option(
+        "filter",
+        MetaValue = "expression",
+        HelpText = "Passed through to `dotnet test --filter`."
+    )]
     public string? Filter { get; set; }
 }
 
@@ -369,7 +404,8 @@ public sealed class DeviceVerb : CommonVerb
     [Value(
         index: 0,
         MetaName = "action",
-        HelpText = "list (default) — attached devices; run — deploy and hot-reload; logs — this app's logcat."
+        HelpText =
+            "list (default) — attached devices; run — deploy and hot-reload; logs — this app's logcat."
     )]
     public string Action { get; set; } = "list";
 
@@ -381,8 +417,9 @@ public sealed class DeviceVerb : CommonVerb
 
     [Option(
         "no-reload",
-        HelpText = "Plain deploy-and-run. Faster frames (JIT, not the interpreter hot reload needs), " +
-                   "at the cost of a redeploy per edit."
+        HelpText =
+            "Plain deploy-and-run. Faster frames (JIT, not the interpreter hot reload needs), " +
+            "at the cost of a redeploy per edit."
     )]
     public bool NoReload { get; set; }
 
@@ -391,8 +428,9 @@ public sealed class DeviceVerb : CommonVerb
 
     [Option(
         "debug",
-        HelpText = "Start the app suspended and forward the Mono soft-debugger port, so a debugger " +
-                   "can attach before any app code runs."
+        HelpText =
+            "Start the app suspended and forward the Mono soft-debugger port, so a debugger " +
+            "can attach before any app code runs."
     )]
     public bool Debug { get; set; }
 
@@ -407,14 +445,16 @@ public sealed class DeviceVerb : CommonVerb
 
 [Verb(
     "doctor",
-    HelpText = "Check this machine for everything Zigote development needs, and say how to fix what is missing."
+    HelpText =
+        "Check this machine for everything Zigote development needs, and say how to fix what is missing."
 )]
 public sealed class DoctorVerb : CommonVerb
 {
     [Option(
         "fix",
-        HelpText = "Run the fixes this tool knows how to run (SDK workloads), after showing them. " +
-                   "Never runs anything without this flag, and never without asking."
+        HelpText =
+            "Run the fixes this tool knows how to run (SDK workloads), after showing them. " +
+            "Never runs anything without this flag, and never without asking."
     )]
     public bool Fix { get; set; }
 

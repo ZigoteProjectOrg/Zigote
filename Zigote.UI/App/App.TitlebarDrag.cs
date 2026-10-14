@@ -35,6 +35,7 @@ public partial class App
     // whatever thread the platform chose — a plain Dictionary can be torn by a concurrent write.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
         InteractiveTypeCache = new();
+
     private static bool _dragProviderInstalled;
 
     /// <summary>

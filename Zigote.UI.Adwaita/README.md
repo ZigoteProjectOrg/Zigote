@@ -187,14 +187,14 @@ new AdwColumnView<File>(files,
 ) { SelectionMode = AdwSelectionMode.Multiple, OnActivated = Open };
 ```
 
-| Widget | What it is |
-|---|---|
-| `AdwCalendar` | GtkCalendar: `‹ Month ›  ‹ Year ›` steppers over a six-week grid, weekday order and names from the culture, today in accent, an accent disc for the selection, marked days, `MinDate`/`MaxDate`. Arrows, Page Up/Down (Shift: a year), Home/End; months slide on `AdwMotion.Reveal`. |
-| `AdwTimePicker` | GNOME Clocks' vertical spinners — hours, minutes, AM/PM when the locale is 12-hour. Both wrap without carrying; digits type straight in and move on; the wheel spins it once it has focus. |
-| `AdwDateButton` / `AdwTimeButton` | The compact form (SwiftUI's compact `DatePicker`): the value in a button, the picker in a popover. |
-| `AdwDateRow` / `AdwTimeRow` | The same as boxed-list rows, laid out like `AdwComboRow`. |
-| `AdwColumnView<T>` | GtkColumnView: a sticky header over painted, clip-virtualized rows — a hundred thousand rows cost what is on screen. Click a title to sort (stable; on a worker thread past 20,000 rows), drag its edge to resize, ellipsized cells, single or multiple selection, keyboard navigation, `.data-table` density via `Compact`. |
-| `AdwPopover` | GtkPopover with any child: the popover card, arrow and motion every Adwaita popover uses; the child takes focus. |
+| Widget                            | What it is                                                                                                                                                                                                                                                                                                                   |
+|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AdwCalendar`                     | GtkCalendar: `‹ Month ›  ‹ Year ›` steppers over a six-week grid, weekday order and names from the culture, today in accent, an accent disc for the selection, marked days, `MinDate`/`MaxDate`. Arrows, Page Up/Down (Shift: a year), Home/End; months slide on `AdwMotion.Reveal`.                                         |
+| `AdwTimePicker`                   | GNOME Clocks' vertical spinners — hours, minutes, AM/PM when the locale is 12-hour. Both wrap without carrying; digits type straight in and move on; the wheel spins it once it has focus.                                                                                                                                   |
+| `AdwDateButton` / `AdwTimeButton` | The compact form (SwiftUI's compact `DatePicker`): the value in a button, the picker in a popover.                                                                                                                                                                                                                           |
+| `AdwDateRow` / `AdwTimeRow`       | The same as boxed-list rows, laid out like `AdwComboRow`.                                                                                                                                                                                                                                                                    |
+| `AdwColumnView<T>`                | GtkColumnView: a sticky header over painted, clip-virtualized rows — a hundred thousand rows cost what is on screen. Click a title to sort (stable; on a worker thread past 20,000 rows), drag its edge to resize, ellipsized cells, single or multiple selection, keyboard navigation, `.data-table` density via `Compact`. |
+| `AdwPopover`                      | GtkPopover with any child: the popover card, arrow and motion every Adwaita popover uses; the child takes focus.                                                                                                                                                                                                             |
 
 Inside a scrolling page neither picker steals the wheel: the calendar pages months on a sideways swipe, and on the wheel
 only where nothing scrolls (a popover).
@@ -315,12 +315,12 @@ makes a double-tapped switch look broken; a spring keeps the speed it already ha
 
 So the kit's widgets set a `MotionSpec` rather than a duration:
 
-| Token | Response · damping | Used by |
-|---|---|---|
-| `AdwMotion.Control` | 0.24 s · 0.9 | `AdwSwitch`'s knob, `AdwExpanderRow`'s chevron — small things that flip |
-| `AdwMotion.Overlay` | 0.30 s · 0.95 | `AdwDialog`, `AdwPopover`, `AdwToast` — things that appear over the content |
-| `AdwMotion.Reveal` | 0.36 s · 1.0 | `AdwBanner`, `AdwExpanderRow`'s body, `AdwOverlaySplitView`, `AdwNavigationView` — surfaces that change size or slide. Critically damped: the thing that would overshoot is a layout edge |
-| `AdwMotion.Value` | 0.45 s · 1.0 | `AdwProgressBar` — a value settling, so it reads as the number moving rather than the widget animating |
+| Token               | Response · damping | Used by                                                                                                                                                                                   |
+|---------------------|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AdwMotion.Control` | 0.24 s · 0.9       | `AdwSwitch`'s knob, `AdwExpanderRow`'s chevron — small things that flip                                                                                                                   |
+| `AdwMotion.Overlay` | 0.30 s · 0.95      | `AdwDialog`, `AdwPopover`, `AdwToast` — things that appear over the content                                                                                                               |
+| `AdwMotion.Reveal`  | 0.36 s · 1.0       | `AdwBanner`, `AdwExpanderRow`'s body, `AdwOverlaySplitView`, `AdwNavigationView` — surfaces that change size or slide. Critically damped: the thing that would overshoot is a layout edge |
+| `AdwMotion.Value`   | 0.45 s · 1.0       | `AdwProgressBar` — a value settling, so it reads as the number moving rather than the widget animating                                                                                    |
 
 Five consequences worth knowing:
 
@@ -356,13 +356,15 @@ instead of another flat fill. The rules, in the order they matter:
 - **Glass is the navigation layer, never the content layer.** The list scrolling underneath a pane stays opaque, so
   there is something to refract.
 - **Glass never stacks on glass.** A pane's children are drawn flat; a glass button on a glass bar reads as a smudge.
-- **Two variants, and the dial between them.** `LiquidPane.Regular` for chrome over a surface the theme knows,
-  `LiquidPane.Clear` for chrome over media, and `Tinted` (0 = clear, 1 = regular) to blend a pane between them live —
+- **Two variants, and the dial between them.** `LiquidPane.Regular` for adaptive chrome over any content,
+  `LiquidPane.Clear` for transparent chrome over dimmed media, and `Tinted` (0 = clear, 1 = regular) to blend a pane
+  between them live —
   a slider can drive it without rebuilding anything.
 - **One capture per cluster.** Every pane inside a `LiquidGroup` lays its lens down before any pane's content, so a
   toolbar of three panes is one backdrop copy and one render-pass break, not three.
 - **Content takes its colour from the glass** — `LiquidPane.OnGlass(theme)` / `OnGlassMuted` — and interactive glass
-  is a gel: `LiquidPane.Interactive(pane, onPressed)` wires hover and press into the lens.
+  is a gel: `LiquidPane.Interactive(pane, onPressed)` wires hover and press into a velocity-preserving
+  spring. Reduced Motion snaps directly to the final optical state.
 
 ```csharp
 var toolbar = new LiquidGroup(
@@ -380,7 +382,15 @@ Not free: each run of lenses costs a scene copy and a render-pass break, and a l
 The gallery's *Liquid Glass* page is the material study: a toolbar over an article with a lab that dials every
 property of the glass live (clear↔tinted, float, rim, family, shape — and a switch to the flat Adwaita chrome), an app
 window whose header bar and view switcher are GNOME's structure in this material, and a control centre and lock screen
-over photographs where every tile latches, drags or folds.
+over local wallpapers where controls latch, drag or fold.
+
+The Clear endpoint disables adaptive luminance and uses minimal scattering. Put a dimming layer **outside and before**
+`LiquidGroup` so the shared capture includes it, and use bold, bright content.
+Regular increases scattering and compresses contrast according to the foreground ink. `Adapt`
+controls both effects; `Bevel` controls optical thickness independently. The shader keeps dispersion
+subtle, concentrates refraction near the rim, and separates the thin specular lip from inner shading.
+The gallery provides Clear/Regular presets, local gradient wallpapers, and a control centre with
+connectivity capsules and horizontal Display/Sound sliders.
 
 ## Beyond libadwaita: tool widgets
 
@@ -388,22 +398,22 @@ libadwaita stops at document apps. An editor needs more, so the kit carries a se
 counterpart and are drawn to its rules instead — the same fill ladders, radii, knob and focus ring as the widgets that
 do. Each has a live page in the gallery.
 
-| Widget | What it is | Drawn as |
-|---|---|---|
-| `AdwTextField` | The editing engine under `AdwEntry` — single or multi-line, IME, undo | Use `AdwEntry` unless you are building a control around it |
-| `AdwNumberInput` | A float field you can type in, step, or drag sideways to scrub | GTK's spin button: one entry box, flat −/+ buttons, plus a grip |
-| `AdwColorPicker` | Saturation/value plane, hue and alpha scales, hex entry | GtkColorPlane and GtkColorScale: rounded troughs, scale knobs |
-| `AdwGradientEditor` | A colour ramp with movable, recolourable stops | A control-shaped swatch; each stop is a scale knob |
-| `AdwCurveEditor` | Keys and tangents over a grid | A `.view` in a card frame; keys are scale knobs |
-| `AdwCodeEditor` | A source view: gutter, highlighting, undo, soft wrap, multi-cursor (⌘D / ⌘⇧L / ⌘⌥↑↓ / Alt+click), bracket pairs + matching, line commands (⌘/, Alt+↑↓, ⇧Alt+↑↓, ⌘⇧K, Tab/⇧Tab), word movement, incremental find (⌘F) | GNOME Text Editor: bare view, dim gutter, accent-palette syntax colours |
-| `AdwTreeView<T>` | An expandable hierarchy over any data | Navigation-sidebar rows with GtkTreeExpander indents |
-| `AdwReorderableList` | Rows put in order by dragging | A boxed list with a drag-handle prefix; the held row lifts onto a card |
-| `AdwChip` | A pill toggle for tags and filters | A small `.pill` toggle button — neutral when checked, not accent |
-| `AdwBadge` | A count pinned to a corner of its child | The view switcher's needs-attention indicator |
-| `AdwToolbar` | A strip of leading and trailing controls | GTK's `.toolbar` box: 6px padding and spacing, no background |
-| `AdwPanel` | A floating, movable, resizable utility window | A dialog surface under a flat header with a circular close button |
-| `AdwFileBrowserDialog` | The in-app file chooser `FileDialog` falls back to | GtkFileChooser: places sidebar, path bar, sortable list, suggested accept |
-| `AdwResponsiveGrid` | A masonry grid whose column count follows the width | Layout only — it paints nothing |
+| Widget                 | What it is                                                                                                                                                                                                           | Drawn as                                                                  |
+|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `AdwTextField`         | The editing engine under `AdwEntry` — single or multi-line, IME, undo                                                                                                                                                | Use `AdwEntry` unless you are building a control around it                |
+| `AdwNumberInput`       | A float field you can type in, step, or drag sideways to scrub                                                                                                                                                       | GTK's spin button: one entry box, flat −/+ buttons, plus a grip           |
+| `AdwColorPicker`       | Saturation/value plane, hue and alpha scales, hex entry                                                                                                                                                              | GtkColorPlane and GtkColorScale: rounded troughs, scale knobs             |
+| `AdwGradientEditor`    | A colour ramp with movable, recolourable stops                                                                                                                                                                       | A control-shaped swatch; each stop is a scale knob                        |
+| `AdwCurveEditor`       | Keys and tangents over a grid                                                                                                                                                                                        | A `.view` in a card frame; keys are scale knobs                           |
+| `AdwCodeEditor`        | A source view: gutter, highlighting, undo, soft wrap, multi-cursor (⌘D / ⌘⇧L / ⌘⌥↑↓ / Alt+click), bracket pairs + matching, line commands (⌘/, Alt+↑↓, ⇧Alt+↑↓, ⌘⇧K, Tab/⇧Tab), word movement, incremental find (⌘F) | GNOME Text Editor: bare view, dim gutter, accent-palette syntax colours   |
+| `AdwTreeView<T>`       | An expandable hierarchy over any data                                                                                                                                                                                | Navigation-sidebar rows with GtkTreeExpander indents                      |
+| `AdwReorderableList`   | Rows put in order by dragging                                                                                                                                                                                        | A boxed list with a drag-handle prefix; the held row lifts onto a card    |
+| `AdwChip`              | A pill toggle for tags and filters                                                                                                                                                                                   | A small `.pill` toggle button — neutral when checked, not accent          |
+| `AdwBadge`             | A count pinned to a corner of its child                                                                                                                                                                              | The view switcher's needs-attention indicator                             |
+| `AdwToolbar`           | A strip of leading and trailing controls                                                                                                                                                                             | GTK's `.toolbar` box: 6px padding and spacing, no background              |
+| `AdwPanel`             | A floating, movable, resizable utility window                                                                                                                                                                        | A dialog surface under a flat header with a circular close button         |
+| `AdwFileBrowserDialog` | The in-app file chooser `FileDialog` falls back to                                                                                                                                                                   | GtkFileChooser: places sidebar, path bar, sortable list, suggested accept |
+| `AdwResponsiveGrid`    | A masonry grid whose column count follows the width                                                                                                                                                                  | Layout only — it paints nothing                                           |
 
 ## Differences from libadwaita
 
@@ -436,7 +446,8 @@ Stated up front so nothing surprises you:
 
 ## Dependencies
 
-`Zigote.UI` (the kernel) and `Zigote.UI.BottomSheet`. Internals that are pure logic — accelerator parsing, layout maths — are unit-tested directly
+`Zigote.UI` (the kernel) and `Zigote.UI.BottomSheet`. Internals that are pure logic — accelerator parsing, layout
+maths — are unit-tested directly
 from `Zigote.Tests` rather than pushed into the public surface: this kit mirrors libadwaita's API and should not grow
 extras.
 

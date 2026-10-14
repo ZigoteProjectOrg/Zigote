@@ -6,7 +6,7 @@ public enum ShellLayer : uint
     Background = 0,
     Bottom = 1,
     Top = 2,
-    Overlay = 3
+    Overlay = 3,
 }
 
 /// <summary>Edges a shell surface sticks to. Opposite edges together stretch it across the output.</summary>
@@ -17,17 +17,19 @@ public enum LayerAnchor : uint
     Top = 1,
     Bottom = 2,
     Left = 4,
-    Right = 8
+    Right = 8,
 }
 
 /// <summary>How a shell surface takes keyboard focus.</summary>
 public enum LayerKeyboard : uint
 {
     None = 0,
+
     /// <summary>Grabs the keyboard while mapped — a launcher or lock screen.</summary>
     Exclusive = 1,
+
     /// <summary>Focused like a normal window, on click.</summary>
-    OnDemand = 2
+    OnDemand = 2,
 }
 
 /// <summary>

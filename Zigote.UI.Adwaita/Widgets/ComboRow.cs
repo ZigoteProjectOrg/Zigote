@@ -84,7 +84,10 @@ public sealed class AdwComboRow : ComposedWidget
         _arrow = new IconGlyph(glyph: Icons.DropDown, size: AdwMetrics.IconSize, color: p.DimLabel);
 
         Widget row = new AdwActionRow(title: Title, subtitle: Subtitle) {
-            Suffixes = { _valueLabel, _arrow },
+            Suffixes = {
+                _valueLabel,
+                _arrow,
+            },
             OnActivated = Enabled ? OpenPopup : null,
         };
         // Adwaita disabled rows dim wholesale.
@@ -102,7 +105,12 @@ public sealed class AdwComboRow : ComposedWidget
             float left = MathF.Min(x: _valueLabel.Bounds.X, y: _arrow.Bounds.X);
             float right = MathF.Max(x: _valueLabel.Bounds.Right, y: _arrow.Bounds.Right);
             // Stop short of the row's bottom edge so the arrow tip tucks into the row padding.
-            anchor = new Rect(x: left, y: Bounds.Y, width: right - left, height: Bounds.Height - 6f);
+            anchor = new Rect(
+                x: left,
+                y: Bounds.Y,
+                width: right - left,
+                height: Bounds.Height - 6f
+            );
         }
 
         new AdwListPopover(

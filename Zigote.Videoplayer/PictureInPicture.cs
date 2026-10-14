@@ -133,7 +133,11 @@ internal sealed class PipView(VideoPlayer player) : VideoChrome(player)
     {
         if (_root is not null) return _root;
 
-        _play = IconButton(icon: MaterialIcons.Pause, label: "Pause", onPressed: Player.TogglePlayPause);
+        _play = IconButton(
+            icon: MaterialIcons.Pause,
+            label: "Pause",
+            onPressed: Player.TogglePlayPause
+        );
         _seek = new MediaSlider {
             OnChangeEnd = f => Player.Seek(Player.Duration * f),
             SemanticsLabel = "Seek",
@@ -147,7 +151,11 @@ internal sealed class PipView(VideoPlayer player) : VideoChrome(player)
                     top: 8,
                     child: Pane(
                         radius: 17f,
-                        child: IconButton(icon: MaterialIcons.OpenInNew, label: "Back to app", onPressed: PictureInPicture.Close)
+                        child: IconButton(
+                            icon: MaterialIcons.OpenInNew,
+                            label: "Back to app",
+                            onPressed: PictureInPicture.Close
+                        )
                     )
                 ),
                 new Positioned(
@@ -155,7 +163,11 @@ internal sealed class PipView(VideoPlayer player) : VideoChrome(player)
                     top: 8,
                     child: Pane(
                         radius: 17f,
-                        child: IconButton(icon: MaterialIcons.Close, label: "Close", onPressed: CloseAndPause)
+                        child: IconButton(
+                            icon: MaterialIcons.Close,
+                            label: "Close",
+                            onPressed: CloseAndPause
+                        )
                     )
                 ),
                 Positioned.Fill(
@@ -166,16 +178,30 @@ internal sealed class PipView(VideoPlayer player) : VideoChrome(player)
                                 padding: EdgeInsets.All(7f),
                                 child: new Row(mainAxisSize: MainAxisSize.Min, spacing: 8f) {
                                     Children = {
-                                        IconButton(icon: MaterialIcons.Replay10, label: "Back 10 seconds", onPressed: () => Player.SeekBy(TimeSpan.FromSeconds(-10))),
+                                        IconButton(
+                                            icon: MaterialIcons.Replay10,
+                                            label: "Back 10 seconds",
+                                            onPressed:
+                                            () => Player.SeekBy(TimeSpan.FromSeconds(-10))
+                                        ),
                                         _play,
-                                        IconButton(icon: MaterialIcons.Forward10, label: "Forward 10 seconds", onPressed: () => Player.SeekBy(TimeSpan.FromSeconds(10))),
+                                        IconButton(
+                                            icon: MaterialIcons.Forward10,
+                                            label: "Forward 10 seconds",
+                                            onPressed: () => Player.SeekBy(TimeSpan.FromSeconds(10))
+                                        ),
                                     },
                                 }
                             )
                         )
                     )
                 ),
-                new Positioned(left: 10, right: 10, bottom: 4, child: _seek),
+                new Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 4,
+                    child: _seek
+                ),
             },
         };
 
@@ -262,7 +288,10 @@ internal sealed class PipScrim : Widget
         height: _size.Height
     );
 
-    public override void Paint(PaintList paint) => paint.AddRect(bounds: Bounds, color: Colors.Black.WithAlpha(0.2f));
+    public override void Paint(PaintList paint) => paint.AddRect(
+        bounds: Bounds,
+        color: Colors.Black.WithAlpha(0.2f)
+    );
 
     // Paint only; the picture under it keeps the pointer.
     public override Widget? HitTest(Offset point) => null;
@@ -289,21 +318,38 @@ internal sealed class FloatingPip(PipView view) : Widget
         float w = MathF.Min(x: CardWidth, y: _size.Width - (Margin * 2f));
         float h = w / PictureInPicture.Aspect(view.Player);
         view.Measure(Constraints.Tight(width: w, height: h));
-        if (!_placed) _card = new Rect(x: _size.Width - w - Margin, y: _size.Height - h - Margin, width: w, height: h);
-        else _card = new Rect(x: _card.X, y: _card.Y, width: w, height: h);
+        if (!_placed)
+            _card = new Rect(
+                x: _size.Width - w - Margin,
+                y: _size.Height - h - Margin,
+                width: w,
+                height: h
+            );
+        else
+            _card = new Rect(
+                x: _card.X,
+                y: _card.Y,
+                width: w,
+                height: h
+            );
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
         view.Layout(new Offset(x: _card.X, y: _card.Y));
     }
 
     public override void Paint(PaintList paint)
     {
         paint.AddElevation(bounds: _card, radius: 12f, style: Elevation.Z2);
-        paint.AddClipStart(_card, radius: 12f);
+        paint.AddClipStart(bounds: _card, radius: 12f);
         view.Paint(paint);
         paint.AddClipEnd();
     }
@@ -321,7 +367,12 @@ internal sealed class FloatingPip(PipView view) : Widget
         view.ShowControls();
         if (!_dragging) return;
         _placed = true;
-        _card = new Rect(x: point.X - _grab.X, y: point.Y - _grab.Y, width: _card.Width, height: _card.Height);
+        _card = new Rect(
+            x: point.X - _grab.X,
+            y: point.Y - _grab.Y,
+            width: _card.Width,
+            height: _card.Height
+        );
         MarkNeedsLayout();
     }
 

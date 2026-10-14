@@ -36,7 +36,10 @@ public class ProfilerTests
         var outer = events[2];
         Assert.Equal(expected: "Outer", actual: Profiler.NameOf(outer.NameId));
         Assert.Equal(expected: 0, actual: outer.Depth);
-        foreach (var inner in new[] { events[0], events[1] })
+        foreach (var inner in new[] {
+                     events[0],
+                     events[1],
+                 })
         {
             Assert.Equal(expected: "Inner", actual: Profiler.NameOf(inner.NameId));
             Assert.Equal(expected: 1, actual: inner.Depth);
@@ -46,10 +49,7 @@ public class ProfilerTests
     }
 
     [Fact]
-    public void SteadyStateFrame_AllocatesZero()
-    {
-        AllocGuard.AssertZeroAlloc(OneFrame);
-    }
+    public void SteadyStateFrame_AllocatesZero() => AllocGuard.AssertZeroAlloc(OneFrame);
 
     [Fact]
     public void Capture_DeliversRequestedFrames_AndWritesChromeTrace()

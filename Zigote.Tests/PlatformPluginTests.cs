@@ -19,7 +19,10 @@ public class PlatformPluginTests
         PlatformChannel.Handle(channel: "test.echo", handler: p => "got:" + p);
         try
         {
-            Assert.Equal(expected: "got:hi", actual: PlatformChannel.Invoke(channel: "test.echo", payload: "hi"));
+            Assert.Equal(
+                expected: "got:hi",
+                actual: PlatformChannel.Invoke(channel: "test.echo", payload: "hi")
+            );
             Assert.True(PlatformChannel.Supports("test.echo"));
         }
         finally
@@ -171,8 +174,13 @@ public class PlatformPluginTests
         {
             byte[] binary = [1, 0, 2, 0, 3];
             var reply = new ArrayBufferWriter<byte>();
-            Assert.True(PlatformChannel.Invoke(channel: "test.bytes", payload: binary, reply: reply));
-            Assert.Equal(expected: (byte[]) [1, 0, 2, 0, 3, (byte)'!'], actual: reply.WrittenSpan.ToArray());
+            Assert.True(
+                PlatformChannel.Invoke(channel: "test.bytes", payload: binary, reply: reply)
+            );
+            Assert.Equal(
+                expected: (byte[])[1, 0, 2, 0, 3, (byte)'!'],
+                actual: reply.WrittenSpan.ToArray()
+            );
         }
         finally
         {
@@ -203,7 +211,9 @@ public class PlatformPluginTests
             Assert.True(PlatformChannel.Supports("test.cross.bytes"));
 
             var reply = new ArrayBufferWriter<byte>();
-            Assert.True(PlatformChannel.Invoke(channel: "test.cross.text", payload: "up"u8, reply: reply));
+            Assert.True(
+                PlatformChannel.Invoke(channel: "test.cross.text", payload: "up"u8, reply: reply)
+            );
             Assert.Equal(expected: "UP"u8.ToArray(), actual: reply.WrittenSpan.ToArray());
         }
         finally
@@ -247,18 +257,26 @@ public class PlatformPluginTests
             PluginHost.Register(new RecordingPlugin(name: "t.gamma", journal: journal));
             PluginHost.Register(new RecordingPlugin(name: "t.beta", journal: journal));
             Assert.Equal(
-                expected: ["t.alpha:start", "t.beta:start", "t.gamma:start", "t.beta:stop", "t.beta:start"],
+                expected: [
+                    "t.alpha:start", "t.beta:start", "t.gamma:start", "t.beta:stop", "t.beta:start",
+                ],
                 actual: journal
             );
 
             journal.Clear();
             PluginHost.StopAll();
-            Assert.Equal(expected: ["t.gamma:stop", "t.beta:stop", "t.alpha:stop"], actual: journal);
+            Assert.Equal(
+                expected: ["t.gamma:stop", "t.beta:stop", "t.alpha:stop"],
+                actual: journal
+            );
 
             // Registrations survive a stop, so an app relaunch starts the same set again.
             journal.Clear();
             PluginHost.StartAll();
-            Assert.Equal(expected: ["t.alpha:start", "t.beta:start", "t.gamma:start"], actual: journal);
+            Assert.Equal(
+                expected: ["t.alpha:start", "t.beta:start", "t.gamma:start"],
+                actual: journal
+            );
         }
         finally
         {

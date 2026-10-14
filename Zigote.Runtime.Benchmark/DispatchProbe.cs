@@ -24,30 +24,51 @@ internal static class DispatchProbe
 
     public static void Run(string[] args)
     {
-        int n = args.Length > 0 && int.TryParse(args[0], out int parsed) ? parsed : 10_000;
+        int n = args.Length > 0 && int.TryParse(s: args[0], result: out int parsed)
+            ? parsed
+            : 10_000;
 
         var items = new Particle[n];
         for (int i = 0; i < n; i++) items[i] = VfxProbe.Seed(i);
         var ctx = new VfxUpdateContext(dt: Dt, time: 1f);
 
         var curve = FloatCurve.Linear(from: 1f, to: 0f);
-        var ramp = new ColorRamp([
-            new ColorStop(position: 0f, color: Color.White),
-            new ColorStop(position: 1f, color: Color.Black),
-        ]);
+        var ramp = new ColorRamp(
+            [
+                new ColorStop(position: 0f, color: Color.White),
+                new ColorStop(position: 1f, color: Color.Black),
+            ]
+        );
 
-        Console.WriteLine($"ApplyRange dispatch probe — {n:N0} particles, {Steps:N0} steps, interleaved");
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(
+            $"ApplyRange dispatch probe — {n:N0} particles, {Steps:N0} steps, interleaved"
+        );
+        Console.WriteLine(new string(c: '─', count: 78));
 
-        Compare(name: "size-over-life",
-            baseline: new SizeInherited(curve), overridden: new SizeOverridden(curve),
-            items: items, ctx: ctx, n: n);
-        Compare(name: "color-over-life",
-            baseline: new ColorInherited(ramp), overridden: new ColorOverridden(ramp),
-            items: items, ctx: ctx, n: n);
-        Compare(name: "vortex",
-            baseline: new VortexInherited(Vec3.Up, 1f), overridden: new VortexOverridden(Vec3.Up, 1f),
-            items: items, ctx: ctx, n: n);
+        Compare(
+            name: "size-over-life",
+            baseline: new SizeInherited(curve),
+            overridden: new SizeOverridden(curve),
+            items: items,
+            ctx: ctx,
+            n: n
+        );
+        Compare(
+            name: "color-over-life",
+            baseline: new ColorInherited(ramp),
+            overridden: new ColorOverridden(ramp),
+            items: items,
+            ctx: ctx,
+            n: n
+        );
+        Compare(
+            name: "vortex",
+            baseline: new VortexInherited(axis: Vec3.Up, strength: 1f),
+            overridden: new VortexOverridden(axis: Vec3.Up, strength: 1f),
+            items: items,
+            ctx: ctx,
+            n: n
+        );
     }
 
     /// <summary>
@@ -62,14 +83,14 @@ internal static class DispatchProbe
 
         for (int i = 0; i < 400; i++)
         {
-            baseline.ApplyRange(items.AsSpan(), in c);
-            overridden.ApplyRange(items.AsSpan(), in c);
+            baseline.ApplyRange(particles: items.AsSpan(), ctx: in c);
+            overridden.ApplyRange(particles: items.AsSpan(), ctx: in c);
         }
 
         for (int round = 0; round < 7; round++)
         {
-            bestBase = Math.Min(val1: bestBase, val2: Once(baseline, items, c));
-            bestOver = Math.Min(val1: bestOver, val2: Once(overridden, items, c));
+            bestBase = Math.Min(val1: bestBase, val2: Once(m: baseline, items: items, ctx: c));
+            bestOver = Math.Min(val1: bestOver, val2: Once(m: overridden, items: items, ctx: c));
         }
 
         Console.WriteLine(
@@ -81,7 +102,7 @@ internal static class DispatchProbe
     private static double Once(VfxUpdateModule m, Particle[] items, VfxUpdateContext ctx)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        for (int i = 0; i < Steps; i++) m.ApplyRange(items.AsSpan(), in ctx);
+        for (int i = 0; i < Steps; i++) m.ApplyRange(particles: items.AsSpan(), ctx: in ctx);
         return System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds * 1e6 / Steps;
     }
 

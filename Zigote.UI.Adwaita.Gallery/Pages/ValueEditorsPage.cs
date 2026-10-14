@@ -13,7 +13,8 @@ public sealed class ValueEditorsPage : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var curve = new AdwEditableCurve([
+        var curve = new AdwEditableCurve(
+            [
                 new AdwCurveKey(time: 0f, value: 0f),
                 new AdwCurveKey(time: 0.35f, value: 0.9f),
                 new AdwCurveKey(time: 1f, value: 0.4f),
@@ -46,14 +47,26 @@ public sealed class ValueEditorsPage : ComposedWidget
                         Suffixes = {
                             new SizedBox(
                                 width: 160f,
-                                child: new AdwNumberInput(value: 8f, step: 1f, min: 1f, max: 64f) {
+                                child: new AdwNumberInput(
+                                    value: 8f,
+                                    step: 1f,
+                                    min: 1f,
+                                    max: 64f
+                                ) {
                                     Decimals = 0,
                                 }
                             ),
                         },
                     },
                     new Watch(() => new AdwActionRow("Value") {
-                            Suffixes = { Demo.Value(_number.Value.ToString(format: "0.00", provider: System.Globalization.CultureInfo.InvariantCulture)) },
+                            Suffixes = {
+                                Demo.Value(
+                                    _number.Value.ToString(
+                                        format: "0.00",
+                                        provider: System.Globalization.CultureInfo.InvariantCulture
+                                    )
+                                ),
+                            },
                         }
                     )
                 ),
@@ -63,7 +76,10 @@ public sealed class ValueEditorsPage : ComposedWidget
                     "The full picker the colour button opens: a saturation and value square, a " +
                     "hue strip, alpha, and the hex field.",
                     child: Demo.Specimen(
-                        new AdwColorPicker(initial: _color.Peek(), onChanged: c => _color.Value = c),
+                        new AdwColorPicker(
+                            initial: _color.Peek(),
+                            onChanged: c => _color.Value = c
+                        ),
                         new Watch(() => Demo.Value(
                                 $"#{(int)(_color.Value.R * 255):X2}" +
                                 $"{(int)(_color.Value.G * 255):X2}" +

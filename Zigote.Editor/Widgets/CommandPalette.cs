@@ -33,7 +33,11 @@ public sealed class CommandPalette : Widget
     private const float GroupW = 64f;
 
     // SDL scancodes.
-    private const uint ScReturn = 40, ScKpEnter = 88, ScPageUp = 75, ScPageDown = 78, ScDown = 81,
+    private const uint ScReturn = 40,
+        ScKpEnter = 88,
+        ScPageUp = 75,
+        ScPageDown = 78,
+        ScDown = 81,
         ScUp = 82;
 
     private readonly IReadOnlyList<PaletteCommand> _all;
@@ -79,7 +83,8 @@ public sealed class CommandPalette : Widget
         Refresh();
     }
 
-    private int VisibleRows => Math.Max(val1: 0, val2: (int)((_size.Height - RowsTop - Pad) / RowH));
+    private int VisibleRows =>
+        Math.Max(val1: 0, val2: (int)((_size.Height - RowsTop - Pad) / RowH));
 
     private Rect RowsBounds => new(
         x: Bounds.X + Pad,
@@ -107,7 +112,7 @@ public sealed class CommandPalette : Widget
             separator: ' ',
             options: StringSplitOptions.RemoveEmptyEntries
         );
-        if (terms.Length == 0) return [..commands];
+        if (terms.Length == 0) return [.. commands];
 
         List<(PaletteCommand Command, int Score)> scored = [];
         foreach (var command in commands)

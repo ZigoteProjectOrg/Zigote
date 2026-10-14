@@ -37,13 +37,26 @@ internal static class ArtViewer
         var zoom = new Signal<float>(1f);
         bool hero = from is { Texture.HasTexture: true };
         // No spinner over a picture that is already there: the tile's own texture stands in.
-        var full = new ArtImage(piece: piece, maxDim: FullMaxDim, chrome: false, spinner: !hero);
+        var full = new ArtImage(
+            piece: piece,
+            maxDim: FullMaxDim,
+            chrome: false,
+            spinner: !hero
+        );
 
         // Hidden while the tile's picture is in flight, and shown the frame it lands. Under the
         // full picture sits the tile's texture at the same fit, so the landing is seamless and the
         // sharper decode fades up over it whenever it arrives — nothing waits on the load.
         var landing = hero
-            ? new AdwHero(tag: from!, child: new Stack { Children = { new Poster(from!.Texture), full } }) {
+            ? new AdwHero(
+                tag: from!,
+                child: new Stack {
+                    Children = {
+                        new Poster(from!.Texture),
+                        full,
+                    },
+                }
+            ) {
                 Flight = ArtFlight.Uncrop(from!.Texture),
             }
             : null;
@@ -78,7 +91,10 @@ internal static class ArtViewer
                         viewer,
                         new Align(
                             alignment: Alignment.BottomCenter,
-                            child: new Padding(padding: EdgeInsets.Only(bottom: Spacing.Lg), child: bar)
+                            child: new Padding(
+                                padding: EdgeInsets.Only(bottom: Spacing.Lg),
+                                child: bar
+                            )
                         ),
                     },
                 }
@@ -105,14 +121,17 @@ internal static class ArtFlight
 {
     public static AdwHeroPainter Uncrop(Image picture) => (paint, from, to, t) =>
     {
-        var (w, h) = picture.TextureSize;
+        (uint w, uint h) = picture.TextureSize;
         if (!picture.HasTexture || h == 0) return;
 
         // In the tile the picture covers its frame and the frame crops it; in the viewer the whole
         // picture fits. Moving the crop and the picture separately between those is the un-crop.
         float aspect = (float)w / h;
         var whole = Fit(frame: to, aspect: aspect, cover: false);
-        paint.AddClipStart(bounds: Lerp(a: from, b: whole, t: t), radius: ArtImage.Radius * (1f - t));
+        paint.AddClipStart(
+            bounds: Lerp(a: from, b: whole, t: t),
+            radius: ArtImage.Radius * (1f - t)
+        );
         paint.AddImage(
             bounds: Lerp(a: Fit(frame: from, aspect: aspect, cover: true), b: whole, t: t),
             pixelWidth: (int)w,
@@ -125,7 +144,7 @@ internal static class ArtFlight
 
     public static Rect Fit(Rect frame, float aspect, bool cover)
     {
-        bool byWidth = frame.Width / frame.Height < aspect != cover;
+        bool byWidth = (frame.Width / frame.Height < aspect) != cover;
         float width = byWidth ? frame.Width : frame.Height * aspect;
         float height = byWidth ? frame.Width / aspect : frame.Height;
         return new Rect(
@@ -156,11 +175,16 @@ internal sealed class Poster(Image picture) : Widget
     }
 
     public override void Layout(Offset origin) =>
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
 
     public override void Paint(PaintList paint)
     {
-        var (w, h) = picture.TextureSize;
+        (uint w, uint h) = picture.TextureSize;
         if (!picture.HasTexture || h == 0) return;
         paint.AddImage(
             bounds: ArtFlight.Fit(frame: Bounds, aspect: (float)w / h, cover: false),
@@ -180,7 +204,11 @@ internal sealed class Poster(Image picture) : Widget
 ///     and double-click are what anyone tries first. The capsule answers the pointer where it
 ///     lies, so it is kept small and low, off the part of the picture people reach for.
 /// </summary>
-internal sealed class ViewerBar(ArtPiece piece, Action<AdwToast> toast, InteractiveViewer viewer, Signal<float> zoom)
+internal sealed class ViewerBar(
+    ArtPiece piece,
+    Action<AdwToast> toast,
+    InteractiveViewer viewer,
+    Signal<float> zoom)
     : ComposedWidget
 {
     private readonly Signal<float> _saving = new(-1f);
@@ -193,7 +221,12 @@ internal sealed class ViewerBar(ArtPiece piece, Action<AdwToast> toast, Interact
             radius: AdwMetrics.Pill,
             elevation: 8f,
             child: new Padding(
-                padding: EdgeInsets.Only(left: Spacing.Lg, top: Spacing.Xs, right: Spacing.Xs, bottom: Spacing.Xs),
+                padding: EdgeInsets.Only(
+                    left: Spacing.Lg,
+                    top: Spacing.Xs,
+                    right: Spacing.Xs,
+                    bottom: Spacing.Xs
+                ),
                 child: new Row(
                     spacing: Spacing.Xs,
                     mainAxisSize: MainAxisSize.Min,
@@ -201,12 +234,16 @@ internal sealed class ViewerBar(ArtPiece piece, Action<AdwToast> toast, Interact
                 ) {
                     Children = {
                         new Watch(() => new Label(
-                            text: $"{zoom.Value:0.0}×",
-                            style: AdwTypography.Monospace,
-                            color: LiquidPane.OnGlass(theme)
-                        )),
+                                text: $"{zoom.Value:0.0}×",
+                                style: AdwTypography.Monospace,
+                                color: LiquidPane.OnGlass(theme)
+                            )
+                        ),
                         new SizedBox(width: Spacing.Sm),
-                        Demo.IconButton(icon: MaterialIcons.FitScreen, onPressed: () => viewer.Reset()),
+                        Demo.IconButton(
+                            icon: MaterialIcons.FitScreen,
+                            onPressed: () => viewer.Reset()
+                        ),
                         Demo.IconButton(
                             icon: MaterialIcons.ContentCopy,
                             onPressed: () => ArtActions.Copy(piece: piece, toast: toast)
@@ -215,8 +252,13 @@ internal sealed class ViewerBar(ArtPiece piece, Action<AdwToast> toast, Interact
                             ? ArtActions.Percent(done: done, theme: theme)
                             : Demo.IconButton(
                                 icon: MaterialIcons.Download,
-                                onPressed: () => ArtActions.Save(piece: piece, toast: toast, saving: _saving)
-                            )),
+                                onPressed: () => ArtActions.Save(
+                                    piece: piece,
+                                    toast: toast,
+                                    saving: _saving
+                                )
+                            )
+                        ),
                     },
                 }
             )
@@ -244,9 +286,14 @@ internal static class ArtActions
             var result = await ArtSource.BytesAsync(piece).ConfigureAwait(false);
             app?.Post(() =>
                 {
-                    bool copied = result.TryGet(out byte[]? bytes, out _) &&
-                                  ZigoteEngine.Instance?.SetClipboardData(mimeType: Mime(bytes), data: bytes) == true;
-                    toast?.Invoke(new AdwToast(copied ? "Image copied" : "Couldn't copy the image"));
+                    bool copied = result.TryGet(value: out byte[]? bytes, error: out _) &&
+                                  ZigoteEngine.Instance?.SetClipboardData(
+                                      mimeType: Mime(bytes),
+                                      data: bytes
+                                  ) == true;
+                    toast?.Invoke(
+                        new AdwToast(copied ? "Image copied" : "Couldn't copy the image")
+                    );
                 }
             );
         }
@@ -256,7 +303,8 @@ internal static class ArtActions
     ///     Saves the original to Downloads, driving <paramref name="saving" /> from 0 to 1 on the
     ///     way and back to negative when it settles. A second press while one is running is ignored.
     /// </summary>
-    public static void Save(ArtPiece piece, Action<AdwToast>? toast, Signal<float> saving, Action? done = null)
+    public static void Save(ArtPiece piece, Action<AdwToast>? toast, Signal<float> saving,
+        Action? done = null)
     {
         if (saving.Peek() >= 0f) return;
         saving.Value = 0f;
@@ -267,8 +315,11 @@ internal static class ArtActions
         {
             // Reports arrive on the download's thread, in order; posting each keeps that order on
             // the UI thread, so the last one is always the settle below.
-            var progress = new Posted(p => app?.Post(() => saving.Value = MathF.Max(x: 0f, y: (float)p.Fraction)));
-            var (path, problem) = await ArtSource.DownloadAsync(piece: piece, progress: progress)
+            var progress = new Posted(p =>
+                app?.Post(() => saving.Value = MathF.Max(x: 0f, y: (float)p.Fraction))
+            );
+            (string? path, string? problem) = await ArtSource
+                .DownloadAsync(piece: piece, progress: progress)
                 .ConfigureAwait(false);
             app?.Post(() =>
                 {
@@ -292,7 +343,10 @@ internal static class ArtActions
     /// <summary>The save button's face while a download runs.</summary>
     public static Widget Percent(float done, ThemeData theme) => new SizedBox(
         height: 34f,
-        child: new Row(mainAxisSize: MainAxisSize.Min, crossAxisAlignment: CrossAxisAlignment.Center) {
+        child: new Row(
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: CrossAxisAlignment.Center
+        ) {
             Children = {
                 new Padding(
                     padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm),
@@ -307,31 +361,44 @@ internal static class ArtActions
     );
 
     /// <summary>A round glass button for chrome that rides directly on a picture.</summary>
-    public static Pressable CopyButton(ArtPiece piece, Action<AdwToast>? toast, ThemeData theme) => Glass(
-        content: Icon(glyph: MaterialIcons.ContentCopy, theme: theme),
-        onPressed: () => Copy(piece: piece, toast: toast),
-        label: "Copy image"
-    );
+    public static Pressable CopyButton(ArtPiece piece, Action<AdwToast>? toast, ThemeData theme) =>
+        Glass(
+            content: Icon(glyph: MaterialIcons.ContentCopy, theme: theme),
+            onPressed: () => Copy(piece: piece, toast: toast),
+            label: "Copy image"
+        );
 
     /// <inheritdoc cref="CopyButton" />
     public static Pressable SaveButton(
-        ArtPiece piece, Action<AdwToast>? toast, ThemeData theme, Signal<float> saving, Action? done = null) => Glass(
+        ArtPiece piece, Action<AdwToast>? toast, ThemeData theme, Signal<float> saving,
+        Action? done = null) => Glass(
         content: new Watch(() => saving.Value is >= 0f and var at
             ? Percent(done: at, theme: theme)
-            : Icon(glyph: MaterialIcons.Download, theme: theme)),
-        onPressed: () => Save(piece: piece, toast: toast, saving: saving, done: done),
+            : Icon(glyph: MaterialIcons.Download, theme: theme)
+        ),
+        onPressed: () => Save(
+            piece: piece,
+            toast: toast,
+            saving: saving,
+            done: done
+        ),
         label: "Save to Downloads"
     );
 
     private static Widget Icon(string glyph, ThemeData theme) => new SizedBox(
         width: 34f,
         height: 34f,
-        child: new Center { Child = new IconGlyph(glyph: glyph, size: 18f, color: LiquidPane.OnGlass(theme)) }
+        child: new Center {
+            Child = new IconGlyph(glyph: glyph, size: 18f, color: LiquidPane.OnGlass(theme)),
+        }
     );
 
     private static Pressable Glass(Widget content, Action onPressed, string label) =>
         LiquidPane.Interactive(
-            pane: new LiquidPane { Elevation = 4f, Child = content },
+            pane: new LiquidPane {
+                Elevation = 4f,
+                Child = content,
+            },
             onPressed: onPressed,
             semantics: label
         );

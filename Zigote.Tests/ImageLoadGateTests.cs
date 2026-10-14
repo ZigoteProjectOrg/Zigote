@@ -24,7 +24,7 @@ public class ImageLoadGateTests
             int index = i;
             tasks[i] = images[i].LoadAsync(async ct =>
                 {
-                    Volatile.Write(ref fetching[index], true);
+                    Volatile.Write(location: ref fetching[index], value: true);
                     Interlocked.Increment(ref started);
                     await Task.Delay(millisecondsDelay: Timeout.Infinite, cancellationToken: ct);
                     return [];
@@ -39,10 +39,14 @@ public class ImageLoadGateTests
 
         // Waiters first: disposing a slot holder frees its slot for any waiter still live.
         for (int i = 0; i < images.Length; i++)
-            if (!Volatile.Read(ref fetching[i])) images[i].Dispose();
+            if (!Volatile.Read(ref fetching[i]))
+                images[i].Dispose();
         foreach (var image in images) image.Dispose();
         // Task.Run reports a cancelled token as a cancelled task; either way the load is over.
-        await Task.WhenAll(tasks).ContinueWith(_ => { }, TestContext.Current.CancellationToken);
+        await Task.WhenAll(tasks).ContinueWith(
+            continuationAction: _ => { },
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(expected: cap, actual: Volatile.Read(ref started));
 
@@ -55,6 +59,9 @@ public class ImageLoadGateTests
                 return Task.FromCanceled<byte[]>(new CancellationToken(canceled: true));
             }
         );
-        await admitted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await admitted.Task.WaitAsync(
+            timeout: TimeSpan.FromSeconds(5),
+            cancellationToken: TestContext.Current.CancellationToken
+        );
     }
 }

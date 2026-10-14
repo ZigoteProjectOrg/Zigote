@@ -33,25 +33,31 @@ internal static class VfxProbe
 
     public static void Run(string[] args)
     {
-        int n = args.Length > 0 && int.TryParse(args[0], out int parsed) ? parsed : 10_000;
+        int n = args.Length > 0 && int.TryParse(s: args[0], result: out int parsed)
+            ? parsed
+            : 10_000;
 
-        Console.WriteLine($"Zigote.Vfx particle probe — {n:N0} particles, {Steps:N0} steps @ {Dt * 1000f:F2} ms");
-        Console.WriteLine($"Vector<float>.Count = {Vector<float>.Count}"
-                          + $" ({Vector<float>.Count * 32} bit), hardware accelerated: {Vector.IsHardwareAccelerated}");
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(
+            $"Zigote.Vfx particle probe — {n:N0} particles, {Steps:N0} steps @ {Dt * 1000f:F2} ms"
+        );
+        Console.WriteLine(
+            $"Vector<float>.Count = {Vector<float>.Count}"
+            + $" ({Vector<float>.Count * 32} bit), hardware accelerated: {Vector.IsHardwareAccelerated}"
+        );
+        Console.WriteLine(new string(c: '─', count: 78));
 
         double whole = MeasureWholeStep(n);
         MeasureModules(n);
         double aos = MeasureAos(n);
-        double soa = MeasureSoa(n, vectorized: false);
-        double simd = MeasureSoa(n, vectorized: true);
+        double soa = MeasureSoa(n: n, vectorized: false);
+        double simd = MeasureSoa(n: n, vectorized: true);
 
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(new string(c: '─', count: 78));
         Report(label: "whole step (4 modules + integrate + compact)", nsPerStep: whole, n: n);
         Report(label: "  elementwise only, AoS (gravity+drag+integrate)", nsPerStep: aos, n: n);
         Report(label: "  elementwise only, SoA scalar", nsPerStep: soa, n: n);
         Report(label: "  elementwise only, SoA + Vector<float>", nsPerStep: simd, n: n);
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(new string(c: '─', count: 78));
 
         double share = aos / whole;
         double speedup = aos / simd;
@@ -60,7 +66,9 @@ internal static class VfxProbe
 
         Console.WriteLine($"elementwise share of a real step : {share * 100:F1}%");
         Console.WriteLine($"SoA+SIMD speedup on that share   : {speedup:F2}×");
-        Console.WriteLine($"=> best case whole-step speedup  : {wholeGain:F2}×  ({(wholeGain - 1) * 100:F0}% faster)");
+        Console.WriteLine(
+            $"=> best case whole-step speedup  : {wholeGain:F2}×  ({(wholeGain - 1) * 100:F0}% faster)"
+        );
 
         // A ratio is only half the decision. The other half is what the subsystem costs at all:
         // the fixed gameplay step runs at 120 Hz, so a step costing X ns burns 120·X ns of every
@@ -69,14 +77,18 @@ internal static class VfxProbe
         double coreShare = whole * 1e-9 * (1d / Dt);
         double saved = coreShare - (coreShare / wholeGain);
         Console.WriteLine();
-        Console.WriteLine($"at the 120 Hz fixed step, this emitter costs {coreShare * 100:F2}% of one core;");
+        Console.WriteLine(
+            $"at the 120 Hz fixed step, this emitter costs {coreShare * 100:F2}% of one core;"
+        );
         Console.WriteLine($"the whole SoA rewrite would give back {saved * 100:F2}% of one core.");
         Console.WriteLine();
-        Console.WriteLine(saved >= 0.05d
-            ? "VERDICT: worth the API break. Proceed with the SoA rewrite."
-            : "VERDICT: NOT worth the API break. The ratio looks good and the absolute number does\n"
-              + "         not — the subsystem is not on anyone's critical path. Spend the effort\n"
-              + "         where the profile says the frame actually goes.");
+        Console.WriteLine(
+            saved >= 0.05d
+                ? "VERDICT: worth the API break. Proceed with the SoA rewrite."
+                : "VERDICT: NOT worth the API break. The ratio looks good and the absolute number does\n"
+                  + "         not — the subsystem is not on anyone's critical path. Spend the effort\n"
+                  + "         where the profile says the frame actually goes."
+        );
     }
 
     private static void Report(string label, double nsPerStep, int n) => Console.WriteLine(
@@ -93,8 +105,7 @@ internal static class VfxProbe
     /// </summary>
     private static double MeasureWholeStep(int n)
     {
-        var asset = new VfxEmitterAsset
-        {
+        var asset = new VfxEmitterAsset {
             Capacity = n,
             Looping = true,
             SpawnRate = 0f,
@@ -107,9 +118,16 @@ internal static class VfxProbe
         asset.UpdateModules.Add(new GravityModule(new Vec3(x: 0f, y: -9.81f, z: 0f)));
         asset.UpdateModules.Add(new DragModule(0.2f));
         asset.UpdateModules.Add(new SizeOverLifeModule(FloatCurve.Linear(from: 1f, to: 0f)));
-        asset.UpdateModules.Add(new ColorOverLifeModule(new ColorRamp(
-            [new ColorStop(position: 0f, color: Color.White), new ColorStop(position: 1f, color: Color.Black)]
-        )));
+        asset.UpdateModules.Add(
+            new ColorOverLifeModule(
+                new ColorRamp(
+                    [
+                        new ColorStop(position: 0f, color: Color.White),
+                        new ColorStop(position: 1f, color: Color.Black),
+                    ]
+                )
+            )
+        );
 
         var sim = new CpuParticleSimulator(asset);
         sim.Tick(Dt); // fires the burst
@@ -133,14 +151,19 @@ internal static class VfxProbe
         for (int i = 0; i < n; i++) items[i] = Seed(i);
         var ctx = new VfxUpdateContext(dt: Dt, time: 1f);
 
-        (string Name, VfxUpdateModule Module)[] modules =
-        [
+        (string Name, VfxUpdateModule Module)[] modules = [
             ("gravity", new GravityModule(new Vec3(x: 0f, y: -9.81f, z: 0f))),
             ("drag", new DragModule(0.2f)),
             ("size-over-life", new SizeOverLifeModule(FloatCurve.Linear(from: 1f, to: 0f))),
-            ("color-over-life", new ColorOverLifeModule(new ColorRamp(
-                [new ColorStop(position: 0f, color: Color.White), new ColorStop(position: 1f, color: Color.Black)]
-            ))),
+            ("color-over-life",
+                new ColorOverLifeModule(
+                    new ColorRamp(
+                        [
+                            new ColorStop(position: 0f, color: Color.White),
+                            new ColorStop(position: 1f, color: Color.Black),
+                        ]
+                    )
+                )),
             ("turbulence", new TurbulenceModule(strength: 1f, frequency: 2f)),
             ("vortex", new VortexModule(axis: Vec3.Up, strength: 1f)),
         ];
@@ -151,38 +174,53 @@ internal static class VfxProbe
             // `ctx` cannot be captured by a lambda (it is a readonly struct passed by `in`), so copy
             // the two floats it carries and rebuild it inside the closure.
             var m = module;
-            double ns = Time(steps: Steps, body: () => m.ApplyRange(items.AsSpan(), in ctx));
-            Console.WriteLine($"  module {name,-18} {ns / 1000f,8:F1} µs  {ns / n,6:F2} ns/particle");
+            double ns = Time(
+                steps: Steps,
+                body: () => m.ApplyRange(particles: items.AsSpan(), ctx: in ctx)
+            );
+            Console.WriteLine(
+                $"  module {name,-18} {ns / 1000f,8:F1} µs  {ns / n,6:F2} ns/particle"
+            );
         }
 
-        double integrate = Time(steps: Steps, body: () =>
-        {
-            var span = items.AsSpan();
-            for (int i = 0; i < span.Length; i++)
+        double integrate = Time(
+            steps: Steps,
+            body: () =>
             {
-                ref var p = ref span[i];
-                p.Position += p.Velocity * Dt;
-                p.Rotation += p.AngularVelocity * Dt;
-                p.Age += Dt;
+                var span = items.AsSpan();
+                for (int i = 0; i < span.Length; i++)
+                {
+                    ref var p = ref span[i];
+                    p.Position += p.Velocity * Dt;
+                    p.Rotation += p.AngularVelocity * Dt;
+                    p.Age += Dt;
+                }
             }
-        });
-        Console.WriteLine($"  {"integrate",-25} {integrate / 1000f,8:F1} µs  {integrate / n,6:F2} ns/particle");
+        );
+        Console.WriteLine(
+            $"  {"integrate",-25} {integrate / 1000f,8:F1} µs  {integrate / n,6:F2} ns/particle"
+        );
 
         // The compaction scan as the simulator writes it: read Age and Lifetime per particle, and
         // swap-remove the expired. Nothing expires here (lifetimes are 1e6), so this measures the
         // scan alone — which is the steady state for a long-lived emitter.
-        double compact = Time(steps: Steps, body: () =>
-        {
-            int live = n, k = 0;
-            while (k < live)
+        double compact = Time(
+            steps: Steps,
+            body: () =>
             {
-                if (items[k].Age >= items[k].Lifetime) items[k] = items[--live];
-                else k++;
-            }
+                int live = n, k = 0;
+                while (k < live)
+                {
+                    if (items[k].Age >= items[k].Lifetime) items[k] = items[--live];
+                    else k++;
+                }
 
-            _sink += live;
-        });
-        Console.WriteLine($"  {"compaction scan",-25} {compact / 1000f,8:F1} µs  {compact / n,6:F2} ns/particle");
+                _sink += live;
+            }
+        );
+        Console.WriteLine(
+            $"  {"compaction scan",-25} {compact / 1000f,8:F1} µs  {compact / n,6:F2} ns/particle"
+        );
         Console.WriteLine();
     }
 
@@ -196,25 +234,28 @@ internal static class VfxProbe
         var gravity = new Vec3(x: 0f, y: -9.81f, z: 0f);
         const float drag = 0.2f;
 
-        return Time(steps: Steps, body: () =>
-        {
-            var span = items.AsSpan();
-            var step = gravity * Dt;
-            for (int i = 0; i < span.Length; i++) span[i].Velocity += step;
-
-            float keep = MathF.Max(x: 0f, y: 1f - (drag * Dt));
-            for (int i = 0; i < span.Length; i++) span[i].Velocity *= keep;
-
-            for (int i = 0; i < span.Length; i++)
+        return Time(
+            steps: Steps,
+            body: () =>
             {
-                ref var p = ref span[i];
-                p.Position += p.Velocity * Dt;
-                p.Rotation += p.AngularVelocity * Dt;
-                p.Age += Dt;
-            }
+                var span = items.AsSpan();
+                var step = gravity * Dt;
+                for (int i = 0; i < span.Length; i++) span[i].Velocity += step;
 
-            _sink += span[0].Age;
-        });
+                float keep = MathF.Max(x: 0f, y: 1f - (drag * Dt));
+                for (int i = 0; i < span.Length; i++) span[i].Velocity *= keep;
+
+                for (int i = 0; i < span.Length; i++)
+                {
+                    ref var p = ref span[i];
+                    p.Position += p.Velocity * Dt;
+                    p.Rotation += p.AngularVelocity * Dt;
+                    p.Age += Dt;
+                }
+
+                _sink += span[0].Age;
+            }
+        );
     }
 
     // ── 3. The same passes over parallel float arrays ────────────────────────────
@@ -236,37 +277,40 @@ internal static class VfxProbe
         const float drag = 0.2f;
         float keep = MathF.Max(x: 0f, y: 1f - (drag * Dt));
 
-        return Time(steps: Steps, body: () =>
-        {
-            if (vectorized)
+        return Time(
+            steps: Steps,
+            body: () =>
             {
-                // Gravity acts on Y alone; X and Z are pure drag. Kept as three separate passes so
-                // this measures the layout, not a hand-fused kernel the AoS side does not get.
-                AddScaled(vy, value: -9.81f * Dt);
-                Scale(vx, keep);
-                Scale(vy, keep);
-                Scale(vz, keep);
-                FusedAdd(dst: px, src: vx, scale: Dt);
-                FusedAdd(dst: py, src: vy, scale: Dt);
-                FusedAdd(dst: pz, src: vz, scale: Dt);
-                FusedAdd(dst: rot, src: av, scale: Dt);
-                AddScaled(age, value: Dt);
-            }
-            else
-            {
-                for (int i = 0; i < n; i++) vy[i] += -9.81f * Dt;
-                for (int i = 0; i < n; i++) vx[i] *= keep;
-                for (int i = 0; i < n; i++) vy[i] *= keep;
-                for (int i = 0; i < n; i++) vz[i] *= keep;
-                for (int i = 0; i < n; i++) px[i] += vx[i] * Dt;
-                for (int i = 0; i < n; i++) py[i] += vy[i] * Dt;
-                for (int i = 0; i < n; i++) pz[i] += vz[i] * Dt;
-                for (int i = 0; i < n; i++) rot[i] += av[i] * Dt;
-                for (int i = 0; i < n; i++) age[i] += Dt;
-            }
+                if (vectorized)
+                {
+                    // Gravity acts on Y alone; X and Z are pure drag. Kept as three separate passes so
+                    // this measures the layout, not a hand-fused kernel the AoS side does not get.
+                    AddScaled(dst: vy, value: -9.81f * Dt);
+                    Scale(dst: vx, factor: keep);
+                    Scale(dst: vy, factor: keep);
+                    Scale(dst: vz, factor: keep);
+                    FusedAdd(dst: px, src: vx, scale: Dt);
+                    FusedAdd(dst: py, src: vy, scale: Dt);
+                    FusedAdd(dst: pz, src: vz, scale: Dt);
+                    FusedAdd(dst: rot, src: av, scale: Dt);
+                    AddScaled(dst: age, value: Dt);
+                }
+                else
+                {
+                    for (int i = 0; i < n; i++) vy[i] += -9.81f * Dt;
+                    for (int i = 0; i < n; i++) vx[i] *= keep;
+                    for (int i = 0; i < n; i++) vy[i] *= keep;
+                    for (int i = 0; i < n; i++) vz[i] *= keep;
+                    for (int i = 0; i < n; i++) px[i] += vx[i] * Dt;
+                    for (int i = 0; i < n; i++) py[i] += vy[i] * Dt;
+                    for (int i = 0; i < n; i++) pz[i] += vz[i] * Dt;
+                    for (int i = 0; i < n; i++) rot[i] += av[i] * Dt;
+                    for (int i = 0; i < n; i++) age[i] += Dt;
+                }
 
-            _sink += age[0];
-        });
+                _sink += age[0];
+            }
+        );
     }
 
     private static void AddScaled(Span<float> dst, float value)
@@ -312,8 +356,7 @@ internal static class VfxProbe
     internal static Particle Seed(int i)
     {
         float f = i * 0.001f;
-        return new Particle
-        {
+        return new Particle {
             Position = new Vec3(x: f, y: f * 0.5f, z: -f),
             Velocity = new Vec3(x: MathF.Sin(f), y: 2f, z: MathF.Cos(f)),
             Age = 0f,

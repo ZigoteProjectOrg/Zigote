@@ -65,7 +65,7 @@ public sealed class HttpResponse : IDisposable
     ///     The buffered body. Empty for a streaming response — read <see cref="ContentStream" />
     ///     instead. Valid until <see cref="Dispose" />.
     /// </summary>
-    public ReadOnlyMemory<byte> Body => new(_buffer, 0, BodyLength);
+    public ReadOnlyMemory<byte> Body => new(array: _buffer, start: 0, length: BodyLength);
 
     /// <summary>The open body stream, non-null only when the request set <see cref="RequestPolicy.Streaming" />.</summary>
     public Stream? ContentStream { get; }
@@ -88,17 +88,42 @@ public sealed class HttpResponse : IDisposable
     /// <summary>A buffered response over a pooled array. Dispose returns it to the pool.</summary>
     public static HttpResponse FromPooled(
         HttpStatusCode status, ImmutableArray<HeaderPair> headers, byte[] rented, int length) =>
-        new(status, headers, rented, length, pooled: true, contentStream: null, fromCache: false);
+        new(
+            status: status,
+            headers: headers,
+            buffer: rented,
+            length: length,
+            pooled: true,
+            contentStream: null,
+            fromCache: false
+        );
 
     /// <summary>A buffered response over an array this library did not rent. Dispose is a no-op.</summary>
     public static HttpResponse FromBytes(
-        HttpStatusCode status, ImmutableArray<HeaderPair> headers, byte[] body, bool fromCache = false) =>
-        new(status, headers, body, body.Length, pooled: false, contentStream: null, fromCache: fromCache);
+        HttpStatusCode status, ImmutableArray<HeaderPair> headers, byte[] body,
+        bool fromCache = false) =>
+        new(
+            status: status,
+            headers: headers,
+            buffer: body,
+            length: body.Length,
+            pooled: false,
+            contentStream: null,
+            fromCache: fromCache
+        );
 
     /// <summary>A response whose body is still on the wire.</summary>
     public static HttpResponse FromStream(
         HttpStatusCode status, ImmutableArray<HeaderPair> headers, Stream content) =>
-        new(status, headers, [], 0, pooled: false, contentStream: content, fromCache: false);
+        new(
+            status: status,
+            headers: headers,
+            buffer: [],
+            length: 0,
+            pooled: false,
+            contentStream: content,
+            fromCache: false
+        );
 
     /// <summary>
     ///     A copy that owns nothing poolable, so it can be shared, stored and disposed by anyone.
@@ -106,17 +131,34 @@ public sealed class HttpResponse : IDisposable
     /// </summary>
     public HttpResponse Detach(bool fromCache = false) =>
         _pooled || ContentStream is not null
-            ? FromBytes(Status, Headers, Body.ToArray(), fromCache)
+            ? FromBytes(
+                status: Status,
+                headers: Headers,
+                body: Body.ToArray(),
+                fromCache: fromCache
+            )
             : fromCache == FromCache
                 ? this
-                : FromBytes(Status, Headers, _buffer, fromCache);
+                : FromBytes(
+                    status: Status,
+                    headers: Headers,
+                    body: _buffer,
+                    fromCache: fromCache
+                );
 
     /// <summary>The first value of <paramref name="name" />, or null. Case-insensitive, as HTTP defines.</summary>
     public string? Header(string name)
     {
         foreach (var h in Headers)
-            if (string.Equals(h.Name, name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(
+                    a: h.Name,
+                    b: name,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 return h.Value;
+        }
+
         return null;
     }
 
@@ -131,14 +173,19 @@ public sealed class HttpResponse : IDisposable
     {
         try
         {
-            var value = JsonSerializer.Deserialize(Body.Span, typeInfo);
+            var value = JsonSerializer.Deserialize(utf8Json: Body.Span, jsonTypeInfo: typeInfo);
             return value is null
-                ? HttpResult<T>.Fail(new HttpError.Decode(typeof(T), new JsonException("body was null")))
+                ? HttpResult<T>.Fail(
+                    new HttpError.Decode(
+                        Target: typeof(T),
+                        Inner: new JsonException("body was null")
+                    )
+                )
                 : HttpResult<T>.Ok(value);
         }
         catch (JsonException e)
         {
-            return HttpResult<T>.Fail(new HttpError.Decode(typeof(T), e));
+            return HttpResult<T>.Fail(new HttpError.Decode(Target: typeof(T), Inner: e));
         }
     }
 }

@@ -36,7 +36,8 @@ public sealed class FileCacheStore : IHttpCacheStore
     /// <param name="directory">Where entries live. One directory per app, not per runner.</param>
     /// <param name="budgetBytes">Total bytes of bodies to keep. The sweep runs when a write pushes past this.</param>
     /// <param name="time">Clock, injected so eviction tests are deterministic.</param>
-    public FileCacheStore(string directory, long budgetBytes = 256L * 1024 * 1024, TimeProvider? time = null)
+    public FileCacheStore(string directory, long budgetBytes = 256L * 1024 * 1024,
+        TimeProvider? time = null)
     {
         _directory = directory;
         _budgetBytes = budgetBytes;
@@ -45,11 +46,15 @@ public sealed class FileCacheStore : IHttpCacheStore
 
     /// <summary>The default location: a Zigote-owned folder under the user's cache directory.</summary>
     public static string DefaultDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData,
-            Environment.SpecialFolderOption.DoNotVerify) is { Length: > 0 } local
+        path1: Environment.GetFolderPath(
+            folder: Environment.SpecialFolder.LocalApplicationData,
+            option: Environment.SpecialFolderOption.DoNotVerify
+        ) is { Length: > 0 } local
             ? local
             : Path.GetTempPath(),
-        "Zigote", "http-cache");
+        path2: "Zigote",
+        path3: "http-cache"
+    );
 
     /// <inheritdoc />
     public async ValueTask<CachedResponse?> GetAsync(string key, CancellationToken ct = default)
@@ -60,7 +65,8 @@ public sealed class FileCacheStore : IHttpCacheStore
         if (!File.Exists(path)) return null;
         try
         {
-            byte[] bytes = await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);
+            byte[] bytes = await File.ReadAllBytesAsync(path: path, cancellationToken: ct)
+                .ConfigureAwait(false);
             var entry = Deserialize(bytes);
             if (entry is null)
             {
@@ -69,7 +75,13 @@ public sealed class FileCacheStore : IHttpCacheStore
             }
 
             // Access time drives the sweep's eviction order. Best-effort: some filesystems refuse.
-            try { File.SetLastAccessTimeUtc(path, _time.GetUtcNow().UtcDateTime); }
+            try
+            {
+                File.SetLastAccessTimeUtc(
+                    path: path,
+                    lastAccessTimeUtc: _time.GetUtcNow().UtcDateTime
+                );
+            }
             catch (IOException) { }
 
             return entry;
@@ -81,15 +93,21 @@ public sealed class FileCacheStore : IHttpCacheStore
     }
 
     /// <inheritdoc />
-    public async ValueTask SetAsync(string key, CachedResponse entry, CancellationToken ct = default)
+    public async ValueTask SetAsync(string key, CachedResponse entry,
+        CancellationToken ct = default)
     {
         string path = PathFor(key);
-        string partial = $"{path}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.part";
+        string partial =
+            $"{path}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.part";
         try
         {
             Directory.CreateDirectory(_directory);
-            await File.WriteAllBytesAsync(partial, Serialize(entry), ct).ConfigureAwait(false);
-            File.Move(partial, path, overwrite: true);
+            await File.WriteAllBytesAsync(
+                path: partial,
+                bytes: Serialize(entry),
+                cancellationToken: ct
+            ).ConfigureAwait(false);
+            File.Move(sourceFileName: partial, destFileName: path, overwrite: true);
             Sweep();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -110,7 +128,8 @@ public sealed class FileCacheStore : IHttpCacheStore
     public void Clear()
     {
         if (!Directory.Exists(_directory)) return;
-        foreach (string file in Directory.EnumerateFiles(_directory, "*.zhc")) Delete(file);
+        foreach (string file in Directory.EnumerateFiles(path: _directory, searchPattern: "*.zhc"))
+            Delete(file);
     }
 
     private void Sweep()
@@ -120,7 +139,11 @@ public sealed class FileCacheStore : IHttpCacheStore
         long now = _time.GetUtcNow().UtcTicks;
         long last = Interlocked.Read(ref _lastSweepTicks);
         if (now - last < TimeSpan.TicksPerMinute) return;
-        if (Interlocked.CompareExchange(ref _lastSweepTicks, now, last) != last) return;
+        if (Interlocked.CompareExchange(
+                location1: ref _lastSweepTicks,
+                value: now,
+                comparand: last
+            ) != last) return;
 
         try
         {
@@ -129,7 +152,10 @@ public sealed class FileCacheStore : IHttpCacheStore
             foreach (var f in files) total += f.Length;
             if (total <= _budgetBytes) return;
 
-            Array.Sort(files, static (a, b) => a.LastAccessTimeUtc.CompareTo(b.LastAccessTimeUtc));
+            Array.Sort(
+                array: files,
+                comparison: static (a, b) => a.LastAccessTimeUtc.CompareTo(b.LastAccessTimeUtc)
+            );
             foreach (var f in files)
             {
                 if (total <= _budgetBytes) break;
@@ -137,9 +163,7 @@ public sealed class FileCacheStore : IHttpCacheStore
                 Delete(f.FullName);
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private static void Delete(string path)
@@ -153,13 +177,16 @@ public sealed class FileCacheStore : IHttpCacheStore
         // Content-addressed by key: a URL is not a filename (length limits, '/', case-insensitive
         // volumes), and half a SHA-256 is far past collision territory for a per-machine cache.
         byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(key));
-        return Path.Combine(_directory, $"{Convert.ToHexStringLower(digest.AsSpan(0, 16))}.zhc");
+        return Path.Combine(
+            path1: _directory,
+            path2: $"{Convert.ToHexStringLower(digest.AsSpan(start: 0, length: 16))}.zhc"
+        );
     }
 
     private static byte[] Serialize(CachedResponse entry)
     {
         using var buffer = new MemoryStream(entry.Body.Length + 256);
-        using (var w = new BinaryWriter(buffer, Encoding.UTF8, leaveOpen: true))
+        using (var w = new BinaryWriter(output: buffer, encoding: Encoding.UTF8, leaveOpen: true))
         {
             w.Write(Magic);
             w.Write((int)entry.Status);
@@ -184,26 +211,34 @@ public sealed class FileCacheStore : IHttpCacheStore
     {
         try
         {
-            using var buffer = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(buffer, Encoding.UTF8);
+            using var buffer = new MemoryStream(buffer: bytes, writable: false);
+            using var r = new BinaryReader(input: buffer, encoding: Encoding.UTF8);
             if (r.ReadInt32() != Magic) return null;
 
             var status = (HttpStatusCode)r.ReadInt32();
-            var storedAt = new DateTimeOffset(r.ReadInt64(), TimeSpan.Zero);
+            var storedAt = new DateTimeOffset(ticks: r.ReadInt64(), offset: TimeSpan.Zero);
             long initialAge = r.ReadInt64();
             string varyKey = r.ReadString();
 
             int headerCount = r.ReadInt32();
             if (headerCount is < 0 or > 1024) return null;
             var headers = ImmutableArray.CreateBuilder<HeaderPair>(headerCount);
-            for (int i = 0; i < headerCount; i++) headers.Add(new HeaderPair(r.ReadString(), r.ReadString()));
+            for (int i = 0; i < headerCount; i++)
+                headers.Add(new HeaderPair(Name: r.ReadString(), Value: r.ReadString()));
 
             int bodyLength = r.ReadInt32();
             if (bodyLength < 0) return null;
             byte[] body = r.ReadBytes(bodyLength);
             if (body.Length != bodyLength) return null;
 
-            return new CachedResponse(status, headers.ToImmutable(), body, storedAt, initialAge, varyKey);
+            return new CachedResponse(
+                Status: status,
+                Headers: headers.ToImmutable(),
+                Body: body,
+                StoredAt: storedAt,
+                InitialAgeSeconds: initialAge,
+                VaryKey: varyKey
+            );
         }
         catch (Exception e) when (e is EndOfStreamException or IOException or ArgumentException)
         {

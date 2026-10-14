@@ -591,7 +591,11 @@ public sealed class AdwGradientEditor : Widget
             }
         );
 
-        _picker = new AdwPopover(child: new SizedBox(width: 240f, child: picker), anchor: anchor, app: Owner);
+        _picker = new AdwPopover(
+            child: new SizedBox(width: 240f, child: picker),
+            anchor: anchor,
+            app: Owner
+        );
         _picker.Show();
     }
 

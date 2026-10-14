@@ -33,6 +33,7 @@ public static class DebugStats
 
     /// <summary>UI-thread alloc per frame (KB), averaged over the last ~1 s metric window.</summary>
     public static float AllocKbPerFrame { get; private set; }
+
     public static float FpsMin { get; private set; } = 60f;
     public static float FpsMax { get; private set; } = 60f;
     public static float FrameMs { get; private set; }

@@ -81,7 +81,7 @@ public sealed class FloatCurve
 
     public IReadOnlyList<CurveKey> Keys => _keys;
 
-        /// <summary>
+    /// <summary>
     ///     The same curve as the delegate the animation core eases with, so a curve authored over
     ///     particle lifetime in the VFX editor can drive a widget transition unchanged. One
     ///     evaluation contract, two storage shapes — the keys stay keys because they serialise and
@@ -89,7 +89,7 @@ public sealed class FloatCurve
     /// </summary>
     public Func<float, float> AsCurve() => Evaluate;
 
-public static FloatCurve Constant(float v) => new(
+    public static FloatCurve Constant(float v) => new(
         [new CurveKey(position: 0f, value: v), new CurveKey(position: 1f, value: v)]
     );
 

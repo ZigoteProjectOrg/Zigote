@@ -7,6 +7,7 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+
 // Slider / Switch / AdwTextField / Divider / ProgressBar / Badge come from Zigote.UI.Adwaita,
 // which the test project pulls in via a global <Using> in Zigote.Tests.csproj. Alias Switch to
 // disambiguate it from System.Diagnostics.Switch (pulled in for Stopwatch).
@@ -54,7 +55,10 @@ public class ComplexUiPerformanceTests
                         ),
                         new AdwSeparator(),
                         LabeledRow(label: "Dark mode", control: new AdwSwitch(index % 2 == 0)),
-                        LabeledRow(label: "Notifications", control: new AdwCheckButton(value: index % 3 == 0)),
+                        LabeledRow(
+                            label: "Notifications",
+                            control: new AdwCheckButton(value: index % 3 == 0)
+                        ),
                         LabeledRow(
                             label: "Volume",
                             control: new SizedBox(
@@ -238,9 +242,10 @@ public class ComplexUiPerformanceTests
 
         const int frames = 300;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
-        });
+            {
+                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
+            }
+        );
         long allocated = measured;
         double perFrame = allocated / (double)frames;
 

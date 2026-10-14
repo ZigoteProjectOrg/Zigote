@@ -165,7 +165,11 @@ public sealed class AdwColorButton : Widget
         _picker = new AdwColorPicker(initial: _value, onChanged: Set);
         col.Children.Add(_picker);
 
-        new AdwPopover(child: new SizedBox(width: 220f, child: col), anchor: Bounds, app: Owner ?? _app).Show();
+        new AdwPopover(
+            child: new SizedBox(width: 220f, child: col),
+            anchor: Bounds,
+            app: Owner ?? _app
+        ).Show();
     }
 
     /// <summary>Apply a palette entry to both our value and (while open) the picker's HSV state.</summary>

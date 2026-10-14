@@ -18,9 +18,12 @@ public class AdwShortcutLabelTests
     [Fact]
     public void MacUsesGlyphsAndMapsPrimaryToCommand()
     {
-        Assert.Equal(expected: ["⌃", "⌥", "⇧", "N"], actual: Parse("<Shift><Alt><Ctrl>n", mac: true));
-        Assert.Equal(expected: ["⌘", "S"], actual: Parse("<Primary>s", mac: true));
-        Assert.Equal(expected: ["⌃", "↩"], actual: Parse("<Ctrl>Return", mac: true));
+        Assert.Equal(
+            expected: ["⌃", "⌥", "⇧", "N"],
+            actual: Parse(accel: "<Shift><Alt><Ctrl>n", mac: true)
+        );
+        Assert.Equal(expected: ["⌘", "S"], actual: Parse(accel: "<Primary>s", mac: true));
+        Assert.Equal(expected: ["⌃", "↩"], actual: Parse(accel: "<Ctrl>Return", mac: true));
     }
 
     [Fact]

@@ -22,7 +22,9 @@ public sealed class StatusBar : Widget
     private readonly Action _showConsole;
     private readonly Action _showPalette;
     private readonly EditorState _state;
+
     private readonly ThemeData _theme;
+
     // Frame-rate readout, refreshed twice a second from the frames in between: a per-frame value
     // changes digit count (and colour) every paint, which reads as flicker.
     private const float FpsInterval = 0.5f;
@@ -84,7 +86,8 @@ public sealed class StatusBar : Widget
             { IsPlaying: true, IsPaused: true } => ("Paused", _theme.Warning),
             { IsPlaying: true } => ("Playing", _theme.Success),
             { IsScriptBuilding: true } => ("Building scripts…", _theme.Warning),
-            _ when scriptErrors > 0 => ($"Script build: {scriptErrors} diagnostic(s)", _theme.Error),
+            _ when scriptErrors > 0 => ($"Script build: {scriptErrors} diagnostic(s)",
+                _theme.Error),
             _ => ("Ready", _theme.TextMuted),
         };
         float x = Bounds.X + 10f;

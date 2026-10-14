@@ -32,7 +32,8 @@ public sealed class AdwCalendar : Widget
     private const int PrevMonth = 1, NextMonth = 2, PrevYear = 3, NextYear = 4, DayBase = 100;
 
     private static readonly string[] DayNumbers =
-        Enumerable.Range(start: 0, count: 32).Select(i => i.ToString(CultureInfo.InvariantCulture)).ToArray();
+        Enumerable.Range(start: 0, count: 32).Select(i => i.ToString(CultureInfo.InvariantCulture))
+            .ToArray();
 
     private readonly AnimationController _slide;
     private float _cell = 34f;
@@ -159,17 +160,22 @@ public sealed class AdwCalendar : Widget
             PrevYear => Bounds.X + half,
             _ => Bounds.Right - StepperW,
         };
-        return new Rect(x: x, y: Bounds.Y + ((HeaderH - StepperW) / 2f), width: StepperW, height: StepperW);
+        return new Rect(
+            x: x,
+            y: Bounds.Y + ((HeaderH - StepperW) / 2f),
+            width: StepperW,
+            height: StepperW
+        );
     }
 
-    private bool InRange(DateOnly d) => (MinDate is not { } min || d >= min) && (MaxDate is not { } max || d <= max);
+    private bool InRange(DateOnly d) =>
+        (MinDate is not { } min || d >= min) && (MaxDate is not { } max || d <= max);
 
     private int TargetAt(Offset point)
     {
         for (int t = PrevMonth; t <= NextYear; t++)
-        {
-            if (StepperRect(t).Contains(px: point.X, py: point.Y)) return t;
-        }
+            if (StepperRect(t).Contains(px: point.X, py: point.Y))
+                return t;
 
         var grid = GridRect;
         if (!grid.Contains(px: point.X, py: point.Y)) return -1;
@@ -186,13 +192,20 @@ public sealed class AdwCalendar : Widget
         _theme = ThemeProvider.Of(BuildContext.Current);
         // A finger needs the full target; on a pointer GTK's ~34px day cells.
         _cell = AdwTouchMetrics.IsCompact ? 44f : 34f;
-        return c.Constrain(new Size(width: _cell * 7f, height: HeaderH + Gap + WeekdayH + (_cell * Weeks)));
+        return c.Constrain(
+            new Size(width: _cell * 7f, height: HeaderH + Gap + WeekdayH + (_cell * Weeks))
+        );
     }
 
     public override void Layout(Offset origin)
     {
         var size = new Size(width: _cell * 7f, height: HeaderH + Gap + WeekdayH + (_cell * Weeks));
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: size.Width, height: size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: size.Width,
+            height: size.Height
+        );
     }
 
     // ── Paint ─────────────────────────────────────────────────────────────────
@@ -204,28 +217,53 @@ public sealed class AdwCalendar : Widget
         PaintWeekdays(paint: paint, p: p);
 
         var grid = GridRect;
-        float t = _slide.Status is AnimationStatus.Forward ? Math.Clamp(value: _slide.Value, min: 0f, max: 1f) : 1f;
+        float t = _slide.Status is AnimationStatus.Forward
+            ? Math.Clamp(value: _slide.Value, min: 0f, max: 1f)
+            : 1f;
         if (t >= 1f)
         {
-            PaintMonth(paint: paint, p: p, month: _month, grid: grid, interactive: true);
+            PaintMonth(
+                paint: paint,
+                p: p,
+                month: _month,
+                grid: grid,
+                interactive: true
+            );
             return;
         }
 
         // Both months slide by one grid width; the clip keeps them inside the calendar.
         paint.AddClipStart(grid);
         float w = grid.Width;
-        PaintMonth(paint: paint, p: p, month: _from, grid: Shift(rect: grid, dx: -_slideDir * t * w), interactive: false);
-        PaintMonth(paint: paint, p: p, month: _month, grid: Shift(rect: grid, dx: _slideDir * (1f - t) * w), interactive: false);
+        PaintMonth(
+            paint: paint,
+            p: p,
+            month: _from,
+            grid: Shift(rect: grid, dx: -_slideDir * t * w),
+            interactive: false
+        );
+        PaintMonth(
+            paint: paint,
+            p: p,
+            month: _month,
+            grid: Shift(rect: grid, dx: _slideDir * (1f - t) * w),
+            interactive: false
+        );
         paint.AddClipEnd();
     }
 
     private static Rect Shift(Rect rect, float dx) =>
-        new(x: MathF.Round(rect.X + dx), y: rect.Y, width: rect.Width, height: rect.Height);
+        new(
+            x: MathF.Round(rect.X + dx),
+            y: rect.Y,
+            width: rect.Width,
+            height: rect.Height
+        );
 
     private void PaintHeader(PaintList paint, AdwColors p)
     {
         float half = Bounds.Width / 2f;
-        var monthName = CultureInfo.CurrentCulture.DateTimeFormat.MonthNames[_month.Month - 1];
+        string monthName = CultureInfo.CurrentCulture.DateTimeFormat.MonthNames[_month.Month - 1];
         if (_yearTextFor != _month.Year)
         {
             _yearTextFor = _month.Year;
@@ -233,10 +271,32 @@ public sealed class AdwCalendar : Widget
         }
 
         var fg = p.WindowFg;
-        CenterText(paint: paint, text: monthName, box: new Rect(x: Bounds.X, y: Bounds.Y, width: half, height: HeaderH),
-            color: fg, size: AdwTypography.Heading.Size, weight: FontWeight.Bold);
-        CenterText(paint: paint, text: _yearText, box: new Rect(x: Bounds.X + half, y: Bounds.Y, width: half, height: HeaderH),
-            color: fg, size: AdwTypography.Heading.Size, weight: FontWeight.Bold);
+        CenterText(
+            paint: paint,
+            text: monthName,
+            box: new Rect(
+                x: Bounds.X,
+                y: Bounds.Y,
+                width: half,
+                height: HeaderH
+            ),
+            color: fg,
+            size: AdwTypography.Heading.Size,
+            weight: FontWeight.Bold
+        );
+        CenterText(
+            paint: paint,
+            text: _yearText,
+            box: new Rect(
+                x: Bounds.X + half,
+                y: Bounds.Y,
+                width: half,
+                height: HeaderH
+            ),
+            color: fg,
+            size: AdwTypography.Heading.Size,
+            weight: FontWeight.Bold
+        );
 
         for (int target = PrevMonth; target <= NextYear; target++)
         {
@@ -244,12 +304,21 @@ public sealed class AdwCalendar : Widget
             // Flat circular buttons: no fill at rest, the hover/press wash otherwise.
             if (_hover == target || _pressed == target)
             {
-                paint.AddRect(bounds: r, color: _pressed == target ? p.ActiveFill : p.HoverFill,
-                    radius: StepperW / 2f);
+                paint.AddRect(
+                    bounds: r,
+                    color: _pressed == target ? p.ActiveFill : p.HoverFill,
+                    radius: StepperW / 2f
+                );
             }
 
             bool back = target is PrevMonth or PrevYear;
-            Icons.Draw(paint: paint, glyph: back ? Icons.ChevronLeft : Icons.ChevronRight, box: r, color: fg, size: 18f);
+            Icons.Draw(
+                paint: paint,
+                glyph: back ? Icons.ChevronLeft : Icons.ChevronRight,
+                box: r,
+                color: fg,
+                size: 18f
+            );
         }
     }
 
@@ -260,13 +329,24 @@ public sealed class AdwCalendar : Widget
         for (int col = 0; col < 7; col++)
         {
             int dow = ((int)FirstDayOfWeek + col) % 7;
-            CenterText(paint: paint, text: names[dow],
-                box: new Rect(x: Bounds.X + (col * _cell), y: y, width: _cell, height: WeekdayH),
-                color: p.DimLabel, size: AdwTypography.Caption.Size, weight: FontWeight.Bold);
+            CenterText(
+                paint: paint,
+                text: names[dow],
+                box: new Rect(
+                    x: Bounds.X + (col * _cell),
+                    y: y,
+                    width: _cell,
+                    height: WeekdayH
+                ),
+                color: p.DimLabel,
+                size: AdwTypography.Caption.Size,
+                weight: FontWeight.Bold
+            );
         }
     }
 
-    private void PaintMonth(PaintList paint, AdwColors p, DateOnly month, Rect grid, bool interactive)
+    private void PaintMonth(PaintList paint, AdwColors p, DateOnly month, Rect grid,
+        bool interactive)
     {
         var start = GridStart(month);
         var today = Today;
@@ -275,7 +355,12 @@ public sealed class AdwCalendar : Widget
         {
             var day = start.AddDays(i);
             var cell = CellRect(grid: grid, index: i);
-            var disc = new Rect(x: cell.X + 2f, y: cell.Y + 2f, width: cell.Width - 4f, height: cell.Height - 4f);
+            var disc = new Rect(
+                x: cell.X + 2f,
+                y: cell.Y + 2f,
+                width: cell.Width - 4f,
+                height: cell.Height - 4f
+            );
             bool inMonth = day.Month == month.Month;
             bool enabled = InRange(day);
             bool selected = day == _value && inMonth;
@@ -284,7 +369,11 @@ public sealed class AdwCalendar : Widget
             if (selected)
                 paint.AddRect(bounds: disc, color: p.AccentBg, radius: disc.Height / 2f);
             else if (interactive && enabled && (_hover == target || _pressed == target))
-                paint.AddRect(bounds: disc, color: _pressed == target ? p.ActiveFill : p.HoverFill, radius: disc.Height / 2f);
+                paint.AddRect(
+                    bounds: disc,
+                    color: _pressed == target ? p.ActiveFill : p.HoverFill,
+                    radius: disc.Height / 2f
+                );
 
             var color = selected ? p.AccentFg
                 : day == today ? p.Accent
@@ -292,14 +381,25 @@ public sealed class AdwCalendar : Widget
             // `.other-month` and insensitive days: the label at 30%.
             if (!inMonth || !enabled) color = color.WithAlpha(color.A * 0.3f);
             bool strong = selected || day == today;
-            CenterText(paint: paint, text: DayNumbers[day.Day], box: cell, color: color, size: fs,
-                weight: strong ? FontWeight.Bold : FontWeight.Normal);
+            CenterText(
+                paint: paint,
+                text: DayNumbers[day.Day],
+                box: cell,
+                color: color,
+                size: fs,
+                weight: strong ? FontWeight.Bold : FontWeight.Normal
+            );
 
             if (IsMarked is { } marked && inMonth && marked(day))
             {
                 float r = 2f;
                 paint.AddRect(
-                    bounds: new Rect(x: cell.X + (cell.Width / 2f) - r, y: cell.Bottom - 9f, width: r * 2f, height: r * 2f),
+                    bounds: new Rect(
+                        x: cell.X + (cell.Width / 2f) - r,
+                        y: cell.Bottom - 9f,
+                        width: r * 2f,
+                        height: r * 2f
+                    ),
                     color: selected ? p.AccentFg : p.Accent,
                     radius: r
                 );
@@ -310,17 +410,25 @@ public sealed class AdwCalendar : Widget
         }
     }
 
-    private static void CenterText(PaintList paint, string text, Rect box, Color color, float size, FontWeight weight)
+    private static void CenterText(PaintList paint, string text, Rect box, Color color, float size,
+        FontWeight weight)
     {
         float w = TextMeasure.Width(text: text, fontSize: size, weight: weight);
         float baseline = box.Y + ((box.Height - size) / 2f) + (size * 0.8f);
-        paint.AddText(text: text, baselineX: box.X + ((box.Width - w) / 2f), baselineY: baseline, color: color,
-            fontSize: size, fontWeight: weight);
+        paint.AddText(
+            text: text,
+            baselineX: box.X + ((box.Width - w) / 2f),
+            baselineY: baseline,
+            color: color,
+            fontSize: size,
+            fontWeight: weight
+        );
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────
 
-    public override MouseCursor? GetCursor(Offset point) => TargetAt(point) >= 0 ? MouseCursor.Pointer : null;
+    public override MouseCursor? GetCursor(Offset point) =>
+        TargetAt(point) >= 0 ? MouseCursor.Pointer : null;
 
     public override void OnPointerMove(Offset point)
     {
@@ -445,8 +553,16 @@ public sealed class AdwCalendar : Widget
         config.Label = SemanticsLabel ?? "Calendar";
         config.Value = _value.ToString(format: "D", provider: CultureInfo.CurrentCulture);
         config.Actions = SemanticsAction.Focus;
-        config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(flag: SemanticsFlags.Focused, on: Focused);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(
+            flag: SemanticsFlags.Focused,
+            on: Focused
+        );
     }
 
-    public override int DebugStateHash() => HashCode.Combine(value1: _value, value2: _month, value3: _hover, value4: _pressed);
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: _value,
+        value2: _month,
+        value3: _hover,
+        value4: _pressed
+    );
 }

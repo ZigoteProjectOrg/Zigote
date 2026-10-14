@@ -505,12 +505,13 @@ public sealed class ContextMenu : Widget
             height: RowHeight(Items[idx])
         );
 
-        _submenu = new ContextMenu(app: _app, items: [.. Items[idx].Children!]);
-        // Submenu shares the screen overlay but we position it manually
-        _submenu._parentMenu = this; // owner link so item-select can dismiss the whole chain
-        _submenu._screen = _screen;
-        _submenu._safe = _safe;
-        _submenu._theme = _theme;
+        _submenu = new ContextMenu(app: _app, items: [.. Items[idx].Children!]) {
+            // Submenu shares the screen overlay but we position it manually
+            _parentMenu = this, // owner link so item-select can dismiss the whole chain
+            _screen = _screen,
+            _safe = _safe,
+            _theme = _theme,
+        };
         _submenu._menuW = MathF.Min(
             x: _submenu.MeasureMenuWidth(),
             y: MathF.Max(x: 80f, y: UsableWidth() - Spacing.Lg)

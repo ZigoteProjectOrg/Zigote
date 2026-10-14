@@ -71,7 +71,10 @@ public class AccessibilityTests
         Assert.True(on.HasFlag(SemanticsFlags.Checkable));
         Assert.True(on.HasFlag(SemanticsFlags.Checked));
 
-        var off = First(root: Tree(new AdwCheckButton(value: false)), role: SemanticsRole.Checkbox)!;
+        var off = First(
+            root: Tree(new AdwCheckButton(value: false)),
+            role: SemanticsRole.Checkbox
+        )!;
         Assert.True(off.HasFlag(SemanticsFlags.Checkable));
         Assert.False(off.HasFlag(SemanticsFlags.Checked));
     }
@@ -184,7 +187,8 @@ public class AccessibilityTests
         )!;
         Assert.Equal(expected: "Button: Save", actual: button.Describe());
 
-        var check = First(root: Tree(new AdwCheckButton(value: true)), role: SemanticsRole.Checkbox)!;
+        var check =
+            First(root: Tree(new AdwCheckButton(value: true)), role: SemanticsRole.Checkbox)!;
         Assert.Contains(expectedSubstring: "checked", actualString: check.Describe());
     }
 

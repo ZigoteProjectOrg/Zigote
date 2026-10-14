@@ -46,9 +46,7 @@ public static class Device
                 directory: options.Directory,
                 adb: adb!
             ),
-            _ => throw new CliError(
-                $"unknown action '{options.Action}'. Use: list, run, logs."
-            ),
+            _ => throw new CliError($"unknown action '{options.Action}'. Use: list, run, logs."),
         };
     }
 
@@ -78,7 +76,9 @@ public static class Device
 
     private static int List(string? adb, bool json)
     {
-        var devices = adb is null ? [] : Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"]));
+        var devices = adb is null
+            ? []
+            : Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"]));
         // Simulators are devices too — and on a Mac they are usually the only ones. Listing them
         // here is what makes `zigote run` with no arguments able to mean "the booted simulator".
         devices.AddRange(Ios.Simulators());
@@ -88,7 +88,8 @@ public static class Device
             // human output stops being an IDE-plugin bug.
             foreach (var device in devices)
             {
-                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                Console.WriteLine(
+                    System.Text.Json.JsonSerializer.Serialize(
                         new {
                             id = device.Serial,
                             name = device.Model,
@@ -131,12 +132,12 @@ public static class Device
             if (parts.Length < 2 || parts[0] == "List" || parts[0].StartsWith('*')) continue;
 
             string model = parts
-                                .FirstOrDefault(p => p.StartsWith(
-                                        value: "model:",
-                                        comparisonType: StringComparison.Ordinal
-                                    )
-                                )?["model:".Length..]
-                            ?? parts[0];
+                               .FirstOrDefault(p => p.StartsWith(
+                                       value: "model:",
+                                       comparisonType: StringComparison.Ordinal
+                                   )
+                               )?["model:".Length..]
+                           ?? parts[0];
             devices.Add(new Attached(Serial: parts[0], State: parts[1], Model: model));
         }
 
@@ -156,8 +157,11 @@ public static class Device
         if (serial is not null)
         {
             foreach (var candidate in ready)
+            {
                 if (candidate.Serial == serial)
                     return candidate;
+            }
+
             throw new CliError(
                 $"no ready device with serial '{serial}'. `zigote device list` shows what is attached."
             );
@@ -173,7 +177,10 @@ public static class Device
                 "no device attached. Plug one in with USB debugging on, or start an emulator."
             ),
             _ => throw new CliError(
-                "more than one device: " + string.Join(", ", ready.Select(d => d.Serial)) +
+                "more than one device: " + string.Join(
+                    separator: ", ",
+                    values: ready.Select(d => d.Serial)
+                ) +
                 ". Pick one with --serial."
             ),
         };
@@ -189,7 +196,9 @@ public static class Device
         abi?.Trim() switch {
             "arm64-v8a" => "android-arm64",
             "x86_64" => "android-x64",
-            null or "" => throw new CliError("the device did not report an ABI (ro.product.cpu.abi)."),
+            null or "" => throw new CliError(
+                "the device did not report an ABI (ro.product.cpu.abi)."
+            ),
             var other => throw new CliError(
                 $"unsupported device ABI '{other}'. The engine ships arm64-v8a and x86_64."
             ),
@@ -214,7 +223,10 @@ public static class Device
             create: "`zigote add android` writes one."
         );
         string rid = Rid(
-            Shell.Capture(file: adb, arguments: ["-s", device.Serial, "shell", "getprop", "ro.product.cpu.abi"])
+            Shell.Capture(
+                file: adb,
+                arguments: ["-s", device.Serial, "shell", "getprop", "ro.product.cpu.abi"]
+            )
         );
 
         bool sdkCanReload = SupportsDeviceHotReload(out string sdk);
@@ -266,9 +278,9 @@ public static class Device
 
         Console.WriteLine($"  {device.Model} ({device.Serial})  →  {rid}");
         if (reload)
-        {
-            Console.WriteLine("  hot reload on: edit a Build() and save — the tree re-runs in place.");
-        }
+            Console.WriteLine(
+                "  hot reload on: edit a Build() and save — the tree re-runs in place."
+            );
         else if (!options.NoReload && !options.Release)
         {
             // Said out loud rather than silently degraded: an app that quietly ignores every delta
@@ -280,9 +292,8 @@ public static class Device
             );
         }
         else
-        {
             Console.WriteLine("  hot reload off: edits need another `zigote run`.");
-        }
+
         if (options.Debug)
         {
             Console.WriteLine(
@@ -312,16 +323,20 @@ public static class Device
     private static bool SupportsDeviceHotReload(out string version)
     {
         version = Shell.Capture(file: "dotnet", arguments: ["--version"])?.Trim() ?? "";
+
         // Compare the release band only (major.minor.feature); the patch digits are not ordered
         // usefully across bands, and "10.0.111 < 10.0.300" is the whole question.
         static int Band(string v)
         {
             string[] parts = v.Split('.');
-            return parts.Length < 3 || !int.TryParse(parts[0], out int major) ||
-                   !int.TryParse(parts[1], out int minor) ||
-                   !int.TryParse(new string(parts[2].TakeWhile(char.IsDigit).ToArray()), out int patch)
+            return parts.Length < 3 || !int.TryParse(s: parts[0], result: out int major) ||
+                   !int.TryParse(s: parts[1], result: out int minor) ||
+                   !int.TryParse(
+                       s: new string(parts[2].TakeWhile(char.IsDigit).ToArray()),
+                       result: out int patch
+                   )
                 ? 0
-                : major * 1_000_000 + minor * 10_000 + patch / 100 * 100;
+                : (major * 1_000_000) + (minor * 10_000) + (patch / 100 * 100);
         }
 
         return Band(version) >= Band(MinHotReloadSdk);
@@ -332,7 +347,8 @@ public static class Device
     ///     or a headless package passes every naive check and then fails deep inside the build.
     /// </summary>
     private static bool IsUsableJavaHome(string? home) =>
-        home is { Length: > 0 } && File.Exists(Path.Combine(
+        home is { Length: > 0 } && File.Exists(
+            Path.Combine(
                 path1: home,
                 path2: "bin",
                 path3: OperatingSystem.IsWindows() ? "jar.exe" : "jar"
@@ -350,7 +366,8 @@ public static class Device
     /// </summary>
     internal static int Logs(Attached device, string directory, string adb)
     {
-        string appId = ApplicationId(Projects.RequireHead(
+        string appId = ApplicationId(
+            Projects.RequireHead(
                 root: directory,
                 suffix: ".Android",
                 create: "`zigote add android` writes one."
@@ -362,17 +379,17 @@ public static class Device
         )?.Trim();
 
         var start = new ProcessStartInfo(adb) { UseShellExecute = false };
-        foreach (string a in (ReadOnlySpan<string>) ["-s", device.Serial, "logcat", "-v", "time"])
+        foreach (string a in (ReadOnlySpan<string>)["-s", device.Serial, "logcat", "-v", "time"])
             start.ArgumentList.Add(a);
         if (!string.IsNullOrEmpty(pid))
-        {
             start.ArgumentList.Add($"--pid={pid}");
-        }
         else
         {
             // Not running yet: fall back to the tags the app and engine write under, so `logs` can
             // be started first and catch a crash that happens during startup.
-            Console.WriteLine($"  {appId} is not running — showing zigote/runtime tags until it is.");
+            Console.WriteLine(
+                $"  {appId} is not running — showing zigote/runtime tags until it is."
+            );
             foreach (string a in (ReadOnlySpan<string>) [
                          "zigote:V", "DOTNET:V", "monodroid:V", "AndroidRuntime:E", "*:S",
                      ])
@@ -433,8 +450,19 @@ public static class Device
                      Environment.GetEnvironmentVariable("ANDROID_HOME") ?? "",
                      Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT") ?? "",
                      Path.Combine(path1: home, path2: "Android", path3: "Sdk"),
-                     Path.Combine(path1: home, path2: "Library", path3: "Android", path4: "sdk"),
-                     Path.Combine(home, "AppData", "Local", "Android", "Sdk"),
+                     Path.Combine(
+                         path1: home,
+                         path2: "Library",
+                         path3: "Android",
+                         path4: "sdk"
+                     ),
+                     Path.Combine(
+                         home,
+                         "AppData",
+                         "Local",
+                         "Android",
+                         "Sdk"
+                     ),
                  ])
         {
             if (root.Length == 0) continue;

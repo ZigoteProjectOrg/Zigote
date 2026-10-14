@@ -362,11 +362,28 @@ public sealed class PaintSnapshot
             case ZgPaintOp.Bezier:
             {
                 var op = MemoryMarshal.Read<ZgPaintBezier>(rec);
-                float minX = MathF.Min(x: MathF.Min(x: op.X0, y: op.X1), y: MathF.Min(x: op.X2, y: op.X3));
-                float maxX = MathF.Max(x: MathF.Max(x: op.X0, y: op.X1), y: MathF.Max(x: op.X2, y: op.X3));
-                float minY = MathF.Min(x: MathF.Min(x: op.Y0, y: op.Y1), y: MathF.Min(x: op.Y2, y: op.Y3));
-                float maxY = MathF.Max(x: MathF.Max(x: op.Y0, y: op.Y1), y: MathF.Max(x: op.Y2, y: op.Y3));
-                bounds = new Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                float minX = MathF.Min(
+                    x: MathF.Min(x: op.X0, y: op.X1),
+                    y: MathF.Min(x: op.X2, y: op.X3)
+                );
+                float maxX = MathF.Max(
+                    x: MathF.Max(x: op.X0, y: op.X1),
+                    y: MathF.Max(x: op.X2, y: op.X3)
+                );
+                float minY = MathF.Min(
+                    x: MathF.Min(x: op.Y0, y: op.Y1),
+                    y: MathF.Min(x: op.Y2, y: op.Y3)
+                );
+                float maxY = MathF.Max(
+                    x: MathF.Max(x: op.Y0, y: op.Y1),
+                    y: MathF.Max(x: op.Y2, y: op.Y3)
+                );
+                bounds = new Rect(
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    )
                     .Inflate(op.Width + 2f);
                 return true;
             }
@@ -388,7 +405,12 @@ public sealed class PaintSnapshot
                     maxY = MathF.Max(x: maxY, y: y);
                 }
 
-                bounds = new Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                bounds = new Rect(
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    )
                     .Inflate(2f);
                 return true;
             }
@@ -404,7 +426,12 @@ public sealed class PaintSnapshot
         }
     }
 
-    private static Rect ToRect(ZgXywh v) => new(x: v.X, y: v.Y, width: v.W, height: v.H);
+    private static Rect ToRect(ZgXywh v) => new(
+        x: v.X,
+        y: v.Y,
+        width: v.W,
+        height: v.H
+    );
 
     // ── Command equality ──────────────────────────────────────────────────────
 
@@ -427,7 +454,12 @@ public sealed class PaintSnapshot
         // for identical text. Compare everything else byte-for-byte and the blobs by content.
         int textPtr = PaintList.TextPtrFieldOffset(kind);
         int pixPtr = PaintList.PixelsPtrFieldOffset(kind);
-        if (!RecordBytesEqual(a: ab, b: bb, skipA: textPtr, skipB: pixPtr)) return false;
+        if (!RecordBytesEqual(
+                a: ab,
+                b: bb,
+                skipA: textPtr,
+                skipB: pixPtr
+            )) return false;
 
         if (textPtr >= 0 &&
             !BlobEquals(

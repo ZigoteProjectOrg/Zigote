@@ -25,9 +25,9 @@ namespace Zigote.UI.Adwaita;
 ///             glass bar reads as a smudge, and doubles the cost for it.
 ///         </item>
 ///         <item>
-///             Two variants: <see cref="Regular" /> for chrome over a known surface, and
-///             <see cref="Clear" /> for chrome over media, which leans on the shader's adaptive
-///             anchor instead of a heavier scrim. <see cref="Tinted" /> is the dial between them,
+///             Two variants: <see cref="Regular" /> for adaptive chrome over any content, and
+///             <see cref="Clear" /> for chrome over dimmed media, without adaptive darkening.
+///             <see cref="Tinted" /> is the dial between them,
 ///             so a control can blend a pane from one to the other live, the way the system's own
 ///             settings do.
 ///         </item>
@@ -73,23 +73,16 @@ public sealed class LiquidPane : Widget
     );
 
     /// <summary>
-    ///     How hard the backdrop is pulled toward the glass's luminance anchor.
-    ///     <para>
-    ///         Low on purpose. This started near its maximum, reasoning that a strong clamp is what
-    ///         keeps content legible over any picture — but a full clamp compresses everything
-    ///         behind the pane toward one tone, and a pane whose interior is flatter than its
-    ///         surroundings does not read as glass, it reads as a dark box someone drew a rim
-    ///         around. Legibility is the scrim's job and the content colour's job; the lens should
-    ///         mostly get out of the way, which is what makes it look like glass at all.
-    ///     </para>
+    ///     Regular glass compresses backdrop contrast for legibility. Clear glass disables this
+    ///     adaptation; its caller supplies dimming beneath the material and bright foreground ink.
     /// </summary>
-    private const float Legibility = 0.35f;
+    private const float Legibility = 0.65f;
 
     /// <summary>
     ///     The clear variant's haze: barely there, because it floats on media the page is *about*,
     ///     so it lifts rather than shades. Also the floor <see cref="Tinted" /> blends up from.
     /// </summary>
-    private const float ClearHaze = 0.10f;
+    private const float ClearHaze = 0.035f;
 
     /// <summary>
     ///     The two rims, as fractions of the theme's slab thickness. The shader's bevel is a
@@ -157,13 +150,13 @@ public sealed class LiquidPane : Widget
     /// <summary>
     ///     How hard the shader pulls the backdrop toward the scrim's luminance anchor: 0 shows the
     ///     backdrop as it is, 1 is a full legibility clamp. This is what keeps a title readable
-    ///     over artwork the pane cannot see, and it is why glass over media needs no heavy fill.
-    ///     Eased down toward the clear variant as <see cref="Tinted" /> falls.
+    ///     over artwork the pane cannot see. Also controls scattering in the shader.
+    ///     Scaled to zero at the clear end of <see cref="Tinted" />.
     /// </summary>
     public float Adapt
     {
         get => _adapt;
-        set => SetPaint(field: ref _adapt, value: value);
+        set => SetPaint(field: ref _adapt, value: Math.Clamp(value: value, min: 0f, max: 1f));
     }
 
     /// <summary>
@@ -176,7 +169,7 @@ public sealed class LiquidPane : Widget
     public float Bevel
     {
         get => _bevel;
-        set => SetPaint(field: ref _bevel, value: value);
+        set => SetPaint(field: ref _bevel, value: MathF.Max(x: 0f, y: value));
     }
 
     /// <summary>Soft float shadow size; 0 for a pane riding inline on what is behind it.</summary>
@@ -226,9 +219,9 @@ public sealed class LiquidPane : Widget
 
     // The gel's animated factors — what Paint actually uses. Each relaxes toward the target its
     // state pair dictates, so at rest the pane looks exactly as the unanimated version did.
-    private float _gelThick = 1f;
-    private float _gelPinch = 1f;
-    private float _gelScrim = 1f;
+    private Motion _thicknessMotion = new(spec: MotionSpec.Snappy, value: 1f, target: 1f);
+    private Motion _pinchMotion = new(spec: MotionSpec.Snappy, value: 1f, target: 1f);
+    private Motion _scrimMotion = new(spec: MotionSpec.Snappy, value: 1f, target: 1f);
     private Ticker? _ticker;
 
     /// <summary>Steady-state gel targets for the current state — the values the old snap used.</summary>
@@ -245,48 +238,57 @@ public sealed class LiquidPane : Widget
         _ticker = CreateTicker(TickGel);
 
         // A pane mounted mid-state starts there — animating from idle on attach would flash.
-        (_gelThick, _gelPinch, _gelScrim) = GelTarget;
+        SnapGel();
     }
 
     // A pane that leaves the tree leaves its group, or the group would keep drawing a lens at
     // wherever the pane last was. A re-attach lays out again, and Layout joins again.
     protected override void OnUnmount() => Join(null);
 
+    private void SnapGel()
+    {
+        var target = GelTarget;
+        _thicknessMotion.SnapTo(target.Thick);
+        _pinchMotion.SnapTo(target.Pinch);
+        _scrimMotion.SnapTo(target.Scrim);
+        _ticker?.Stop();
+    }
+
     private void WakeGel()
     {
-        if (_ticker is { } ticker && Mounted)
+        if (!Mounted || _ticker is null || AnimationController.ReduceMotion)
         {
-            ticker.Start();
+            SnapGel();
+            MarkNeedsPaint();
             return;
         }
 
-        // Not live: snap. There is no frame to animate across, and Paint must still be right.
-        (_gelThick, _gelPinch, _gelScrim) = GelTarget;
+        // Quick compression, a gently elastic release. Retargeting retains velocity when
+        // the pointer changes direction mid-flight; all three optical layers move together.
+        var spec = _pressed
+            ? MotionSpec.Spring(response: 0.18f, damping: 1f)
+            : MotionSpec.Spring(response: 0.32f, damping: 0.78f);
+        _thicknessMotion.Spec = _pinchMotion.Spec = _scrimMotion.Spec = spec;
+        var target = GelTarget;
+        _thicknessMotion.Retarget(target.Thick);
+        _pinchMotion.Retarget(target.Pinch);
+        _scrimMotion.Retarget(target.Scrim);
+        _ticker.Start();
     }
 
     private void TickGel(float dt)
     {
-        // A gel compresses on contact and relaxes on release: the press direction is brisk, the
-        // way back is slower. Exponential approach — no spring, no overshoot.
-        // ponytail: springless; add a small overshoot on release if the gel ever reads as stiff.
-        float rate = _pressed ? 24f : 12f;
-        (float thick, float pinch, float scrim) = GelTarget;
-        _gelThick = Approach(value: _gelThick, target: thick, k: rate * dt);
-        _gelPinch = Approach(value: _gelPinch, target: pinch, k: rate * dt);
-        _gelScrim = Approach(value: _gelScrim, target: scrim, k: rate * dt);
-        MarkNeedsPaint();
-
-        if (MathF.Abs(_gelThick - thick) < 0.004f &&
-            MathF.Abs(_gelPinch - pinch) < 0.004f &&
-            MathF.Abs(_gelScrim - scrim) < 0.004f)
+        if (AnimationController.ReduceMotion)
+            SnapGel();
+        else
         {
-            (_gelThick, _gelPinch, _gelScrim) = (thick, pinch, scrim);
-            _ticker?.Stop();
+            // Non-short-circuit OR: every motion must advance, including the settling frame.
+            bool moving = _thicknessMotion.Tick(dt) | _pinchMotion.Tick(dt) | _scrimMotion.Tick(dt);
+            if (!moving) _ticker?.Stop();
         }
-    }
 
-    private static float Approach(float value, float target, float k) =>
-        value + (target - value) * (1f - MathF.Exp(-k));
+        MarkNeedsPaint();
+    }
 
     /// <summary>A straight channel blend; the alpha is decided separately.</summary>
     private static Color Mix(Color from, Color to, float t) => new(
@@ -309,9 +311,8 @@ public sealed class LiquidPane : Widget
         };
 
     /// <summary>
-    ///     Chrome over media, where the page's palette says nothing about what the glass lands on.
-    ///     Barely any scrim and a thin bevel: the shader dims a bright sky and lifts a black coat
-    ///     per pixel, which is a scrim exactly where one is needed and a clear lens everywhere else.
+    ///     Transparent chrome over media, with a thin bevel and minimal scattering. This variant
+    ///     does not adapt to the backdrop. Supply a dimming layer beneath it and use bright ink.
     /// </summary>
     public static LiquidPane Clear(
         Widget child, float radius = AdwMetrics.Pill, float elevation = 0f) =>
@@ -450,25 +451,20 @@ public sealed class LiquidPane : Widget
         float side = MathF.Min(x: Bounds.Width, y: Bounds.Height);
         float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.2f);
 
-        // A light haze in BOTH themes, which is the correction that made this look like glass.
-        // Dark-mode glass is not a dark scrim: on Apple's dark surfaces the pane is visibly
-        // *lighter* than what surrounds it, a milky lift with the backdrop showing through. Tinting
-        // it black instead — the obvious reading of "dark theme" — makes the pane darker than its
-        // own backdrop, and a hole in the page reads as a box with a rim round it no matter how the
-        // rest is tuned. It also flips the shader's anchor: a light tint lifts what is behind the
-        // glass, which is the lift you actually see in the reference designs.
-        Color haze = Tint ?? (_theme.IsDark
+        // A restrained haze preserves the backdrop's colour. Contrast compression handles
+        // legibility separately; a large white fill would turn dark glass into a grey slab.
+        var haze = Tint ?? (_theme.IsDark
             ? new Color(
                 r: 1f,
                 g: 1f,
                 b: 1f,
-                a: 0.14f
+                a: 0.012f
             )
             : new Color(
                 r: 1f,
                 g: 1f,
                 b: 1f,
-                a: 0.34f
+                a: 0.18f
             ));
 
         // Clear to tinted: the scrim runs from the clear variant's white floor up to the haze's
@@ -478,16 +474,20 @@ public sealed class LiquidPane : Widget
         // dial never runs backwards.
         float floor = MathF.Min(x: ClearHaze, y: haze.A);
         float strength = floor + ((haze.A - floor) * Tinted);
-        Color colour = Mix(from: Color.White, to: haze, t: Tinted);
-        float adapt = Adapt * (0.7f + (0.3f * Tinted));
+        var colour = Mix(from: Color.White, to: haze, t: Tinted);
+        float adapt = Adapt * Tinted;
 
         // The gel: hover thickens the lens a touch, press compresses it and squeezes the
         // refraction — the same response Glass.Surface gives the system controls, eased through
         // the animated factors above rather than snapped.
-        float thickness = bevel * _gelThick;
-        float pinch = _theme.GlassPinch * _gelPinch;
+        float thickness = Math.Clamp(
+            value: bevel * _thicknessMotion.Value,
+            min: 0f,
+            max: side * 0.2f
+        );
+        float pinch = _theme.GlassPinch * _pinchMotion.Value;
         float scrim = Math.Clamp(
-            value: strength * _gelScrim,
+            value: strength * _scrimMotion.Value,
             min: 0f,
             max: 1f
         );
@@ -500,8 +500,7 @@ public sealed class LiquidPane : Widget
         // cover toward white directly underneath white text. An explicit Tint is different: it
         // declares a family the theme knows nothing about, and its content was chosen against it
         // (white on dark or accent glass, ink on light) — so there, and only there, the tint's own
-        // luminance is the truth. Matters most at the clear end of the dial, where the scrim has
-        // faded and the pull is all that keeps a forced family's ink readable.
+        // luminance is the truth. Clear has no adaptive pull and needs dimming beneath it.
         bool lightContent = Tint is { } family
             ? (family.R * 0.299f) + (family.G * 0.587f) + (family.B * 0.114f) < 0.5f
             : _theme.IsDark;

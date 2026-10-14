@@ -35,7 +35,10 @@ public readonly record struct CacheDirectives
     /// <summary>Parse one <c>Cache-Control</c> field value. Unknown directives are skipped.</summary>
     public static CacheDirectives Parse(string? value)
     {
-        var result = new CacheDirectives { MaxAge = -1, SharedMaxAge = -1 };
+        var result = new CacheDirectives {
+            MaxAge = -1,
+            SharedMaxAge = -1,
+        };
         if (string.IsNullOrEmpty(value)) return result;
 
         foreach (var range in value.AsSpan().Split(','))
@@ -45,16 +48,38 @@ public readonly record struct CacheDirectives
             var name = eq < 0 ? token : token[..eq].Trim();
             var arg = eq < 0 ? default : token[(eq + 1)..].Trim().Trim('"');
 
-            if (name.Equals("no-store", StringComparison.OrdinalIgnoreCase)) result = result with { NoStore = true };
-            else if (name.Equals("no-cache", StringComparison.OrdinalIgnoreCase)) result = result with { NoCache = true };
-            else if (name.Equals("private", StringComparison.OrdinalIgnoreCase)) result = result with { Private = true };
-            else if (name.Equals("public", StringComparison.OrdinalIgnoreCase)) result = result with { Public = true };
-            else if (name.Equals("immutable", StringComparison.OrdinalIgnoreCase)) result = result with { Immutable = true };
-            else if (name.Equals("max-age", StringComparison.OrdinalIgnoreCase) && Seconds(arg) is var a and >= 0)
+            if (name.Equals(other: "no-store", comparisonType: StringComparison.OrdinalIgnoreCase))
+                result = result with { NoStore = true };
+            else if (name.Equals(
+                         other: "no-cache",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     )) result = result with { NoCache = true };
+            else if (name.Equals(
+                         other: "private",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     )) result = result with { Private = true };
+            else if (name.Equals(
+                         other: "public",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     )) result = result with { Public = true };
+            else if (name.Equals(
+                         other: "immutable",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     )) result = result with { Immutable = true };
+            else if (name.Equals(
+                         other: "max-age",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ) && Seconds(arg) is var a and >= 0)
                 result = result with { MaxAge = a };
-            else if (name.Equals("s-maxage", StringComparison.OrdinalIgnoreCase) && Seconds(arg) is var s and >= 0)
+            else if (name.Equals(
+                         other: "s-maxage",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ) && Seconds(arg) is var s and >= 0)
                 result = result with { SharedMaxAge = s };
-            else if (name.Equals("stale-while-revalidate", StringComparison.OrdinalIgnoreCase) &&
+            else if (name.Equals(
+                         other: "stale-while-revalidate",
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ) &&
                      Seconds(arg) is var w and >= 0)
                 result = result with { StaleWhileRevalidate = w };
         }
@@ -62,7 +87,14 @@ public readonly record struct CacheDirectives
         return result;
 
         static long Seconds(ReadOnlySpan<char> span) =>
-            long.TryParse(span, NumberStyles.Integer, CultureInfo.InvariantCulture, out long n) ? n : -1;
+            long.TryParse(
+                s: span,
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out long n
+            )
+                ? n
+                : -1;
     }
 }
 
@@ -76,7 +108,7 @@ public enum Freshness
     StaleUsable,
 
     /// <summary>Ask the origin with <c>If-None-Match</c> / <c>If-Modified-Since</c> before serving.</summary>
-    MustRevalidate
+    MustRevalidate,
 }
 
 /// <summary>The RFC 9111 freshness subset this library implements. Pure functions over an injected clock.</summary>
@@ -101,7 +133,8 @@ public static class FreshnessRules
     ///     <paramref name="allowHeuristic" /> says so, and then at the conventional 10% of the
     ///     resource's observed age, capped at a day.
     /// </summary>
-    public static TimeSpan Lifetime(CachedResponse entry, CacheDirectives directives, bool allowHeuristic)
+    public static TimeSpan Lifetime(CachedResponse entry, CacheDirectives directives,
+        bool allowHeuristic)
     {
         if (directives.SharedMaxAge >= 0) return TimeSpan.FromSeconds(directives.SharedMaxAge);
         if (directives.MaxAge >= 0) return TimeSpan.FromSeconds(directives.MaxAge);
@@ -120,10 +153,15 @@ public static class FreshnessRules
     {
         var directives = CacheDirectives.Parse(entry.Header("Cache-Control"));
         if (directives.NoCache) return Freshness.MustRevalidate;
-        if (policy.EffectiveCache == CacheMode.Revalidate && !directives.Immutable) return Freshness.MustRevalidate;
+        if (policy.EffectiveCache == CacheMode.Revalidate && !directives.Immutable)
+            return Freshness.MustRevalidate;
 
-        var age = Age(entry, now);
-        var lifetime = Lifetime(entry, directives, policy.HeuristicFreshnessAllowed);
+        var age = Age(entry: entry, now: now);
+        var lifetime = Lifetime(
+            entry: entry,
+            directives: directives,
+            allowHeuristic: policy.HeuristicFreshnessAllowed
+        );
         if (age < lifetime) return Freshness.Fresh;
 
         // Serve stale and refresh behind the caller's back: the right default for an editor
@@ -135,9 +173,20 @@ public static class FreshnessRules
 
     /// <summary>An HTTP-date, or null. Only the IMF-fixdate form origins actually send.</summary>
     public static DateTimeOffset? ParseDate(string? value) =>
-        DateTimeOffset.TryParseExact(value, "r", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+        DateTimeOffset.TryParseExact(
+            input: value,
+            format: "r",
+            formatProvider: CultureInfo.InvariantCulture,
+            styles: DateTimeStyles.None,
+            result: out var parsed
+        )
             ? parsed
-            : DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)
+            : DateTimeOffset.TryParse(
+                input: value,
+                formatProvider: CultureInfo.InvariantCulture,
+                styles: DateTimeStyles.None,
+                result: out parsed
+            )
                 ? parsed
                 : null;
 }

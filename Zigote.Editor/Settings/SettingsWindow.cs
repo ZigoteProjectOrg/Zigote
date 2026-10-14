@@ -48,11 +48,13 @@ public sealed class SettingsWindow : Widget
         _theme = theme;
         // Both are retained across rebuilds: typing must never lose focus/caret state, and the
         // sidebar owns the selected index it would otherwise be handed back every rebuild.
-        _searchField = new AdwSearchEntry { Placeholder = "Search settings" };
-        _searchField.OnChanged = s =>
-        {
-            _search = s;
-            Rebuild();
+        _searchField = new AdwSearchEntry {
+            Placeholder = "Search settings",
+            OnChanged = s =>
+            {
+                _search = s;
+                Rebuild();
+            },
         };
         _sidebar = new AdwSidebar(
             new AdwSidebarSection(

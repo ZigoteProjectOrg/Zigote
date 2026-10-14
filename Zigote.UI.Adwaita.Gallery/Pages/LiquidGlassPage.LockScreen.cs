@@ -5,10 +5,6 @@ namespace AdwaitaGallery.Pages;
 
 public sealed partial class LiquidGlassPage
 {
-    // Five of the showcase pieces, chosen for range: a bright sky, a dark coat, a busy print —
-    // the scrim has to earn its keep on each.
-    private static readonly int[] Wallpapers = [4, 0, 3, 5, 7];
-
     /// <summary>Thumbnail side: a 44 px target is the smallest a finger reliably hits.</summary>
     private const float ThumbSize = 44f;
 
@@ -34,13 +30,14 @@ public sealed partial class LiquidGlassPage
                 // Picking a wallpaper rebuilds the phone; the scene's own state is in signals on
                 // the page, so the stack stays collapsed and the torch stays lit across it.
                 new Watch(() => Phone(
-                    art: ArtSource.Showcase[Wallpapers[_wallpaper.Value]],
-                    scene: LockScreen()
-                )),
+                        wallpaper: _wallpaper.Value,
+                        scene: LockScreen()
+                    )
+                ),
                 new Watch(WallpaperPicker),
                 Demo.Caption(
-                    "The scrim is per pixel: it dims a bright sky and lifts a dark coat, so the "
-                    + "cards read on every wallpaper."
+                    "Switch between bright and dark wallpapers. Regular glass softens the "
+                    + "background while keeping notification text in focus."
                 ),
             },
         };
@@ -57,16 +54,15 @@ public sealed partial class LiquidGlassPage
             mainAxisSize: MainAxisSize.Min,
             mainAxisAlignment: MainAxisAlignment.Center
         );
-        for (int i = 0; i < Wallpapers.Length; i++)
+        for (int i = 0; i < WallpaperNames.Length; i++)
         {
             int index = i;
-            var art = ArtSource.Showcase[Wallpapers[i]];
             bool on = i == selected;
             row.Children.Add(
                 new Pressable {
                     Role = SemanticsRole.RadioButton,
                     Checked = on,
-                    SemanticsLabel = $"Wallpaper by {art.Artist}",
+                    SemanticsLabel = $"Wallpaper: {WallpaperNames[i]}",
                     FocusRadius = 12f,
                     FocusSquircle = true,
                     OnPressed = () => _wallpaper.Value = index,
@@ -75,7 +71,14 @@ public sealed partial class LiquidGlassPage
                         Squircle = true,
                         // Transparent, not a hairline, when off: the ring marks the selection,
                         // and a CardShade hairline is invisible over the dark page anyway.
-                        BorderColor = on ? _theme.Accent : Color.Rgba(r: 0, g: 0, b: 0, a: 0f),
+                        BorderColor = on
+                            ? _theme.Accent
+                            : Color.Rgba(
+                                r: 0,
+                                g: 0,
+                                b: 0,
+                                a: 0f
+                            ),
                         BorderWidth = 2f,
                         Child = new Padding(
                             padding: EdgeInsets.All(2f),
@@ -83,7 +86,7 @@ public sealed partial class LiquidGlassPage
                                 radius: LiquidPane.Inner(outer: 12f, padding: 2f),
                                 child: SizedBox.Square(
                                     size: ThumbSize,
-                                    child: Backdrop(art: art, radius: 10f, maxDecode: 96)
+                                    child: Wallpaper(i)
                                 )
                             ) { Squircle = true }
                         ),
@@ -111,8 +114,11 @@ public sealed partial class LiquidGlassPage
                     ),
                     ShadowedLabel(
                         text: "9:41",
-                        style: new TextStyle(Size: 68f, Weight: FontWeight.Light,
-                            LineHeight: 1.05f),
+                        style: new TextStyle(
+                            Size: 68f,
+                            Weight: FontWeight.Light,
+                            LineHeight: 1.05f
+                        ),
                         color: Color.White
                     ),
                     new SizedBox(height: 22f),
@@ -228,8 +234,8 @@ public sealed partial class LiquidGlassPage
         string icon, Color badge, string app, string when, string title, string body,
         int? count = null)
     {
-        Color on = SceneInk;
-        Color muted = SceneInkMuted;
+        var on = SceneInk;
+        var muted = SceneInkMuted;
         var header = new Row(spacing: 6f) {
             Children = {
                 new Label(
@@ -266,6 +272,8 @@ public sealed partial class LiquidGlassPage
 
         return new LiquidPane {
             Radius = CardCorner,
+            Bevel = 0.9f,
+            Elevation = 3f,
             Child = new Padding(
                 padding: EdgeInsets.All(14f),
                 child: new Row(spacing: 12f, crossAxisAlignment: CrossAxisAlignment.Start) {
@@ -276,8 +284,11 @@ public sealed partial class LiquidGlassPage
                             Child = SizedBox.Square(
                                 size: 38f,
                                 child: new Center {
-                                    Child = new IconGlyph(glyph: icon, size: 20f,
-                                        color: Color.White),
+                                    Child = new IconGlyph(
+                                        glyph: icon,
+                                        size: 20f,
+                                        color: Color.White
+                                    ),
                                 }
                             ),
                         },
@@ -291,15 +302,23 @@ public sealed partial class LiquidGlassPage
                                     header,
                                     new Label(
                                         text: title,
-                                        style: new TextStyle(Size: 15f,
-                                            Weight: FontWeight.SemiBold),
+                                        style: new TextStyle(
+                                            Size: 15f,
+                                            Weight: FontWeight.SemiBold
+                                        ),
                                         color: on
-                                    ) { MaxLines = 1, Overflow = TextOverflow.Ellipsis },
+                                    ) {
+                                        MaxLines = 1,
+                                        Overflow = TextOverflow.Ellipsis,
+                                    },
                                     new Label(
                                         text: body,
                                         style: AdwTypography.Body,
                                         color: on.WithAlpha(0.92f)
-                                    ) { MaxLines = 2, Overflow = TextOverflow.Ellipsis },
+                                    ) {
+                                        MaxLines = 2,
+                                        Overflow = TextOverflow.Ellipsis,
+                                    },
                                 },
                             }
                         ),

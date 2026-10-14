@@ -18,7 +18,7 @@ public enum TransportFault
     Reset,
 
     /// <summary>Something else the platform reported.</summary>
-    Unknown
+    Unknown,
 }
 
 /// <summary>
@@ -32,7 +32,7 @@ public enum TimeoutStage
     Connect,
 
     /// <summary>The whole-call deadline, retries included.</summary>
-    Total
+    Total,
 }
 
 /// <summary>A refusal by this library rather than by the network.</summary>
@@ -48,7 +48,7 @@ public enum PolicyFault
     ///     The transport on this platform cannot do what the request needs — ranges on WASM, or a
     ///     stream upload where the transport can only send buffered bodies.
     /// </summary>
-    Unsupported
+    Unsupported,
 }
 
 /// <summary>
@@ -83,7 +83,8 @@ public abstract record HttpError
     public sealed record Timeout(TimeSpan Budget, TimeoutStage Stage) : HttpError
     {
         /// <inheritdoc />
-        public override string Message => $"timeout at {Stage} after {Budget.TotalMilliseconds:F0} ms";
+        public override string Message =>
+            $"timeout at {Stage} after {Budget.TotalMilliseconds:F0} ms";
 
         /// <summary>A whole-call deadline is final; a per-attempt timeout is worth another attempt.</summary>
         public override bool IsTransient => Stage is not TimeoutStage.Total;
@@ -143,7 +144,10 @@ public abstract record HttpError
 ///     client. Nothing inside the library throws this at itself.
 /// </summary>
 public sealed class HttpException(HttpError error)
-    : Exception(error.Message, (error as HttpError.Transport)?.Inner ?? (error as HttpError.Decode)?.Inner)
+    : Exception(
+        message: error.Message,
+        innerException: (error as HttpError.Transport)?.Inner ?? (error as HttpError.Decode)?.Inner
+    )
 {
     /// <summary>The error this exception carries, with its full structure intact.</summary>
     public HttpError Error { get; } = error;

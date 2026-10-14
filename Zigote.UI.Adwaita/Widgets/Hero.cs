@@ -84,7 +84,8 @@ public sealed class AdwHero : Widget
 
     protected override void OnMount()
     {
-        if (Sources.TryGetValue(key: Tag, value: out var source) && !ReferenceEquals(objA: source, objB: this))
+        if (Sources.TryGetValue(key: Tag, value: out var source) &&
+            !ReferenceEquals(objA: source, objB: this))
         {
             _away = true;
             _shuttle = source._shuttle = new Shuttle(from: source, to: this);
@@ -96,7 +97,8 @@ public sealed class AdwHero : Widget
 
     protected override void OnUnmount()
     {
-        if (Sources.TryGetValue(key: Tag, value: out var source) && ReferenceEquals(objA: source, objB: this))
+        if (Sources.TryGetValue(key: Tag, value: out var source) &&
+            ReferenceEquals(objA: source, objB: this))
             Sources.Remove(Tag);
         if (_shuttle is not { } shuttle) return;
         _shuttle = null;
@@ -113,7 +115,12 @@ public sealed class AdwHero : Widget
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
         Child?.Layout(origin);
     }
 
@@ -139,7 +146,9 @@ public sealed class AdwHero : Widget
         {
             _from = from;
             To = to;
-            _anim = new AnimationController(durationSeconds: 0.35f, vsync: this) { Spec = to.Motion };
+            _anim = new AnimationController(durationSeconds: 0.35f, vsync: this) {
+                Spec = to.Motion,
+            };
             // Layout, not just paint: the default flight re-lays the child out at each size.
             _anim.OnTick += MarkNeedsLayout;
             _anim.OnCompleted += () =>
@@ -213,8 +222,14 @@ public sealed class AdwHero : Widget
 
         public override void Layout(Offset origin)
         {
-            Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
-            if (To.Flight is not null || _from.Child is not { } child || To.Bounds.Width <= 0f) return;
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
+            if (To.Flight is not null || _from.Child is not { } child ||
+                To.Bounds.Width <= 0f) return;
             var frame = Frame();
             child.Measure(Constraints.Tight(width: frame.Width, height: frame.Height));
             child.Layout(new Offset(x: frame.X, y: frame.Y));
@@ -227,11 +242,19 @@ public sealed class AdwHero : Widget
             float t = _anim.Value;
             if (To.Flight is { } custom)
             {
-                custom(paint: paint, from: _from.Bounds, to: To.Bounds, t: t);
+                custom(
+                    paint: paint,
+                    from: _from.Bounds,
+                    to: To.Bounds,
+                    t: t
+                );
                 return;
             }
 
-            paint.AddClipStart(bounds: Frame(), radius: _from.Radius + ((To.Radius - _from.Radius) * t));
+            paint.AddClipStart(
+                bounds: Frame(),
+                radius: _from.Radius + ((To.Radius - _from.Radius) * t)
+            );
             _from.Child?.Paint(paint);
             paint.AddClipEnd();
         }

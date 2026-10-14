@@ -42,13 +42,15 @@ public static class RetryMiddleware
                             !spec.Policy.IsStreaming &&
                             retry.MaxAttempts > 1;
 
-            string host = HostOf(spec, baseAddress);
-            var breaker = breakers.GetOrAdd(host, static _ => new Breaker());
+            string host = HostOf(spec: spec, baseAddress: baseAddress);
+            var breaker = breakers.GetOrAdd(key: host, valueFactory: static _ => new Breaker());
 
-            if (!breaker.Allow(time.GetUtcNow(), cooldown))
+            if (!breaker.Allow(now: time.GetUtcNow(), cooldown: cooldown))
             {
-                ObservabilityMiddleware.BreakerOpens.Add(1,
-                    new KeyValuePair<string, object?>("server.address", host));
+                ObservabilityMiddleware.BreakerOpens.Add(
+                    delta: 1,
+                    tag: new KeyValuePair<string, object?>(key: "server.address", value: host)
+                );
                 return new HttpError.Policy(PolicyFault.CircuitOpen);
             }
 
@@ -61,13 +63,19 @@ public static class RetryMiddleware
             {
                 if (attempt > 1)
                 {
-                    var delay = retryAfterHint ?? retry.Backoff(attempt, random);
+                    var delay = retryAfterHint ?? retry.Backoff(attempt: attempt, random: random);
                     retryAfterHint = null;
-                    ObservabilityMiddleware.Retries.Add(1,
-                        new KeyValuePair<string, object?>("url.template", spec.Path.Template));
+                    ObservabilityMiddleware.Retries.Add(
+                        delta: 1,
+                        tag: new KeyValuePair<string, object?>(
+                            key: "url.template",
+                            value: spec.Path.Template
+                        )
+                    );
                     try
                     {
-                        await Task.Delay(delay, time, ct).ConfigureAwait(false);
+                        await Task.Delay(delay: delay, timeProvider: time, cancellationToken: ct)
+                            .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -75,7 +83,7 @@ public static class RetryMiddleware
                     }
                 }
 
-                var result = await next(spec, ct).ConfigureAwait(false);
+                var result = await next(spec: spec, ct: ct).ConfigureAwait(false);
                 bool last = attempt >= attempts;
 
                 if (result.IsOk)
@@ -83,7 +91,7 @@ public static class RetryMiddleware
                     var response = result.Value;
                     if (!last && HttpError.Status.IsTransientCode(response.Status))
                     {
-                        breaker.OnFailure(time.GetUtcNow(), breakerThreshold);
+                        breaker.OnFailure(now: time.GetUtcNow(), threshold: breakerThreshold);
                         // The failed body is not the answer; free it before the next attempt.
                         retryAfterHint = ParseRetryAfter(response.Header("Retry-After"));
                         response.Dispose();
@@ -99,11 +107,11 @@ public static class RetryMiddleware
                 if (last || result.Error is not { IsTransient: true } || ct.IsCancellationRequested)
                 {
                     if (result.Error is HttpError.Transport or HttpError.Timeout)
-                        breaker.OnFailure(time.GetUtcNow(), breakerThreshold);
+                        breaker.OnFailure(now: time.GetUtcNow(), threshold: breakerThreshold);
                     return result;
                 }
 
-                breaker.OnFailure(time.GetUtcNow(), breakerThreshold);
+                breaker.OnFailure(now: time.GetUtcNow(), threshold: breakerThreshold);
             }
         };
     }
@@ -112,7 +120,12 @@ public static class RetryMiddleware
     private static TimeSpan? ParseRetryAfter(string? value)
     {
         if (string.IsNullOrEmpty(value)) return null;
-        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
+        if (long.TryParse(
+                s: value,
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out long seconds
+            ))
             return seconds is >= 0 and <= 3600 ? TimeSpan.FromSeconds(seconds) : null;
         return null; // the HTTP-date form is rare and needs our clock to agree with theirs; skip it
     }

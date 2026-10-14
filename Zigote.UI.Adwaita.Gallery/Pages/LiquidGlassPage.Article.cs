@@ -8,7 +8,7 @@ public sealed partial class LiquidGlassPage
     // The article card and the chrome riding it — a hero card, so rounder than a boxed list,
     // and a fixed-height viewport so its content has somewhere to scroll under the glass.
     private const float ArticleRadius = 24f;
-    private const float ArticlePadding = 20f;
+    private const float ArticlePadding = 16f;
     private const float ArticleHeight = 480f;
 
     // The picture fills the card at rest, so the chrome starts out over it and its bottom edge
@@ -49,10 +49,12 @@ public sealed partial class LiquidGlassPage
     // The material lab's dials, on the page so a theme flip keeps them and the readout can watch
     // them. The three sliders write the panes' live setters directly; the four choices below
     // change what a pane contains, so they rebuild the chrome through one Watch.
-    private readonly Signal<float> _tinted = new(0.5f);
+    private readonly Signal<float> _tinted = new(1f);
+    private readonly Signal<int> _variant = new(1);
+    private readonly Signal<int> _articleBackdrop = new(0);
     private readonly Signal<float> _elevation = new(4f);
     private readonly Signal<float> _bevel = new(0.6f);
-    private readonly Signal<int> _chrome = new(0);
+    private readonly Signal<int> _chrome = new(1);
     private readonly Signal<int> _family = new(0);
     private readonly Signal<int> _shape = new(0);
     private readonly Signal<bool> _glass = new(true);
@@ -89,7 +91,10 @@ public sealed partial class LiquidGlassPage
                     // Full bleed: the card's clip rounds its top corners, so no radius of its own.
                     new SizedBox(
                         height: ArticleImageHeight,
-                        child: Backdrop(art: art, radius: 0f, maxDecode: 1024)
+                        child: new Watch(() => _articleBackdrop.Value == 0
+                            ? Wallpaper(0)
+                            : Backdrop(art: art, radius: 0f, maxDecode: 1024)
+                        )
                     ),
                     new Padding(
                         padding: EdgeInsets.All(ArticlePadding),
@@ -99,17 +104,15 @@ public sealed partial class LiquidGlassPage
                         ) {
                             Children = {
                                 new Label(
-                                    text: "Ink and Light",
+                                    text: "Light in motion",
                                     style: AdwTypography.Title1,
                                     color: palette.CardFg
                                 ),
                                 new SizedBox(height: 10f),
                                 new Label(
                                     text:
-                                    $"Drawn by {art.Artist}, served by nekos.best. The chrome "
-                                    + "floating over this card is navigation, so it is glass; "
-                                    + "the card is content, so it stays flat — and that "
-                                    + "flatness is what the lens has to refract.",
+                                    "A quiet surface. A luminous edge. Controls float above the "
+                                    + "page, picking up its colours as the content moves beneath them.",
                                     style: body,
                                     color: palette.CardFg
                                 ),
@@ -174,6 +177,14 @@ public sealed partial class LiquidGlassPage
                     child: new Stack {
                         Children = {
                             content,
+                            new Watch(() =>
+                                {
+                                    // Dimming belongs to the media preset, not the optical-strength
+                                    // dial: adjusting a pane must not recolour the content below it.
+                                    float dim = _glass.Value && _variant.Value == 0 ? 0.32f : 0f;
+                                    return new MediaDimming(() => dim);
+                                }
+                            ),
                             new Positioned(
                                 left: ArticlePadding,
                                 right: ArticlePadding,
@@ -213,8 +224,8 @@ public sealed partial class LiquidGlassPage
                     )
                 ) { HeightFactor = 1f },
                 Demo.Caption(
-                    "Clear is more transparent; tinted increases opacity. The rim is how far in "
-                    + "the lens bends — the middle of the pane stays clear."
+                    "Clear preserves detail over dimmed media. Regular softens the backdrop "
+                    + "and adapts its contrast for legibility. Scroll inside the preview to see the lens."
                 ),
             },
         };
@@ -229,9 +240,45 @@ public sealed partial class LiquidGlassPage
     /// </summary>
     private Widget MaterialLab(ThemeData theme)
     {
+        var tintSlider = new AdwSlider(
+            value: _tinted.Peek(),
+            onChanged: v =>
+            {
+                _tinted.Value = v;
+                foreach (var pane in _panes) pane.Tinted = v;
+            }
+        ) { SemanticsLabel = "Material strength" };
+
         return Demo.Group(
-            title: "Material",
-            description: null,
+            title: "Material studio",
+            description: "Choose a material, then tune its optical weight.",
+            new AdwActionRow(
+                title: "Variant",
+                subtitle: "Clear over media · Regular for legibility"
+            ) {
+                Suffixes = {
+                    new AdwToggleGroup(
+                        labels: ["Clear", "Regular"],
+                        active: _variant.Peek(),
+                        onActive: i =>
+                        {
+                            _tinted.Value = i;
+                            tintSlider.Value = i;
+                            foreach (var pane in _panes) pane.Tinted = i;
+                            _variant.Value = i;
+                        }
+                    ),
+                },
+            },
+            new AdwActionRow(title: "Backdrop") {
+                Suffixes = {
+                    new AdwToggleGroup(
+                        labels: ["Aurora", "Artwork"],
+                        active: _articleBackdrop.Peek(),
+                        onActive: i => _articleBackdrop.Value = i
+                    ),
+                },
+            },
             new AdwActionRow(title: "Chrome", subtitle: "What floats over the article") {
                 Suffixes = {
                     new AdwToggleGroup(
@@ -241,7 +288,10 @@ public sealed partial class LiquidGlassPage
                     ),
                 },
             },
-            new AdwActionRow(title: "Clear → Tinted") {
+            new AdwActionRow(
+                title: "Material strength",
+                subtitle: "Transparency, scattering and contrast"
+            ) {
                 Suffixes = {
                     new IconGlyph(
                         glyph: MaterialIcons.FilterNone,
@@ -250,14 +300,7 @@ public sealed partial class LiquidGlassPage
                     ),
                     new SizedBox(
                         width: 180f,
-                        child: new AdwSlider(
-                            value: _tinted.Peek(),
-                            onChanged: v =>
-                            {
-                                _tinted.Value = v;
-                                foreach (var pane in _panes) pane.Tinted = v;
-                            }
-                        ) { SemanticsLabel = "Clear to tinted" }
+                        child: tintSlider
                     ),
                     // The nearest this font has to Apple's square.filled.on.square: the same
                     // stacked squares as FilterNone, with the front one filled.
@@ -343,7 +386,7 @@ public sealed partial class LiquidGlassPage
     {
         bool tabs = _chrome.Value == 1;
         bool glass = _glass.Value;
-        int family = _family.Value;
+        int family = _variant.Value == 0 ? 2 : _family.Value;
         float radius = _shape.Value switch { 0 => AdwMetrics.Pill, 1 => 16f, _ => 6f };
         _panes.Clear();
 
@@ -352,13 +395,13 @@ public sealed partial class LiquidGlassPage
         // The family: the theme's own haze, or a full scrim forced to one tone — Apple's tint,
         // which "increases opacity" — and ink to match, since the content takes its colour from
         // the glass, not the page.
-        (Color? tint, Color ink) = family switch {
+        var (tint, ink) = family switch {
             1 => (Color.White.WithAlpha(0.9f), LatchedInk),
             2 => (Color.Rgb(r: 28, g: 28, b: 32).WithAlpha(0.9f), Color.White),
             3 => (_theme.Accent.WithAlpha(0.75f), Color.White),
             _ => ((Color?)null, LiquidPane.OnGlass(_theme)),
         };
-        Color inkMuted = family == 0 ? LiquidPane.OnGlassMuted(_theme) : ink.WithAlpha(0.72f);
+        var inkMuted = family == 0 ? LiquidPane.OnGlassMuted(_theme) : ink.WithAlpha(0.72f);
 
         var row = new Row(spacing: 12f, crossAxisAlignment: CrossAxisAlignment.Center);
         if (tabs)
@@ -514,8 +557,8 @@ public sealed partial class LiquidGlassPage
     /// </summary>
     private Widget TabBar(Color ink, float radius)
     {
-        var accent = _theme.Accent;
-        Color onAccent = AdwPalette.For(_theme).AccentFg;
+        var selection = ink.WithAlpha(0.12f);
+        var onAccent = ink;
         float pillRadius = LiquidPane.Inner(outer: radius, padding: PillInset);
 
         return new AnimatedSize(child: new Watch(() => _minimised.Value ? Folded() : Open()));
@@ -523,7 +566,7 @@ public sealed partial class LiquidGlassPage
         // A cell less the inset on every side: on the inset layer, (layer − pill) / (n − 1) is
         // exactly one cell, so X = i / (n − 1) puts the pill's centre on cell i's centre.
         Widget Pill(int i) => new DecoratedBox {
-            Fill = accent,
+            Fill = selection,
             Radius = pillRadius,
             Child = new SizedBox(
                 width: TabWidth - (2f * PillInset),
@@ -559,7 +602,7 @@ public sealed partial class LiquidGlassPage
             var slide = new AnimatedAlign(
                 alignment: new Alignment(X: _tab.Peek() / (n - 1f), Y: 0.5f),
                 child: new DecoratedBox {
-                    Fill = accent,
+                    Fill = selection,
                     Radius = pillRadius,
                     Child = new SizedBox(
                         width: TabWidth - (2f * PillInset),
@@ -568,40 +611,41 @@ public sealed partial class LiquidGlassPage
                 }
             );
             var glyphs = new Watch(() =>
-            {
-                int selected = _tab.Value;
-                var row = new Row(mainAxisSize: MainAxisSize.Min);
-                for (int i = 0; i < n; i++)
                 {
-                    int index = i;
-                    row.Children.Add(
-                        new Pressable {
-                            Child = new SizedBox(
-                                width: TabWidth,
-                                height: ToolbarHeight,
-                                child: new Center {
-                                    Child = new IconGlyph(
-                                        glyph: TabIcons[i],
-                                        size: 24f,
-                                        color: i == selected ? onAccent : ink
-                                    ),
-                                }
-                            ),
-                            OnPressed = () =>
-                            {
-                                _tab.Value = index;
-                                slide.Alignment = new Alignment(X: index / (n - 1f), Y: 0.5f);
-                            },
-                            Role = SemanticsRole.Tab,
-                            SelectedState = i == selected,
-                            SemanticsLabel = TabNames[i],
-                            FocusRadius = pillRadius,
-                        }
-                    );
-                }
+                    int selected = _tab.Value;
+                    var row = new Row(mainAxisSize: MainAxisSize.Min);
+                    for (int i = 0; i < n; i++)
+                    {
+                        int index = i;
+                        row.Children.Add(
+                            new Pressable {
+                                Child = new SizedBox(
+                                    width: TabWidth,
+                                    height: ToolbarHeight,
+                                    child: new Center {
+                                        Child = new IconGlyph(
+                                            glyph: TabIcons[i],
+                                            size: 24f,
+                                            color: i == selected ? onAccent : ink
+                                        ),
+                                    }
+                                ),
+                                OnPressed = () =>
+                                {
+                                    _tab.Value = index;
+                                    slide.Alignment = new Alignment(X: index / (n - 1f), Y: 0.5f);
+                                },
+                                Role = SemanticsRole.Tab,
+                                SelectedState = i == selected,
+                                SemanticsLabel = TabNames[i],
+                                FocusRadius = pillRadius,
+                            }
+                        );
+                    }
 
-                return row;
-            });
+                    return row;
+                }
+            );
 
             return new SizedBox(
                 width: TabWidth * n,

@@ -387,7 +387,9 @@ public sealed class HierarchyPanel : Widget
         {
             float fs = _theme.FontSizeCaption;
             paint.AddText(
-                text: _filter.Length > 0 ? "No nodes match" : "Empty scene — use Add to create a node",
+                text: _filter.Length > 0
+                    ? "No nodes match"
+                    : "Empty scene — use Add to create a node",
                 baselineX: Bounds.X + 10f,
                 baselineY: Bounds.Y + ((RowH - fs) / 2f) + (fs * 0.8f),
                 color: _theme.TextMuted,

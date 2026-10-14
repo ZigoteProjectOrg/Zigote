@@ -22,6 +22,7 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+
 // AdwCodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
 // library), so this one Material widget stays. Everything else in the panel is Adwaita.
 

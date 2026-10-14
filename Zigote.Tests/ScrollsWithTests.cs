@@ -24,8 +24,12 @@ public class ScrollsWithTests
                 child: new Stack {
                     Children = {
                         article,
-                        new Positioned(left: 0f, right: 0f, bottom: 0f,
-                            child: new ScrollsWith(target: article, child: toolbar)),
+                        new Positioned(
+                            left: 0f,
+                            right: 0f,
+                            bottom: 0f,
+                            child: new ScrollsWith(target: article, child: toolbar)
+                        ),
                     },
                 }
             )
@@ -56,11 +60,18 @@ public class ScrollsWithTests
         var stack = new Stack {
             Children = {
                 article,
-                new Positioned(left: 0f, right: 0f, bottom: 0f,
-                    child: new ScrollsWith(target: article, child: new Align {
-                        Alignment = Alignment.TopLeft,
-                        Child = toolbar,
-                    })),
+                new Positioned(
+                    left: 0f,
+                    right: 0f,
+                    bottom: 0f,
+                    child: new ScrollsWith(
+                        target: article,
+                        child: new Align {
+                            Alignment = Alignment.TopLeft,
+                            Child = toolbar,
+                        }
+                    )
+                ),
             },
         };
         stack.Measure(Constraints.Tight(width: 100f, height: 100f));
@@ -85,8 +96,12 @@ public class ScrollsWithTests
         var stack = new Stack {
             Children = {
                 page,
-                new Positioned(left: 0f, right: 0f, bottom: 0f,
-                    child: new ScrollsWith(target: page, child: toolbar)),
+                new Positioned(
+                    left: 0f,
+                    right: 0f,
+                    bottom: 0f,
+                    child: new ScrollsWith(target: page, child: toolbar)
+                ),
             },
         };
         stack.Measure(Constraints.Tight(width: 100f, height: 100f));

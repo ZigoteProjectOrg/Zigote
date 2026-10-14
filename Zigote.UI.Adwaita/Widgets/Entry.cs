@@ -221,7 +221,12 @@ public class AdwEntry : Widget
         public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
         {
             if (down && owner.OnKeyDown?.Invoke(arg1: scancode, arg2: mods) == true) return;
-            base.OnKey(keyChar: keyChar, scancode: scancode, down: down, mods: mods);
+            base.OnKey(
+                keyChar: keyChar,
+                scancode: scancode,
+                down: down,
+                mods: mods
+            );
         }
     }
 }

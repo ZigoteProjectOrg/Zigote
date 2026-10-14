@@ -93,7 +93,8 @@ public class WidgetDebugTests
     [Fact]
     public void LongValues_AreTruncated()
     {
-        var props = WidgetDebug.Properties(new AdwTextField { Text = new string(c: 'x', count: 500) });
+        var props =
+            WidgetDebug.Properties(new AdwTextField { Text = new string(c: 'x', count: 500) });
         Assert.True(Val(p: props, name: "Text").Length <= 161); // 160 cap + ellipsis
         Assert.EndsWith(expectedEndString: "…", actualString: Val(p: props, name: "Text"));
     }

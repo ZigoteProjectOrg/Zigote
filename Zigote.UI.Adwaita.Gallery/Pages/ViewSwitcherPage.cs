@@ -54,8 +54,8 @@ public sealed class ViewSwitcherPage : ComposedWidget
         var search = new AdwSearchEntry {
             Placeholder = "Filter views",
             Compact = true,
+            OnChanged = q => sidebar.Filter = q,
         };
-        search.OnChanged = q => sidebar.Filter = q;
         sidebar.Prefix = new Padding(padding: EdgeInsets.All(Spacing.Sm), child: search);
 
         return new ClipRRect(

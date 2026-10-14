@@ -86,15 +86,17 @@ public sealed class Background : IDisposable
         MutablePayloads = new();
 
     private static readonly System.Collections.Frozen.FrozenSet<Type> MutableGenerics =
-        System.Collections.Frozen.FrozenSet.ToFrozenSet([
-            typeof(List<>),
-            typeof(Dictionary<,>),
-            typeof(HashSet<>),
-            typeof(Queue<>),
-            typeof(Stack<>),
-            typeof(SortedList<,>),
-            typeof(SortedDictionary<,>),
-        ]);
+        System.Collections.Frozen.FrozenSet.ToFrozenSet(
+            [
+                typeof(List<>),
+                typeof(Dictionary<,>),
+                typeof(HashSet<>),
+                typeof(Queue<>),
+                typeof(Stack<>),
+                typeof(SortedList<,>),
+                typeof(SortedDictionary<,>),
+            ]
+        );
 
     private readonly List<Background> _children = [];
 
@@ -123,6 +125,7 @@ public sealed class Background : IDisposable
 
     /// <summary>Root-only. When <see cref="RunFrame(TimeSpan,TimeSpan)" /> last did not skip.</summary>
     private long _lastServiced;
+
     private int _pending;
 
     /// <summary>Which slice gets the frame first. Bumped per frame so none of them starves.</summary>
@@ -143,9 +146,7 @@ public sealed class Background : IDisposable
         toUi: toUi,
         requestFrame: requestFrame,
         clock: null
-    )
-    {
-    }
+    ) { }
 
     private Background(Action<Action> toUi, Action? requestFrame, Func<long>? clock)
     {
@@ -213,7 +214,7 @@ public sealed class Background : IDisposable
     public int IdleCapacity
     {
         get => Volatile.Read(ref Root._idleCapacity);
-        set => Volatile.Write(ref Root._idleCapacity, value);
+        set => Volatile.Write(location: ref Root._idleCapacity, value: value);
     }
 
     private int _idleCapacity;

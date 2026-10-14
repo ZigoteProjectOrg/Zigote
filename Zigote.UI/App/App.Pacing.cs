@@ -64,7 +64,9 @@ public partial class App
             else
             {
                 int dueMs = Math.Max(val1: 1, val2: (int)MathF.Ceiling(s.RestingFor * 1000f) + 1);
-                _snackbarDueInMs = _snackbarDueInMs == 0 ? dueMs : Math.Min(val1: _snackbarDueInMs, val2: dueMs);
+                _snackbarDueInMs = _snackbarDueInMs == 0
+                    ? dueMs
+                    : Math.Min(val1: _snackbarDueInMs, val2: dueMs);
             }
         }
 
@@ -77,7 +79,10 @@ public partial class App
         // cut short to end when the bubble is due (it used to repaint the overlay every frame for
         // the whole delay just to keep the loop turning).
         _tooltipDueInMs = _tooltipTimer > 0 && _tooltipOverlay is null
-            ? Math.Max(val1: 1, val2: (int)MathF.Ceiling((TooltipDelaySeconds - _tooltipTimer) * 1000f) + 1)
+            ? Math.Max(
+                val1: 1,
+                val2: (int)MathF.Ceiling((TooltipDelaySeconds - _tooltipTimer) * 1000f) + 1
+            )
             : 0;
         _caretChangeInMs = 0;
         if (FocusedWidget is ITextInputClient { WantsCaretBlink: true } caret)
@@ -90,13 +95,18 @@ public partial class App
                 // the idle wait when the next one is due so it wakes for it.
                 float time = Time;
                 bool shown = CaretBlink.Shown(time: time, blinkBase: blinkBase);
-                if (shown != _caretShown || !ReferenceEquals(FocusedWidget, _caretOwner))
+                if (shown != _caretShown || !ReferenceEquals(
+                        objA: FocusedWidget,
+                        objB: _caretOwner
+                    ))
                     MarkPaintFor(FocusedWidget);
                 _caretShown = shown;
                 _caretOwner = FocusedWidget;
                 _caretChangeInMs = Math.Max(
                     val1: 1,
-                    val2: (int)MathF.Ceiling(CaretBlink.ChangeIn(time: time, blinkBase: blinkBase) * 1000f)
+                    val2: (int)MathF.Ceiling(
+                        CaretBlink.ChangeIn(time: time, blinkBase: blinkBase) * 1000f
+                    )
                 );
             }
         }
@@ -109,8 +119,10 @@ public partial class App
     {
         int due = 0;
         if (_caretChangeInMs > 0) due = _caretChangeInMs;
-        if (_tooltipDueInMs > 0) due = due == 0 ? _tooltipDueInMs : Math.Min(val1: due, val2: _tooltipDueInMs);
-        if (_snackbarDueInMs > 0) due = due == 0 ? _snackbarDueInMs : Math.Min(val1: due, val2: _snackbarDueInMs);
+        if (_tooltipDueInMs > 0)
+            due = due == 0 ? _tooltipDueInMs : Math.Min(val1: due, val2: _tooltipDueInMs);
+        if (_snackbarDueInMs > 0)
+            due = due == 0 ? _snackbarDueInMs : Math.Min(val1: due, val2: _snackbarDueInMs);
         return due;
     }
 
@@ -122,9 +134,8 @@ public partial class App
             return true;
         // Secondary windows are serviced by this loop, so work queued on one of them counts too.
         for (int i = 0; i < _secondaryWindows.Count; i++)
-        {
-            if (_secondaryWindows[i].HasFrameWork()) return true;
-        }
+            if (_secondaryWindows[i].HasFrameWork())
+                return true;
 
         return false;
     }
@@ -161,9 +172,8 @@ public partial class App
     {
         if (_touchPrimaryFinger >= 0) return true;
         for (int i = 0; i < _secondaryWindows.Count; i++)
-        {
-            if (_secondaryWindows[i]._touchPrimaryFinger >= 0) return true;
-        }
+            if (_secondaryWindows[i]._touchPrimaryFinger >= 0)
+                return true;
 
         return false;
     }
@@ -201,7 +211,8 @@ public partial class App
     ///     minus <paramref name="reserveTicks" /> — the estimated cost of the layout, dispatch, paint
     ///     and submit still to come — capped at <see cref="MaxBackgroundBudgetMs" />.
     /// </summary>
-    internal static double BackgroundBudgetMs(long intervalTicks, long spentTicks, long reserveTicks) =>
+    internal static double BackgroundBudgetMs(long intervalTicks, long spentTicks,
+        long reserveTicks) =>
         Math.Clamp(
             value: (intervalTicks - spentTicks - reserveTicks) * 1000.0 / Stopwatch.Frequency,
             min: 0d,
@@ -214,7 +225,9 @@ public partial class App
     ///     protects the next few, and a workload that got lighter gets its slack back within a second.
     /// </summary>
     internal static long NextFrameReserve(long currentTicks, long sampleTicks) =>
-        sampleTicks >= currentTicks ? sampleTicks : currentTicks - (currentTicks - sampleTicks) / 20;
+        sampleTicks >= currentTicks
+            ? sampleTicks
+            : currentTicks - ((currentTicks - sampleTicks) / 20);
 
     private bool _presentSkipped;
     private int _dropStreak;

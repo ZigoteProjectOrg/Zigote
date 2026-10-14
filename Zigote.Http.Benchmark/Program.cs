@@ -29,7 +29,7 @@ public sealed class Loopback : IDisposable
 
     public Loopback(byte[] body, string? cacheControl = null, string? etag = null)
     {
-        using (var probe = new TcpListener(IPAddress.Loopback, 0))
+        using (var probe = new TcpListener(localaddr: IPAddress.Loopback, port: 0))
         {
             probe.Start();
             Uri = new Uri($"http://127.0.0.1:{((IPEndPoint)probe.LocalEndpoint).Port}/");
@@ -40,33 +40,38 @@ public sealed class Loopback : IDisposable
         _listener.Start();
 
         _ = Task.Run(async () =>
-        {
-            while (_listener.IsListening)
             {
-                HttpListenerContext context;
-                try
+                while (_listener.IsListening)
                 {
-                    context = await _listener.GetContextAsync();
-                }
-                catch (Exception e) when (e is HttpListenerException or ObjectDisposedException)
-                {
-                    return;
-                }
+                    HttpListenerContext context;
+                    try
+                    {
+                        context = await _listener.GetContextAsync();
+                    }
+                    catch (Exception e) when (e is HttpListenerException or ObjectDisposedException)
+                    {
+                        return;
+                    }
 
-                try
-                {
-                    if (cacheControl is not null)
-                        context.Response.Headers.Add("Cache-Control", cacheControl);
-                    if (etag is not null) context.Response.Headers.Add("ETag", etag);
-                    context.Response.ContentLength64 = body.Length;
-                    await context.Response.OutputStream.WriteAsync(body);
-                }
-                finally
-                {
-                    context.Response.Close();
+                    try
+                    {
+                        if (cacheControl is not null)
+                            context.Response.Headers.Add(
+                                name: "Cache-Control",
+                                value: cacheControl
+                            );
+                        if (etag is not null)
+                            context.Response.Headers.Add(name: "ETag", value: etag);
+                        context.Response.ContentLength64 = body.Length;
+                        await context.Response.OutputStream.WriteAsync(body);
+                    }
+                    finally
+                    {
+                        context.Response.Close();
+                    }
                 }
             }
-        });
+        );
     }
 
     public Uri Uri { get; }
@@ -93,25 +98,30 @@ public class RequestComparison
     public void Setup()
     {
         // 4 kB: a JSON listing, the size where per-request overhead is visible next to the wire.
-        _server = new Loopback(Encoding.UTF8.GetBytes(new string('x', 4096)),
-            cacheControl: "public, max-age=3600", etag: "\"bench\"");
+        _server = new Loopback(
+            body: Encoding.UTF8.GetBytes(new string(c: 'x', count: 4096)),
+            cacheControl: "public, max-age=3600",
+            etag: "\"bench\""
+        );
 
-        _client = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(2) })
-        {
-            BaseAddress = _server.Uri
+        _client = new HttpClient(
+            new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(2) }
+        ) {
+            BaseAddress = _server.Uri,
         };
 
         // No cache: both stacks hit the network, so the row is pure pipeline overhead.
         _runner = new HttpRunner(new HttpRunnerOptions { BaseAddress = _server.Uri });
 
         // The full stack an app actually configures: cache, gate, logging.
-        _fullRunner = new HttpRunner(new HttpRunnerOptions
-        {
-            BaseAddress = _server.Uri,
-            Cache = new MemoryCacheStore(),
-            MaxConcurrencyPerHost = 6,
-            OnLog = static _ => { }
-        });
+        _fullRunner = new HttpRunner(
+            new HttpRunnerOptions {
+                BaseAddress = _server.Uri,
+                Cache = new MemoryCacheStore(),
+                MaxConcurrencyPerHost = 6,
+                OnLog = static _ => { },
+            }
+        );
 
         _spec = HttpRequest.Get("data");
         // Prime the cache so CacheHit measures a hit, not a miss-and-fill.
@@ -167,17 +177,20 @@ public class ValueBuilding
     [Benchmark(Baseline = true, Description = "new HttpRequestMessage + headers")]
     public HttpRequestMessage BuildMessage()
     {
-        var message = new HttpRequestMessage(HttpMethod.Get, new Uri(Base, $"assets/{42}?thumb={512}"));
-        message.Headers.TryAddWithoutValidation("Accept", "application/json");
+        var message = new HttpRequestMessage(
+            method: HttpMethod.Get,
+            requestUri: new Uri(baseUri: Base, relativeUri: $"assets/{42}?thumb={512}")
+        );
+        message.Headers.TryAddWithoutValidation(name: "Accept", value: "application/json");
         return message;
     }
 
     [Benchmark(Description = "HttpSpec build + resolve")]
     public Uri BuildSpec() =>
         HttpRequest.Get("assets/{id}")
-            .Route("id", 42)
-            .WithQuery("thumb", 512)
-            .WithHeader("Accept", "application/json")
+            .Route(name: "id", value: 42)
+            .WithQuery(name: "thumb", value: 512)
+            .WithHeader(name: "Accept", value: "application/json")
             .ResolveUri(Base);
 }
 
@@ -193,13 +206,21 @@ public class FrameApi
     [GlobalSetup]
     public void Setup()
     {
-        _runner = new HttpRunner(new HttpRunnerOptions
-        {
-            BaseAddress = new Uri("https://example.test/"),
-            Transport = static (_, _) => ValueTask.FromResult(HttpResult<HttpResponse>.Ok(
-                HttpResponse.FromBytes(HttpStatusCode.OK, [], "ok"u8.ToArray())))
-        });
-        _queue = new FrameHttpQueue(_runner, capacity: 8);
+        _runner = new HttpRunner(
+            new HttpRunnerOptions {
+                BaseAddress = new Uri("https://example.test/"),
+                Transport = static (_, _) => ValueTask.FromResult(
+                    HttpResult<HttpResponse>.Ok(
+                        HttpResponse.FromBytes(
+                            status: HttpStatusCode.OK,
+                            headers: [],
+                            body: "ok"u8.ToArray()
+                        )
+                    )
+                ),
+            }
+        );
+        _queue = new FrameHttpQueue(runner: _runner, capacity: 8);
         _spec = HttpRequest.Get("thing");
     }
 
@@ -214,7 +235,7 @@ public class FrameApi
     public int SubmitPollRelease()
     {
         var handle = _queue.Submit(_spec);
-        while (!_queue.TryTake(handle, out _)) Thread.SpinWait(1);
+        while (!_queue.TryTake(handle: handle, outcome: out _)) Thread.SpinWait(1);
         _queue.Release(handle);
         return handle.Index;
     }

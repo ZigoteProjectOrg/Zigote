@@ -109,10 +109,11 @@ public sealed class View : ComposedWidget
         Widget? root = null;
         int revision = 0;
         _computed = Computed.From(() =>
-        {
-            root ??= _build(context);
-            return ++revision;
-        });
+            {
+                root ??= _build(context);
+                return ++revision;
+            }
+        );
         _subscription = _computed.Observe(OnSignalChanged);
 
         // A change can land between the eager evaluation and the subscription; Observe absorbs it
@@ -143,7 +144,8 @@ public sealed class View : ComposedWidget
 
     public override Size Measure(Constraints constraints)
     {
-        var size = base.Measure(constraints); // may run EnsureBuilt, which clears NeedsBuild at its end
+        var size =
+            base.Measure(constraints); // may run EnsureBuilt, which clears NeedsBuild at its end
         if (_changed && !NeedsBuild)
         {
             // A signal changed while the build above was in flight (or in the observe gap): the

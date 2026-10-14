@@ -105,11 +105,11 @@ public static class Templates
         $"""
              <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
          {(engine is null ? "" : $"""
-             <PropertyGroup>
-                     <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
-                     <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
-                 </PropertyGroup>
-             """)}
+                                  <PropertyGroup>
+                                          <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+                                          <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
+                                      </PropertyGroup>
+                                  """)}
 
              <ItemGroup>
                  <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
@@ -306,11 +306,11 @@ public static class Templates
              </PropertyGroup>
 
          {(engine is null ? "" : $"""
-             <PropertyGroup>
-                     <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
-                     <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
-                 </PropertyGroup>
-             """)}
+                                  <PropertyGroup>
+                                          <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+                                          <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
+                                      </PropertyGroup>
+                                  """)}
 
              <ItemGroup>
                  <!-- The Android SDK's implicit usings put Android.App/Widget/Views in global scope,
@@ -350,18 +350,18 @@ public static class Templates
                     </ItemGroup>
                 """
              : """
-                <!-- The on-device hot-reload switch `zigote run` passes (-p:ZigoteHotReload=true).
-                         Imported rather than restated so the head cannot drift from the engine's own heads. -->
-                    <Import Project="$(ZigoteRoot)/build/Zigote.Android.targets"/>
+               <!-- The on-device hot-reload switch `zigote run` passes (-p:ZigoteHotReload=true).
+                        Imported rather than restated so the head cannot drift from the engine's own heads. -->
+                   <Import Project="$(ZigoteRoot)/build/Zigote.Android.targets"/>
 
-                    <ItemGroup>
-                        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-                        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
-                    </ItemGroup>
-                    <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-                        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.DevTools/Zigote.UI.DevTools.csproj"/>
-                    </ItemGroup>
-                """)}
+                   <ItemGroup>
+                       <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
+                       <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
+                   </ItemGroup>
+                   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+                       <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.DevTools/Zigote.UI.DevTools.csproj"/>
+                   </ItemGroup>
+               """)}
 
              <ItemGroup>
                  <!-- The desktop head's sources, minus its entry point: Android's entry point is
@@ -371,86 +371,86 @@ public static class Templates
              </ItemGroup>
 
          {(engine is null ? """
-             <!-- The RID is mandatory, and it is the app's whole identity on a device: it names the
-                     managed target AND the engine package that carries the matching .so. Two ABIs are
-                     one letter apart, and the wrong one installs cleanly and dies at the first dlopen —
-                     on a phone, never on the emulator it was built on. -->
-                 <Target Name="RequireAndroidRid" BeforeTargets="BeforeBuild"
-                         Condition="'$(DesignTimeBuild)' != 'true'">
-                     <Error Condition="'$(ZigTargetRid)' != 'android-arm64' And '$(ZigTargetRid)' != 'android-x64'"
-                            Text="Pass -p:ZigTargetRid=android-arm64 for a device or -p:ZigTargetRid=android-x64 for the emulator. It selects the managed RID AND the engine package the .so comes from." />
-                 </Target>
+                            <!-- The RID is mandatory, and it is the app's whole identity on a device: it names the
+                                    managed target AND the engine package that carries the matching .so. Two ABIs are
+                                    one letter apart, and the wrong one installs cleanly and dies at the first dlopen —
+                                    on a phone, never on the emulator it was built on. -->
+                                <Target Name="RequireAndroidRid" BeforeTargets="BeforeBuild"
+                                        Condition="'$(DesignTimeBuild)' != 'true'">
+                                    <Error Condition="'$(ZigTargetRid)' != 'android-arm64' And '$(ZigTargetRid)' != 'android-x64'"
+                                           Text="Pass -p:ZigTargetRid=android-arm64 for a device or -p:ZigTargetRid=android-x64 for the emulator. It selects the managed RID AND the engine package the .so comes from." />
+                                </Target>
 
-                 <PropertyGroup>
-                     <RuntimeIdentifier Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</RuntimeIdentifier>
-                 </PropertyGroup>
-             """ : $$"""
-             <ItemGroup>
-                     <!-- SDL's Java half, vendored in the engine at the tag whose native version
-                          SDLActivity checks at startup, plus the activity that points SDL at
-                          libzigote.so and zigote_android_main. All of SDL's JNI-registered classes must
-                          reach the dex or the first JNI lookup throws. -->
-                     <AndroidJavaSource Include="$(ZigoteRoot)/mobile/android/JavaSources/**/*.java">
-                         <Bind>false</Bind>
-                     </AndroidJavaSource>
-                 </ItemGroup>
+                                <PropertyGroup>
+                                    <RuntimeIdentifier Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</RuntimeIdentifier>
+                                </PropertyGroup>
+                            """ : $$"""
+                                    <ItemGroup>
+                                            <!-- SDL's Java half, vendored in the engine at the tag whose native version
+                                                 SDLActivity checks at startup, plus the activity that points SDL at
+                                                 libzigote.so and zigote_android_main. All of SDL's JNI-registered classes must
+                                                 reach the dex or the first JNI lookup throws. -->
+                                            <AndroidJavaSource Include="$(ZigoteRoot)/mobile/android/JavaSources/**/*.java">
+                                                <Bind>false</Bind>
+                                            </AndroidJavaSource>
+                                        </ItemGroup>
 
-                 <!-- The ABI folder the engine lands in, derived from the RID the native build used. -->
-                 <PropertyGroup>
-                     <{{name}}AndroidAbi Condition="'$(ZigTargetRid)' == 'android-x64'">x86_64</{{name}}AndroidAbi>
-                     <{{name}}AndroidAbi Condition="'$({{name}}AndroidAbi)' == ''">arm64-v8a</{{name}}AndroidAbi>
-                     <RuntimeIdentifier Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</RuntimeIdentifier>
-                 </PropertyGroup>
+                                        <!-- The ABI folder the engine lands in, derived from the RID the native build used. -->
+                                        <PropertyGroup>
+                                            <{{name}}AndroidAbi Condition="'$(ZigTargetRid)' == 'android-x64'">x86_64</{{name}}AndroidAbi>
+                                            <{{name}}AndroidAbi Condition="'$({{name}}AndroidAbi)' == ''">arm64-v8a</{{name}}AndroidAbi>
+                                            <RuntimeIdentifier Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</RuntimeIdentifier>
+                                        </PropertyGroup>
 
-                 <!--
-                   zig-out holds exactly ONE libzigote.so, for whichever target was built last, and the
-                   ABI folder above is only a label. Get them out of step and the APK carries, say, an
-                   x86_64 engine filed under arm64-v8a: it installs happily and then dies the moment the
-                   loader touches it — on a device, never on the emulator that built it. So the RID is
-                   mandatory rather than defaulted, and the arch of the actual file is checked below.
-                 -->
-                 <Target Name="RequireAndroidRid" BeforeTargets="BeforeBuild"
-                         Condition="'$(DesignTimeBuild)' != 'true'">
-                     <Error Condition="'$(ZigTargetRid)' != 'android-arm64' And '$(ZigTargetRid)' != 'android-x64'"
-                            Text="Pass -p:ZigTargetRid=android-arm64 for a device or -p:ZigTargetRid=android-x64 for the emulator. It selects BOTH the managed RID and the native cross-compile; without it the two can disagree and the app crashes on load." />
-                 </Target>
+                                        <!--
+                                          zig-out holds exactly ONE libzigote.so, for whichever target was built last, and the
+                                          ABI folder above is only a label. Get them out of step and the APK carries, say, an
+                                          x86_64 engine filed under arm64-v8a: it installs happily and then dies the moment the
+                                          loader touches it — on a device, never on the emulator that built it. So the RID is
+                                          mandatory rather than defaulted, and the arch of the actual file is checked below.
+                                        -->
+                                        <Target Name="RequireAndroidRid" BeforeTargets="BeforeBuild"
+                                                Condition="'$(DesignTimeBuild)' != 'true'">
+                                            <Error Condition="'$(ZigTargetRid)' != 'android-arm64' And '$(ZigTargetRid)' != 'android-x64'"
+                                                   Text="Pass -p:ZigTargetRid=android-arm64 for a device or -p:ZigTargetRid=android-x64 for the emulator. It selects BOTH the managed RID and the native cross-compile; without it the two can disagree and the app crashes on load." />
+                                        </Target>
 
-                 <!-- e_machine lives at byte 18 of the ELF header: 0xB7 (183) = aarch64, 0x3E (62) = x86-64. -->
-                 <Target Name="CheckEngineArch" AfterTargets="BuildZigEngine"
-                         Condition="'$(DesignTimeBuild)' != 'true' And Exists('$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so')">
-                     <PropertyGroup>
-                         <_EngineMachine>$([System.IO.File]::ReadAllBytes('$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so')[18])</_EngineMachine>
-                         <_ExpectedMachine Condition="'$({{name}}AndroidAbi)' == 'arm64-v8a'">183</_ExpectedMachine>
-                         <_ExpectedMachine Condition="'$({{name}}AndroidAbi)' == 'x86_64'">62</_ExpectedMachine>
-                     </PropertyGroup>
-                     <Error Condition="'$(_EngineMachine)' != '$(_ExpectedMachine)'"
-                            Text="libzigote.so is built for ELF machine $(_EngineMachine) but is being packaged as $({{name}}AndroidAbi) (expects $(_ExpectedMachine)). The native build is stale — rebuild with -p:ZigTargetRid=$(ZigTargetRid)." />
-                 </Target>
+                                        <!-- e_machine lives at byte 18 of the ELF header: 0xB7 (183) = aarch64, 0x3E (62) = x86-64. -->
+                                        <Target Name="CheckEngineArch" AfterTargets="BuildZigEngine"
+                                                Condition="'$(DesignTimeBuild)' != 'true' And Exists('$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so')">
+                                            <PropertyGroup>
+                                                <_EngineMachine>$([System.IO.File]::ReadAllBytes('$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so')[18])</_EngineMachine>
+                                                <_ExpectedMachine Condition="'$({{name}}AndroidAbi)' == 'arm64-v8a'">183</_ExpectedMachine>
+                                                <_ExpectedMachine Condition="'$({{name}}AndroidAbi)' == 'x86_64'">62</_ExpectedMachine>
+                                            </PropertyGroup>
+                                            <Error Condition="'$(_EngineMachine)' != '$(_ExpectedMachine)'"
+                                                   Text="libzigote.so is built for ELF machine $(_EngineMachine) but is being packaged as $({{name}}AndroidAbi) (expects $(_ExpectedMachine)). The native build is stale — rebuild with -p:ZigTargetRid=$(ZigTargetRid)." />
+                                        </Target>
 
-                 <ItemGroup>
-                     <AndroidNativeLibrary Include="$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so">
-                         <Abi>$({{name}}AndroidAbi)</Abi>
-                     </AndroidNativeLibrary>
-                 </ItemGroup>
+                                        <ItemGroup>
+                                            <AndroidNativeLibrary Include="$(ZigoteRoot)/Zigote.Engine/zig-out/lib/libzigote.so">
+                                                <Abi>$({{name}}AndroidAbi)</Abi>
+                                            </AndroidNativeLibrary>
+                                        </ItemGroup>
 
-                 <ItemGroup>
-                     <!-- Fonts ship as Android assets; the engine opens them through FreeType by file
-                          path, and an APK asset has no path — so the Application stages them out on
-                          first run. Without fonts the engine cannot initialize at all. -->
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Regular.ttf"
-                                   Link="Fonts\Inter-Regular.ttf"/>
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Medium.ttf"
-                                   Link="Fonts\Inter-Medium.ttf"/>
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-SemiBold.ttf"
-                                   Link="Fonts\Inter-SemiBold.ttf"/>
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Bold.ttf"
-                                   Link="Fonts\Inter-Bold.ttf"/>
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/MaterialIcons/MaterialIcons-Regular.ttf"
-                                   Link="Fonts\MaterialIcons-Regular.ttf"/>
-                     <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Noto_Emoji/static/NotoEmoji-Regular.ttf"
-                                   Link="Fonts\NotoEmoji-Regular.ttf"/>
-                 </ItemGroup>
-             """)}
+                                        <ItemGroup>
+                                            <!-- Fonts ship as Android assets; the engine opens them through FreeType by file
+                                                 path, and an APK asset has no path — so the Application stages them out on
+                                                 first run. Without fonts the engine cannot initialize at all. -->
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Regular.ttf"
+                                                          Link="Fonts\Inter-Regular.ttf"/>
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Medium.ttf"
+                                                          Link="Fonts\Inter-Medium.ttf"/>
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-SemiBold.ttf"
+                                                          Link="Fonts\Inter-SemiBold.ttf"/>
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Inter/static/Inter_18pt-Bold.ttf"
+                                                          Link="Fonts\Inter-Bold.ttf"/>
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/MaterialIcons/MaterialIcons-Regular.ttf"
+                                                          Link="Fonts\MaterialIcons-Regular.ttf"/>
+                                            <AndroidAsset Include="$(ZigoteRoot)/Zigote.UI/Fonts/Noto_Emoji/static/NotoEmoji-Regular.ttf"
+                                                          Link="Fonts\NotoEmoji-Regular.ttf"/>
+                                        </ItemGroup>
+                                    """)}
 
          </Project>
 
@@ -770,7 +770,8 @@ public static class Templates
 
     // ── plugin ────────────────────────────────────────────────────────────────
 
-    public static string PluginCsproj(string name, string? engine, string version, bool android, bool ios)
+    public static string PluginCsproj(string name, string? engine, string version, bool android,
+        bool ios)
     {
         string tfms = "net10.0"
                       + (android ? ";net10.0-android" : "")

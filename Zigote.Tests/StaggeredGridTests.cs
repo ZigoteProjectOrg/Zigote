@@ -11,7 +11,11 @@ namespace Zigote.Tests;
 public class StaggeredGridTests
 {
     private static readonly Constraints Room = new(
-        minWidth: 0f, maxWidth: 320f, minHeight: 0f, maxHeight: float.PositiveInfinity);
+        minWidth: 0f,
+        maxWidth: 320f,
+        minHeight: 0f,
+        maxHeight: float.PositiveInfinity
+    );
 
     private static SizedBox Tile(float height) => new(height: height);
 
@@ -28,7 +32,10 @@ public class StaggeredGridTests
     {
         var grid = new StaggeredGrid(
             children: [Tile(100), Tile(40), Tile(30), Tile(30)],
-            columns: 2, spacing: 20, runSpacing: 10);
+            columns: 2,
+            spacing: 20,
+            runSpacing: 10
+        );
 
         var size = grid.Measure(Room);
         grid.Layout(Offset.Zero);
@@ -39,10 +46,10 @@ public class StaggeredGridTests
         Assert.Equal(expected: 120f, actual: size.Height);
 
         var children = grid.Children;
-        Assert.Equal(expected: 0f, actual: children[0].Bounds.X);     // first column
-        Assert.Equal(expected: 170f, actual: children[1].Bounds.X);   // 150 wide + 20 gap
+        Assert.Equal(expected: 0f, actual: children[0].Bounds.X); // first column
+        Assert.Equal(expected: 170f, actual: children[1].Bounds.X); // 150 wide + 20 gap
         Assert.Equal(expected: 170f, actual: children[2].Bounds.X);
-        Assert.Equal(expected: 50f, actual: children[2].Bounds.Y);    // under tile 1, plus the gap
+        Assert.Equal(expected: 50f, actual: children[2].Bounds.Y); // under tile 1, plus the gap
         Assert.Equal(expected: 90f, actual: children[3].Bounds.Y);
     }
 

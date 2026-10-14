@@ -76,8 +76,9 @@ public static class WidgetPreview
         if (target is { Width: > 0, Height: > 0 })
         {
             notes.Add(
-                target.Width.ToString("0.##", CultureInfo.InvariantCulture) + "×" +
-                target.Height.ToString("0.##", CultureInfo.InvariantCulture)
+                target.Width.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) +
+                "×" +
+                target.Height.ToString(format: "0.##", provider: CultureInfo.InvariantCulture)
             );
         }
 
@@ -92,7 +93,9 @@ public static class WidgetPreview
             );
         }
 
-        return notes.Count == 0 ? target.Target : $"{target.Target}  {string.Join("  ", notes)}";
+        return notes.Count == 0
+            ? target.Target
+            : $"{target.Target}  {string.Join(separator: "  ", values: notes)}";
     }
 
     /// <summary>
@@ -130,10 +133,11 @@ public static class WidgetPreview
             .Select(t => (Type: t, Ctor: Ctor(t)))
             .Where(found => found.Ctor is not null)
             .Select(found => Describe(
-                target: found.Type.FullName!,
-                preview: found.Type.GetCustomAttribute<PreviewAttribute>(),
-                parameters: found.Ctor!.GetParameters()
-            ));
+                    target: found.Type.FullName!,
+                    preview: found.Type.GetCustomAttribute<PreviewAttribute>(),
+                    parameters: found.Ctor!.GetParameters()
+                )
+            );
 
         // Grouped by name, not one entry per overload: the list has to describe the overload
         // [Resolve] would actually call, or the property editor draws knobs for a method nothing runs.
@@ -144,10 +148,11 @@ public static class WidgetPreview
             .Select(overloads => (Target: overloads.Key, Method: Pick(overloads)))
             .Where(found => found.Method is not null)
             .Select(found => Describe(
-                target: found.Target,
-                preview: found.Method!.GetCustomAttribute<PreviewAttribute>(),
-                parameters: found.Method.GetParameters()
-            ));
+                    target: found.Target,
+                    preview: found.Method!.GetCustomAttribute<PreviewAttribute>(),
+                    parameters: found.Method.GetParameters()
+                )
+            );
 
         return widgets.Concat(factories)
             .DistinctBy(d => d.Target)
@@ -210,9 +215,8 @@ public static class WidgetPreview
     {
         var usable = options.Where(m => Previewable(m.GetParameters())).ToList();
         if (!annotated && !usable.Any(m => m.GetCustomAttribute<PreviewAttribute>() is not null))
-        {
-            if (usable.FirstOrDefault(m => m.GetParameters().Length == 0) is { } plain) return plain;
-        }
+            if (usable.FirstOrDefault(m => m.GetParameters().Length == 0) is { } plain)
+                return plain;
 
         return usable.MaxBy(m => m.GetParameters().Length);
     }
@@ -383,11 +387,13 @@ public static class WidgetPreview
     }
 
     /// <summary>A default value as the string that would convert back to it.</summary>
-    private static string Text(object? value) => value switch
-    {
+    private static string Text(object? value) => value switch {
         null => "",
         bool flag => flag ? "true" : "false",
-        IFormattable number => number.ToString(format: null, formatProvider: CultureInfo.InvariantCulture),
+        IFormattable number => number.ToString(
+            format: null,
+            formatProvider: CultureInfo.InvariantCulture
+        ),
         _ => value.ToString() ?? "",
     };
 

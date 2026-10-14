@@ -42,7 +42,7 @@ public sealed class TokenAuthProvider(
     TimeSpan? refreshAfter = null,
     TimeProvider? time = null) : IHttpAuthProvider
 {
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate = new(initialCount: 1, maxCount: 1);
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private long _fetchedAt;
     private volatile string? _token;
@@ -63,7 +63,7 @@ public sealed class TokenAuthProvider(
         {
             if (Current(rejectedToken) is { } refreshed) return refreshed;
             _token = await fetch(ct).ConfigureAwait(false);
-            Volatile.Write(ref _fetchedAt, _time.GetUtcNow().UtcTicks);
+            Volatile.Write(location: ref _fetchedAt, value: _time.GetUtcNow().UtcTicks);
             return _token;
         }
         finally
@@ -78,7 +78,11 @@ public sealed class TokenAuthProvider(
     private string? Current(string? rejectedToken)
     {
         if (_token is not { } token) return null;
-        if (string.Equals(token, rejectedToken, StringComparison.Ordinal)) return null;
+        if (string.Equals(
+                a: token,
+                b: rejectedToken,
+                comparisonType: StringComparison.Ordinal
+            )) return null;
 
         // Aged out: report "no token" so the caller path falls into the single-flighted fetch.
         if (refreshAfter is { } maxAge &&
@@ -99,10 +103,14 @@ public static class AuthMiddleware
     /// <summary>The layer.</summary>
     public static Middleware Create(IHttpAuthProvider provider) => next => async (spec, ct) =>
     {
-        if (spec.Policy.IsAnonymous) return await next(spec, ct).ConfigureAwait(false);
+        if (spec.Policy.IsAnonymous) return await next(spec: spec, ct: ct).ConfigureAwait(false);
 
-        string? token = await provider.GetTokenAsync(rejectedToken: null, ct).ConfigureAwait(false);
-        var result = await next(WithToken(spec, provider.Scheme, token), ct).ConfigureAwait(false);
+        string? token = await provider.GetTokenAsync(rejectedToken: null, ct: ct)
+            .ConfigureAwait(false);
+        var result = await next(
+            spec: WithToken(spec: spec, scheme: provider.Scheme, token: token),
+            ct: ct
+        ).ConfigureAwait(false);
 
         // Replay once, and only when the body survives being sent twice. A one-shot stream is
         // already half on the wire by the time the 401 arrives.
@@ -110,17 +118,23 @@ public static class AuthMiddleware
             !spec.Body.IsReplayable || spec.Policy.IsStreaming)
             return result;
 
-        string? refreshed = await provider.GetTokenAsync(token, ct).ConfigureAwait(false);
+        string? refreshed = await provider.GetTokenAsync(rejectedToken: token, ct: ct)
+            .ConfigureAwait(false);
         if (refreshed is null || refreshed == token) return result;
 
         result.Value.Dispose();
-        return await next(WithToken(spec, provider.Scheme, refreshed), ct).ConfigureAwait(false);
+        return await next(
+            spec: WithToken(spec: spec, scheme: provider.Scheme, token: refreshed),
+            ct: ct
+        ).ConfigureAwait(false);
     };
 
     private static HttpSpec WithToken(HttpSpec spec, string scheme, string? token)
     {
         if (token is null) return spec;
         var headers = spec.Headers.IsDefault ? ImmutableArray<HeaderPair>.Empty : spec.Headers;
-        return spec with { Headers = headers.Add(new HeaderPair("Authorization", $"{scheme} {token}")) };
+        return spec with {
+            Headers = headers.Add(new HeaderPair(Name: "Authorization", Value: $"{scheme} {token}")),
+        };
     }
 }

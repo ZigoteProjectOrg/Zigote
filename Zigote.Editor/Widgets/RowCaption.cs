@@ -16,9 +16,8 @@ internal static class RowCaption
     {
         if (widget is Label label) return label.Text;
         foreach (var child in widget.GetChildren())
-        {
-            if (Of(child) is { } text) return text;
-        }
+            if (Of(child) is { } text)
+                return text;
 
         return null;
     }

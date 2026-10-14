@@ -37,7 +37,8 @@ public sealed class HttpFile : Stream
     private readonly HttpSpec _spec;
     private readonly string? _validator;
 
-    private HttpFile(HttpRunner runner, HttpSpec spec, long length, string? validator, int blockSize, int maxBlocks)
+    private HttpFile(HttpRunner runner, HttpSpec spec, long length, string? validator,
+        int blockSize, int maxBlocks)
     {
         _runner = runner;
         _spec = spec;
@@ -86,9 +87,9 @@ public sealed class HttpFile : Stream
         // One byte, not a HEAD: a 206 proves ranges work, and Content-Range carries the total. Some
         // origins answer HEAD with a length they will not honour a range against.
         var probe = spec with { Verb = HttpVerb.Get };
-        probe = probe.WithHeader("Range", "bytes=0-0").Cache(CacheMode.Bypass);
+        probe = probe.WithHeader(name: "Range", value: "bytes=0-0").Cache(CacheMode.Bypass);
 
-        var result = await runner.SendAsync(probe, ct).ConfigureAwait(false);
+        var result = await runner.SendAsync(spec: probe, ct: ct).ConfigureAwait(false);
         if (!result.IsOk) return HttpResult<HttpFile>.Fail(result.Error);
 
         using var response = result.Value;
@@ -100,7 +101,14 @@ public sealed class HttpFile : Stream
             return HttpResult<HttpFile>.Fail(new HttpError.Policy(PolicyFault.Unsupported));
 
         string? validator = response.Header("ETag") ?? response.Header("Last-Modified");
-        return new HttpFile(runner, spec with { Verb = HttpVerb.Get }, total.Value, validator, blockSize, maxBlocks);
+        return new HttpFile(
+            runner: runner,
+            spec: spec with { Verb = HttpVerb.Get },
+            length: total.Value,
+            validator: validator,
+            blockSize: blockSize,
+            maxBlocks: maxBlocks
+        );
     }
 
     /// <summary>
@@ -134,15 +142,18 @@ public sealed class HttpFile : Stream
 
         var request = (spec with { Verb = HttpVerb.Get }).Cache(CacheMode.Bypass).Streaming();
         if (have > 0 && runner.Capabilities.Ranges)
+        {
             request = request
-                .WithHeader("Range", $"bytes={have}-")
-                .WithHeader("If-Range", validator!);
-        var result = await runner.SendAsync(request, ct).ConfigureAwait(false);
+                .WithHeader(name: "Range", value: $"bytes={have}-")
+                .WithHeader(name: "If-Range", value: validator!);
+        }
+
+        var result = await runner.SendAsync(spec: request, ct: ct).ConfigureAwait(false);
         if (!result.IsOk) return HttpResult<long>.Fail(result.Error);
 
         using var response = result.Value;
         if (response.Status is not (HttpStatusCode.OK or HttpStatusCode.PartialContent))
-            return HttpResult<long>.Fail(new HttpError.Status(response.Status, []));
+            return HttpResult<long>.Fail(new HttpError.Status(Code: response.Status, Body: []));
 
         // A 200 to a ranged request means the origin ignored the range or If-Range said the
         // resource changed: start over rather than appending the whole file onto the old part.
@@ -150,10 +161,17 @@ public sealed class HttpFile : Stream
 
         // Record this response's validator before writing a byte, so a crash mid-body leaves a
         // partial the next attempt can still prove something about.
-        WriteSidecar(sidecar, response.Header("ETag") ?? response.Header("Last-Modified"));
+        WriteSidecar(
+            sidecar: sidecar,
+            validator: response.Header("ETag") ?? response.Header("Last-Modified")
+        );
 
-        await using (var file = new FileStream(partial, append ? FileMode.Append : FileMode.Create,
-                         FileAccess.Write, FileShare.None))
+        await using (var file = new FileStream(
+                         path: partial,
+                         mode: append ? FileMode.Append : FileMode.Create,
+                         access: FileAccess.Write,
+                         share: FileShare.None
+                     ))
         {
             if (response.ContentStream is { } content)
             {
@@ -161,19 +179,29 @@ public sealed class HttpFile : Stream
                 // buffered read, which is the only place the request's own Progress is fed. Bytes
                 // already on disk count, so a resumed download picks its bar up where it stopped.
                 long done = append ? have : 0;
-                long total = long.TryParse(response.Header("Content-Length"), NumberStyles.Integer,
-                    CultureInfo.InvariantCulture, out long rest)
+                long total = long.TryParse(
+                    s: response.Header("Content-Length"),
+                    style: NumberStyles.Integer,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out long rest
+                )
                     ? done + rest
                     : -1;
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
                 try
                 {
                     int read;
-                    while ((read = await content.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                    while ((read = await content.ReadAsync(buffer: buffer, cancellationToken: ct)
+                               .ConfigureAwait(false)) > 0)
                     {
-                        await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                        await file.WriteAsync(
+                            buffer: buffer.AsMemory(start: 0, length: read),
+                            cancellationToken: ct
+                        ).ConfigureAwait(false);
                         done += read;
-                        progress?.Report(new HttpProgress(done, total, Uploading: false));
+                        progress?.Report(
+                            new HttpProgress(Transferred: done, Total: total, Uploading: false)
+                        );
                     }
                 }
                 finally
@@ -182,10 +210,11 @@ public sealed class HttpFile : Stream
                 }
             }
             else
-                await file.WriteAsync(response.Body, ct).ConfigureAwait(false);
+                await file.WriteAsync(buffer: response.Body, cancellationToken: ct)
+                    .ConfigureAwait(false);
         }
 
-        File.Move(partial, path, overwrite: true);
+        File.Move(sourceFileName: partial, destFileName: path, overwrite: true);
         TryDelete(sidecar);
         return new FileInfo(path).Length;
     }
@@ -208,11 +237,9 @@ public sealed class HttpFile : Stream
         try
         {
             if (validator is null) TryDelete(sidecar); // no validator: the next attempt starts over
-            else File.WriteAllText(sidecar, validator);
+            else File.WriteAllText(path: sidecar, contents: validator);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     private static void TryDelete(string path)
@@ -228,14 +255,17 @@ public sealed class HttpFile : Stream
         if (Position >= Length || buffer.IsEmpty) return 0;
 
         long block = Position / _blockSize;
-        byte[] bytes = await BlockAsync(block, ct).ConfigureAwait(false);
+        byte[] bytes = await BlockAsync(block: block, ct: ct).ConfigureAwait(false);
 
         int offset = (int)(Position - (block * _blockSize));
-        int available = Math.Min(bytes.Length - offset, (int)Math.Min(Length - Position, int.MaxValue));
-        int count = Math.Min(buffer.Length, available);
+        int available = Math.Min(
+            val1: bytes.Length - offset,
+            val2: (int)Math.Min(val1: Length - Position, val2: int.MaxValue)
+        );
+        int count = Math.Min(val1: buffer.Length, val2: available);
         if (count <= 0) return 0;
 
-        bytes.AsSpan(offset, count).CopyTo(buffer.Span);
+        bytes.AsSpan(start: offset, length: count).CopyTo(buffer.Span);
         Position += count;
         return count;
     }
@@ -244,17 +274,16 @@ public sealed class HttpFile : Stream
     public override int Read(byte[] buffer, int offset, int count) =>
         // Synchronous read over a network: correct, and slow by nature. Callers on the frame path
         // use the submit/poll queue instead; this exists so any Stream consumer works.
-        ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        ReadAsync(buffer.AsMemory(start: offset, length: count)).AsTask().GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override long Seek(long offset, SeekOrigin origin)
     {
-        Position = origin switch
-        {
+        Position = origin switch {
             SeekOrigin.Begin => offset,
             SeekOrigin.Current => Position + offset,
             SeekOrigin.End => Length + offset,
-            _ => throw new ArgumentOutOfRangeException(nameof(origin))
+            _ => throw new ArgumentOutOfRangeException(nameof(origin)),
         };
         return Position;
     }
@@ -266,7 +295,8 @@ public sealed class HttpFile : Stream
     public override void SetLength(long value) => throw new NotSupportedException();
 
     /// <inheritdoc />
-    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) =>
+        throw new NotSupportedException();
 
     private async ValueTask<byte[]> BlockAsync(long block, CancellationToken ct)
     {
@@ -278,21 +308,24 @@ public sealed class HttpFile : Stream
         }
 
         long start = block * _blockSize;
-        long end = Math.Min(start + _blockSize, Length) - 1;
+        long end = Math.Min(val1: start + _blockSize, val2: Length) - 1;
 
         var request = _spec
-            .WithHeader("Range", $"bytes={start}-{end}")
+            .WithHeader(name: "Range", value: $"bytes={start}-{end}")
             .Cache(CacheMode.Bypass);
         if (_validator is { Length: > 0 } validator)
-            request = request.WithHeader("If-Range", validator);
+            request = request.WithHeader(name: "If-Range", value: validator);
 
-        var result = await _runner.SendAsync(request, ct).ConfigureAwait(false);
+        var result = await _runner.SendAsync(spec: request, ct: ct).ConfigureAwait(false);
         if (!result.IsOk) throw new HttpException(result.Error);
 
         using var response = result.Value;
         if (response.Status != HttpStatusCode.PartialContent)
+        {
             throw new IOException(
-                $"Range request answered {(int)response.Status}: the resource changed while it was open.");
+                $"Range request answered {(int)response.Status}: the resource changed while it was open."
+            );
+        }
 
         byte[] bytes = response.Body.ToArray();
         _blocks[block] = (bytes, _lru.AddFirst(block));
@@ -311,8 +344,12 @@ public sealed class HttpFile : Stream
         if (contentRange is null) return null;
         int slash = contentRange.LastIndexOf('/');
         if (slash < 0) return null;
-        return long.TryParse(contentRange.AsSpan(slash + 1), NumberStyles.Integer,
-            CultureInfo.InvariantCulture, out long total)
+        return long.TryParse(
+            s: contentRange.AsSpan(slash + 1),
+            style: NumberStyles.Integer,
+            provider: CultureInfo.InvariantCulture,
+            result: out long total
+        )
             ? total
             : null;
     }

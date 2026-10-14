@@ -53,13 +53,24 @@ public readonly record struct MotionSpec
     public MotionSpec() { }
 
     public static MotionSpec Duration(float seconds, Func<float, float>? curve = null) =>
-        new() { Kind = MotionKind.Duration, Seconds = seconds, Curve = curve };
+        new() {
+            Kind = MotionKind.Duration,
+            Seconds = seconds,
+            Curve = curve,
+        };
 
     public static MotionSpec Spring(float response = 0.35f, float damping = 1f) =>
-        new() { Kind = MotionKind.Spring, Response = response, Damping = damping };
+        new() {
+            Kind = MotionKind.Spring,
+            Response = response,
+            Damping = damping,
+        };
 
     public static MotionSpec Decay(float friction = 3.2f) =>
-        new() { Kind = MotionKind.Decay, Friction = friction };
+        new() {
+            Kind = MotionKind.Decay,
+            Friction = friction,
+        };
 
     /// <summary>Critically damped, no overshoot — the default for anything that must not wobble.</summary>
     public static MotionSpec Smooth => Spring(response: 0.35f, damping: 1f);

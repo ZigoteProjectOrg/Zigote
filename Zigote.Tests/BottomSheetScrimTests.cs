@@ -25,12 +25,12 @@ public class BottomSheetScrimTests
         ) {
             Modal = true,
             ShowDragHandle = true,
+            OnOpenChanged = open =>
+            {
+                if (!open) count++;
+            },
+            Open = true, // unattached: snaps open, no animation
         };
-        sheet.OnOpenChanged = open =>
-        {
-            if (!open) count++;
-        };
-        sheet.Open = true; // unattached: snaps open, no animation
         sheet.Measure(Constraints.Tight(width: w, height: h));
         sheet.Layout(Offset.Zero);
         closes = count;
@@ -75,9 +75,9 @@ public class BottomSheetScrimTests
         var sheet =
             new AdwBottomSheet(content: content, sheet: new Container { Height = 200f }) {
                 Modal = true,
+                Open = true, // unattached: snaps open…
             };
 
-        sheet.Open = true; // unattached: snaps open…
         sheet.Measure(Constraints.Tight(width: 400f, height: 600f));
         sheet.Layout(Offset.Zero);
         sheet.Open = false; // …and shut again

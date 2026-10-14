@@ -104,8 +104,5 @@ public sealed class AdwTabView : ComposedWidget
         OnClosed?.Invoke(page);
     }
 
-    protected override Widget Build(BuildContext context)
-    {
-        return Switcher;
-    }
+    protected override Widget Build(BuildContext context) => Switcher;
 }

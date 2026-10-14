@@ -47,7 +47,7 @@ public static class LoggingMiddleware
         next => async (spec, ct) =>
         {
             long started = time.GetTimestamp();
-            var result = await next(spec, ct).ConfigureAwait(false);
+            var result = await next(spec: spec, ct: ct).ConfigureAwait(false);
             var elapsed = time.GetElapsedTime(started);
 
             string? target = null;
@@ -63,11 +63,29 @@ public static class LoggingMiddleware
                 }
             }
 
-            sink(result.IsOk
-                ? new HttpLogEvent(spec.Verb.Token(), spec.Path.Template, target, result.Value.Status,
-                    null, elapsed, result.Value.FromCache, result.Value.BodyLength)
-                : new HttpLogEvent(spec.Verb.Token(), spec.Path.Template, target, null,
-                    result.Error, elapsed, FromCache: false, BodyBytes: 0));
+            sink(
+                result.IsOk
+                    ? new HttpLogEvent(
+                        Verb: spec.Verb.Token(),
+                        Route: spec.Path.Template,
+                        Target: target,
+                        Status: result.Value.Status,
+                        Error: null,
+                        Elapsed: elapsed,
+                        FromCache: result.Value.FromCache,
+                        BodyBytes: result.Value.BodyLength
+                    )
+                    : new HttpLogEvent(
+                        Verb: spec.Verb.Token(),
+                        Route: spec.Path.Template,
+                        Target: target,
+                        Status: null,
+                        Error: result.Error,
+                        Elapsed: elapsed,
+                        FromCache: false,
+                        BodyBytes: 0
+                    )
+            );
 
             return result;
         };

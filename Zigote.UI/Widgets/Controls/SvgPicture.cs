@@ -74,11 +74,9 @@ public sealed class SvgPicture : Widget, IDisposable
     public override bool ExcludeSemantics => AltText is null;
 
     /// <summary>The raster is rebuilt at the next paint; an unmounted picture holds no texture.</summary>
-
     protected override void OnUnmount()
 
     {
-
         if (_textureHandle == 0) return;
 
         ZigoteEngine.ReleaseTexture(_textureHandle);
@@ -88,7 +86,6 @@ public sealed class SvgPicture : Widget, IDisposable
         _texWidth = 0;
 
         _texHeight = 0;
-
     }
 
 
@@ -128,7 +125,7 @@ public sealed class SvgPicture : Widget, IDisposable
 
     public override Size Measure(Constraints c)
     {
-        Size natural = _asset.IntrinsicSize;
+        var natural = _asset.IntrinsicSize;
         float aspect = natural.Height > 0 ? natural.Width / natural.Height : 1f;
 
         float w = Width ?? (Height is { } h0 ? h0 * aspect : natural.Width);

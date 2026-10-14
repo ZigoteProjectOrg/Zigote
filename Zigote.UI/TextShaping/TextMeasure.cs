@@ -222,7 +222,11 @@ public static class TextMeasure
         public bool Equals(SpanKey a, Key k) =>
             a.Size == k.Size && a.Weight == k.Weight && a.Style == k.Style &&
             a.LetterSpacing == k.LetterSpacing && a.WordSpacing == k.WordSpacing &&
-            string.Equals(a: a.FontFamily, b: k.FontFamily, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(
+                a: a.FontFamily,
+                b: k.FontFamily,
+                comparisonType: StringComparison.Ordinal
+            ) &&
             a.Text.SequenceEqual(k.Text);
 
         public int GetHashCode(SpanKey a) => Hash(
@@ -257,7 +261,10 @@ public static class TextMeasure
                 value4: style,
                 value5: fontFamily is null
                     ? 0
-                    : string.GetHashCode(value: fontFamily, comparisonType: StringComparison.Ordinal),
+                    : string.GetHashCode(
+                        value: fontFamily,
+                        comparisonType: StringComparison.Ordinal
+                    ),
                 value6: letterSpacing,
                 value7: wordSpacing
             );

@@ -17,7 +17,7 @@ dotnet run --project plugins/Demo/PluginsDemo
 | Share | Share | desktop answers `Unavailable` and leaves the payload on the clipboard — paste it |
 | Files | FilePicker | the native open/save/folder dialogs |
 | Links | UrlLauncher, AppLinks | see below |
-| Notifications | Notifications | a real desktop notification |
+| Notifications | Notifications, MediaSession | a real desktop notification; publish a track and drive it with `playerctl` or the media keys (Linux) |
 | Location | Geolocation, Sensors | both unavailable on desktop, and both say so instead of throwing |
 | Mobile | Push, Biometrics, Haptics, Permissions, AppSettings | the four that only mean something on a phone |
 

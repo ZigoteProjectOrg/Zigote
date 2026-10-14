@@ -75,7 +75,9 @@ internal static class GalleryPreferences
                     Rows = {
                         new AdwActionRow("Suggested action") {
                             Suffixes = {
-                                new AdwButton(label: "Send", onPressed: static () => { }) { Style = AdwButtonStyle.Suggested },
+                                new AdwButton(label: "Send", onPressed: static () => { }) {
+                                    Style = AdwButtonStyle.Suggested,
+                                },
                             },
                         },
                         new AdwSwitchRow(title: "A switch", value: true),

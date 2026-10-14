@@ -30,13 +30,17 @@ internal static class UiScrollProbe
 
     public static void Run(string[] args)
     {
-        int items = args.Length > 0 && int.TryParse(args[0], out int parsed) ? parsed : 2000;
+        int items = args.Length > 0 && int.TryParse(s: args[0], result: out int parsed)
+            ? parsed
+            : 2000;
 
-        Console.WriteLine($"UI scroll probe — virtualised list of {items:N0} rows, "
-                          + $"{ViewW:F0}×{ViewH:F0} viewport, {Frames:N0} frames");
-        Console.WriteLine(new string('─', 84));
+        Console.WriteLine(
+            $"UI scroll probe — virtualised list of {items:N0} rows, "
+            + $"{ViewW:F0}×{ViewH:F0} viewport, {Frames:N0} frames"
+        );
+        Console.WriteLine(new string(c: '─', count: 84));
 
-        var list = BuildList(items, withText: true);
+        var list = BuildList(items: items, withText: true);
 
         var paint = new PaintList();
         var snapshot = new PaintSnapshot();
@@ -58,40 +62,80 @@ internal static class UiScrollProbe
         // Each phase is measured in its own pass over the same scroll sequence, so a phase never
         // pays for the one before it in the same timer. Every pass runs the whole frame — only the
         // stopwatch moves — otherwise the tree drifts out of the state the next phase expects.
-        double scrollNs = Pass(list, paint, snapshot, c, Phase.Scroll);
-        double measureNs = Pass(list, paint, snapshot, c, Phase.Measure);
-        double layoutNs = Pass(list, paint, snapshot, c, Phase.Layout);
-        double paintNs = Pass(list, paint, snapshot, c, Phase.Paint);
-        double diffNs = Pass(list, paint, snapshot, c, Phase.Diff);
-        double hitNs = Pass(list, paint, snapshot, c, Phase.HitTest);
+        double scrollNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.Scroll
+        );
+        double measureNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.Measure
+        );
+        double layoutNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.Layout
+        );
+        double paintNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.Paint
+        );
+        double diffNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.Diff
+        );
+        double hitNs = Pass(
+            list: list,
+            paint: paint,
+            snapshot: snapshot,
+            c: c,
+            phase: Phase.HitTest
+        );
 
         double total = scrollNs + measureNs + layoutNs + paintNs + diffNs + hitNs;
 
-        Console.WriteLine($"{"phase",-22}{"µs/frame",12}{"% of 60Hz",12}{"% of 144Hz",12}{"% of frame",13}");
-        Console.WriteLine(new string('─', 84));
-        Row("scroll tick", scrollNs, total);
-        Row("measure", measureNs, total);
-        Row("layout", layoutNs, total);
-        Row("paint walk", paintNs, total);
-        Row("damage diff+capture", diffNs, total);
-        Row("hit test", hitNs, total);
-        Console.WriteLine(new string('─', 84));
-        Row("TOTAL", total, total);
+        Console.WriteLine(
+            $"{"phase",-22}{"µs/frame",12}{"% of 60Hz",12}{"% of 144Hz",12}{"% of frame",13}"
+        );
+        Console.WriteLine(new string(c: '─', count: 84));
+        Row(label: "scroll tick", ns: scrollNs, total: total);
+        Row(label: "measure", ns: measureNs, total: total);
+        Row(label: "layout", ns: layoutNs, total: total);
+        Row(label: "paint walk", ns: paintNs, total: total);
+        Row(label: "damage diff+capture", ns: diffNs, total: total);
+        Row(label: "hit test", ns: hitNs, total: total);
+        Console.WriteLine(new string(c: '─', count: 84));
+        Row(label: "TOTAL", ns: total, total: total);
         Console.WriteLine();
         Console.WriteLine($"paint commands/frame : {paint.Count}");
         Console.WriteLine();
-        Console.WriteLine(total / 1000f > 0.20 * 16_670f / 1000f * 1000f
-            ? "The C# frame pipeline is a real share of the budget — attack the hottest phase above."
-            : "The C# frame pipeline is a small share of the budget. If a real app is dropping\n"
-              + "frames while scrolling, the cost is NOT here — look at image decode/upload, the\n"
-              + "FFI submit, and the render graph + vsync block (see the render-thread section of\n"
-              + "docs/notes/parallelism-simd-and-atomics.md).");
+        Console.WriteLine(
+            total / 1000f > 0.20 * 16_670f / 1000f * 1000f
+                ? "The C# frame pipeline is a real share of the budget — attack the hottest phase above."
+                : "The C# frame pipeline is a small share of the budget. If a real app is dropping\n"
+                  + "frames while scrolling, the cost is NOT here — look at image decode/upload, the\n"
+                  + "FFI submit, and the render graph + vsync block (see the render-thread section of\n"
+                  + "docs/notes/parallelism-simd-and-atomics.md)."
+        );
 
         // ── Is `measure` text? ───────────────────────────────────────────────────
         // The same tree with each Label swapped for a SizedBox of the same footprint. Everything
         // else — row count, realisation churn, the Row/Column/Padding flex work — is identical, so
         // the delta is what text sizing costs on a scroll frame.
-        var textless = BuildList(items, withText: false);
+        var textless = BuildList(items: items, withText: false);
         var paint2 = new PaintList();
         var snap2 = new PaintSnapshot();
         for (int i = 0; i < 300; i++)
@@ -109,16 +153,23 @@ internal static class UiScrollProbe
         // machine's frequency drift land entirely on whichever ran second — the same mistake that
         // produced a retracted "-13%" elsewhere in this harness. Alternate them round by round.
         (double withText, double measureNoText) = PassPair(
-            a: list, aPaint: paint, aSnap: snapshot,
-            b: textless, bPaint: paint2, bSnap: snap2, c: c
+            a: list,
+            aPaint: paint,
+            aSnap: snapshot,
+            b: textless,
+            bPaint: paint2,
+            bSnap: snap2,
+            c: c
         );
         Console.WriteLine();
         Console.WriteLine("measure, with vs without Labels (same row count and layout work,");
         Console.WriteLine("interleaved round-by-round so clock drift hits both equally):");
         Console.WriteLine($"  with text    : {withText / 1000f,7:F2} µs");
         Console.WriteLine($"  without text : {measureNoText / 1000f,7:F2} µs");
-        Console.WriteLine($"  => text is {(withText - measureNoText) / withText * 100,5:F1}% of measure, "
-                          + $"{(withText - measureNoText) / total * 100,5:F1}% of the whole frame");
+        Console.WriteLine(
+            $"  => text is {(withText - measureNoText) / withText * 100,5:F1}% of measure, "
+            + $"{(withText - measureNoText) / total * 100,5:F1}% of the whole frame"
+        );
 
         // ── Warm cache vs cold ───────────────────────────────────────────────────
         // Everything above oscillates over a ~64-frame window, so the same rows — and the same
@@ -133,9 +184,11 @@ internal static class UiScrollProbe
         Console.WriteLine();
         Console.WriteLine("text cache, warm vs cold (monotonic scroll never revisits a row):");
         Console.WriteLine($"  warm (oscillating) : {withText / 1000f,7:F2} µs");
-        double cold = ColdPass(BuildList(items, withText: true), c, items);
+        double cold = ColdPass(list: BuildList(items: items, withText: true), c: c, items: items);
         Console.WriteLine($"  cold (monotonic)   : {cold / 1000f,7:F2} µs");
-        Console.WriteLine($"  => a never-seen-before row costs {cold / withText,4:F1}× a cached one to measure");
+        Console.WriteLine(
+            $"  => a never-seen-before row costs {cold / withText,4:F1}× a cached one to measure"
+        );
         Console.WriteLine("     (C#-side only — a live engine adds FFI + HarfBuzz on every miss)");
     }
 
@@ -185,31 +238,40 @@ internal static class UiScrollProbe
     private static ListView BuildList(int items, bool withText)
     {
         var list = new ListView(itemExtent: 120d);
-        list.SetBuilder(itemCount: items, itemBuilder: i => new Padding(
-            padding: EdgeInsets.All(8f),
-            child: new Row([
-                new ColoredBox(
-                    color: Color.Rgb(r: 40 + (i % 60), g: 44, b: 52),
-                    child: new SizedBox(width: 160f, height: 100f)
-                ),
-                new Padding(
-                    padding: EdgeInsets.All(12f),
-                    child: new Column(withText
-                        ? [new Label($"Item {i}"), new Label($"a subtitle for row {i}")]
-                        : [
-                            new SizedBox(width: 60f, height: 18f),
-                            new SizedBox(width: 150f, height: 18f),
-                        ])
-                ),
-            ])
-        ));
+        list.SetBuilder(
+            itemCount: items,
+            itemBuilder: i => new Padding(
+                padding: EdgeInsets.All(8f),
+                child: new Row(
+                    [
+                        new ColoredBox(
+                            color: Color.Rgb(r: 40 + (i % 60), g: 44, b: 52),
+                            child: new SizedBox(width: 160f, height: 100f)
+                        ),
+                        new Padding(
+                            padding: EdgeInsets.All(12f),
+                            child: new Column(
+                                withText
+                                    ? [new Label($"Item {i}"), new Label($"a subtitle for row {i}")]
+                                    : [
+                                        new SizedBox(width: 60f, height: 18f),
+                                        new SizedBox(width: 150f, height: 18f),
+                                    ]
+                            )
+                        ),
+                    ]
+                )
+            )
+        );
         return list;
     }
 
     private static void Row(string label, double ns, double total)
     {
         double us = ns / 1000f;
-        Console.WriteLine($"{label,-22}{us,12:F2}{us / 166.7,11:F2}%{us / 69.4,11:F2}%{ns / total * 100,12:F1}%");
+        Console.WriteLine(
+            $"{label,-22}{us,12:F2}{us / 166.7,11:F2}%{us / 69.4,11:F2}%{ns / total * 100,12:F1}%"
+        );
     }
 
     private enum Phase { Scroll, Measure, Layout, Paint, Diff, HitTest }
@@ -227,14 +289,31 @@ internal static class UiScrollProbe
         double bestA = double.MaxValue, bestB = double.MaxValue;
         for (int round = 0; round < 5; round++)
         {
-            bestA = Math.Min(val1: bestA, val2: OneRound(a, aPaint, aSnap, c));
-            bestB = Math.Min(val1: bestB, val2: OneRound(b, bPaint, bSnap, c));
+            bestA = Math.Min(
+                val1: bestA,
+                val2: OneRound(
+                    list: a,
+                    paint: aPaint,
+                    snap: aSnap,
+                    c: c
+                )
+            );
+            bestB = Math.Min(
+                val1: bestB,
+                val2: OneRound(
+                    list: b,
+                    paint: bPaint,
+                    snap: bSnap,
+                    c: c
+                )
+            );
         }
 
         return (bestA, bestB);
     }
 
-    private static double OneRound(ListView list, PaintList paint, PaintSnapshot snap, Constraints c)
+    private static double OneRound(ListView list, PaintList paint, PaintSnapshot snap,
+        Constraints c)
     {
         long acc = 0;
         int dir = 0;

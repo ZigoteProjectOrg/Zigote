@@ -37,8 +37,11 @@ public class ListViewRemountTests
             )!
             .SetValue(obj: app, value: new RepaintTracker());
         typeof(App)
-            .GetField("_overlays", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(app, new List<Widget>());
+            .GetField(
+                name: "_overlays",
+                bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic
+            )!
+            .SetValue(obj: app, value: new List<Widget>());
         return app;
     }
 
@@ -56,18 +59,19 @@ public class ListViewRemountTests
         protected override Widget Build(BuildContext context)
         {
             return new Watch(() =>
-            {
-                if (_builtFrom != Data)
                 {
-                    _builtFrom = Data;
-                    Fills++;
-                    _list.SetItems([]);
-                    for (var i = 0; i < Data; i++)
-                        _list.AddItem(new SizedBox(width: 10f, height: 20f));
-                }
+                    if (_builtFrom != Data)
+                    {
+                        _builtFrom = Data;
+                        Fills++;
+                        _list.SetItems([]);
+                        for (int i = 0; i < Data; i++)
+                            _list.AddItem(new SizedBox(width: 10f, height: 20f));
+                    }
 
-                return _list;
-            });
+                    return _list;
+                }
+            );
         }
     }
 
@@ -78,7 +82,12 @@ public class ListViewRemountTests
     private sealed class SwitcherPage : ComposedWidget
     {
         private readonly ListView _list = new() { ItemHeight = 20f };
-        private readonly AnimatedSwitcher _transition = new(SizedBox.Shrink(), 0.18f);
+
+        private readonly AnimatedSwitcher _transition = new(
+            child: SizedBox.Shrink(),
+            duration: 0.18f
+        );
+
         private int _builtFrom = -1;
         public int Data = 3;
         public int Fills;
@@ -88,26 +97,28 @@ public class ListViewRemountTests
         protected override Widget Build(BuildContext context)
         {
             return new Watch(() =>
-            {
-                if (_builtFrom != Data)
                 {
-                    _builtFrom = Data;
-                    Fills++;
-                    _list.SetItems([]);
-                    for (var i = 0; i < Data; i++)
-                        _list.AddItem(new SizedBox(width: 10f, height: 20f));
-                }
-
-                _transition.Child = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch)
-                {
-                    Children =
+                    if (_builtFrom != Data)
                     {
-                        new Padding(EdgeInsets.All(4f), new SizedBox(width: 10f, height: 10f)),
-                        new Expanded(_list)
+                        _builtFrom = Data;
+                        Fills++;
+                        _list.SetItems([]);
+                        for (int i = 0; i < Data; i++)
+                            _list.AddItem(new SizedBox(width: 10f, height: 20f));
                     }
-                };
-                return _transition;
-            });
+
+                    _transition.Child = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                        Children = {
+                            new Padding(
+                                padding: EdgeInsets.All(4f),
+                                child: new SizedBox(width: 10f, height: 10f)
+                            ),
+                            new Expanded(_list),
+                        },
+                    };
+                    return _transition;
+                }
+            );
         }
     }
 
@@ -123,8 +134,14 @@ public class ListViewRemountTests
         protected override Widget Build(BuildContext context)
         {
             return new Watch(() => SheetOpen.Value
-                ? new Column { Children = { new SizedBox(width: 10f, height: 10f), page } }
-                : new Column { Children = { page } });
+                ? new Column {
+                    Children = {
+                        new SizedBox(width: 10f, height: 10f),
+                        page,
+                    },
+                }
+                : new Column { Children = { page } }
+            );
         }
     }
 
@@ -138,7 +155,7 @@ public class ListViewRemountTests
         var c = new Constraints(maxWidth: 100f, maxHeight: 100f);
         root.Measure(c);
         root.Layout(Offset.Zero);
-        Assert.All(page.List.Items, r => Assert.True(r.Bounds.Height > 0f));
+        Assert.All(collection: page.List.Items, action: r => Assert.True(r.Bounds.Height > 0f));
 
         // Open the sheet: the wrapper Column is replaced, so the page is detached and re-attached.
         root.SheetOpen.Value = true;
@@ -149,7 +166,7 @@ public class ListViewRemountTests
         Assert.Equal(expected: 3, actual: page.List.Count);
         foreach (var row in page.List.Items)
             Assert.NotNull(row.Owner);
-        Assert.All(page.List.Items, r => Assert.True(r.Bounds.Height > 0f));
+        Assert.All(collection: page.List.Items, action: r => Assert.True(r.Bounds.Height > 0f));
     }
 
     [Fact]
@@ -164,7 +181,7 @@ public class ListViewRemountTests
             Assert.Same(expected: FakeOwner, actual: row.Owner);
 
         page.Layout(Offset.Zero);
-        Assert.All(page.List.Items, r => Assert.True(r.Bounds.Height > 0f));
+        Assert.All(collection: page.List.Items, action: r => Assert.True(r.Bounds.Height > 0f));
 
         page.Detach();
         page.Attach(owner: FakeOwner, parent: null);
@@ -182,7 +199,7 @@ public class ListViewRemountTests
 
         // The symptom: rows present and attached, but never measured/laid out, so nothing paints.
         Assert.True(condition: page.List.Bounds.Height > 0f, userMessage: "list has no bounds");
-        Assert.All(page.List.Items, r => Assert.True(r.Bounds.Height > 0f));
+        Assert.All(collection: page.List.Items, action: r => Assert.True(r.Bounds.Height > 0f));
     }
 
     [Fact]

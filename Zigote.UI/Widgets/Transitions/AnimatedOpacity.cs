@@ -83,5 +83,6 @@ public sealed class AnimatedOpacity : ImplicitlyAnimatedWidget
     ///     exactly as <see cref="Opacity" /> at zero — otherwise Tab lands on, and a screen reader
     ///     reads out, a panel nobody can see.
     /// </summary>
-    public override IEnumerable<Widget> GetVisibleChildren() => Current <= 0.001f ? [] : GetChildren();
+    public override IEnumerable<Widget> GetVisibleChildren() =>
+        Current <= 0.001f ? [] : GetChildren();
 }

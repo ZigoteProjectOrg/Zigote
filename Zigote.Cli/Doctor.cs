@@ -53,7 +53,10 @@ public static class Doctor
         var zig = Task.Run(CheckZig);
         var rust = Task.Run(CheckRust);
 
-        string? engineRoot = CommonVerb.FindEngineRoot(start: options.Directory, explicitPath: options.Engine);
+        string? engineRoot = CommonVerb.FindEngineRoot(
+            start: options.Directory,
+            explicitPath: options.Engine
+        );
         // Zig and Rust build the engine's native halves, and an app that restores
         // Zigote.Engine.runtime.<rid> never builds them — that is the whole point of shipping the
         // SDK as packages. So they are checked where they are needed (inside a checkout) and
@@ -72,10 +75,13 @@ public static class Doctor
         }
         else
         {
-            checks.Add(new Check(
-                Status: Status.Info,
-                Title: "Native toolchains: not needed — the engine arrives as a package (Zigote.Engine.runtime.<rid>)"
-            ));
+            checks.Add(
+                new Check(
+                    Status: Status.Info,
+                    Title:
+                    "Native toolchains: not needed — the engine arrives as a package (Zigote.Engine.runtime.<rid>)"
+                )
+            );
         }
 
         checks.Add(CheckSdkVersions(options.Directory));
@@ -133,7 +139,11 @@ public static class Doctor
             Console.WriteLine($"  {string.Join(separator: ' ', values: check.FixCommand!)}");
         Console.Write("Go ahead? [y/N] ");
         string? answer = Console.IsInputRedirected ? "n" : Console.ReadLine();
-        if (!string.Equals(a: answer?.Trim(), b: "y", comparisonType: StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                a: answer?.Trim(),
+                b: "y",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
         {
             Console.WriteLine("Nothing run.");
             return 1;
@@ -210,7 +220,8 @@ public static class Doctor
         engineRoot is null
             ? new Check(
                 Status: Status.Info,
-                Title: "Zigote SDK: packages (no checkout here — apps reference Zigote.UI by version)"
+                Title:
+                "Zigote SDK: packages (no checkout here — apps reference Zigote.UI by version)"
             )
             : new Check(Status: Status.Ok, Title: $"Zigote checkout ({engineRoot})");
 
@@ -254,11 +265,15 @@ public static class Doctor
         }
 
         return versions.Count switch {
-            0 => new Check(Status: Status.Info, Title: "Zigote SDK version: no app project here to read"),
+            0 => new Check(
+                Status: Status.Info,
+                Title: "Zigote SDK version: no app project here to read"
+            ),
             1 => new Check(Status: Status.Ok, Title: $"Zigote SDK {versions.Min} (this project)"),
             _ => new Check(
                 Status: Status.Fail,
-                Title: "Zigote packages disagree on a version: " + string.Join(", ", versions),
+                Title: "Zigote packages disagree on a version: " +
+                       string.Join(separator: ", ", values: versions),
                 Fix: "The managed packages and Zigote.Engine.runtime.<rid> must match, or the app "
                      + "throws an ABI mismatch at startup. Set them all from <ZigoteSdkVersion>."
             ),
@@ -315,8 +330,12 @@ public static class Doctor
             }
 
             using var stream = File.OpenRead(path);
-            string actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
-            if (!actual.Equals(value: file.Groups[3].Value, comparisonType: StringComparison.OrdinalIgnoreCase))
+            string actual =
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+            if (!actual.Equals(
+                    value: file.Groups[3].Value,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 mismatched.Add(name);
         }
 
@@ -324,7 +343,8 @@ public static class Doctor
             ? new Check(Status: Status.Ok, Title: $"Engine {version} ({commit}) — checksums match")
             : new Check(
                 Status: Status.Fail,
-                Title: $"Engine {version} ({commit}): " + string.Join(", ", mismatched) +
+                Title: $"Engine {version} ({commit}): " +
+                       string.Join(separator: ", ", values: mismatched) +
                        " does not match the published checksum",
                 Fix: "Delete bin/ and obj/ and rebuild. If it persists the restored package is "
                      + "damaged — clear it from ~/.nuget/packages and restore again."
@@ -342,11 +362,17 @@ public static class Doctor
     private static IEnumerable<string> ProjectFiles(string directory)
     {
         if (!Directory.Exists(directory)) yield break;
-        foreach (string project in Directory.EnumerateFiles(directory, "*.csproj")) yield return project;
+        foreach (string project in Directory.EnumerateFiles(
+                     path: directory,
+                     searchPattern: "*.csproj"
+                 )) yield return project;
         foreach (string child in Directory.EnumerateDirectories(directory))
         {
             if (Path.GetFileName(child).StartsWith('.')) continue;
-            foreach (string project in Directory.EnumerateFiles(child, "*.csproj")) yield return project;
+            foreach (string project in Directory.EnumerateFiles(
+                         path: child,
+                         searchPattern: "*.csproj"
+                     )) yield return project;
         }
     }
 
@@ -361,7 +387,12 @@ public static class Doctor
         if (engineRoot is null)
             return new Check(Status: Status.Info, Title: "Native engine: skipped (no checkout)");
 
-        string lib = Path.Combine(path1: engineRoot, path2: "Zigote.Engine", path3: "zig-out", path4: "lib");
+        string lib = Path.Combine(
+            path1: engineRoot,
+            path2: "Zigote.Engine",
+            path3: "zig-out",
+            path4: "lib"
+        );
         string name = OperatingSystem.IsWindows() ? "zigote.dll"
             : OperatingSystem.IsMacOS() ? "libzigote.dylib"
             : "libzigote.so";
@@ -370,7 +401,8 @@ public static class Doctor
             : new Check(
                 Status: Status.Warn,
                 Title: "Native engine: not built yet",
-                Fix: "The first `dotnet build` of any app builds it — expect that build to take a while."
+                Fix:
+                "The first `dotnet build` of any app builds it — expect that build to take a while."
             );
     }
 
@@ -380,7 +412,8 @@ public static class Doctor
         return version is null
             ? new Check(
                 Status: Status.Info,
-                Title: "Zig toolchain: not on PATH (only needed to rebuild the engine by hand; dotnet build drives it otherwise)"
+                Title:
+                "Zig toolchain: not on PATH (only needed to rebuild the engine by hand; dotnet build drives it otherwise)"
             )
             : new Check(Status: Status.Ok, Title: $"Zig toolchain ({version})");
     }
@@ -406,13 +439,17 @@ public static class Doctor
         }
 
         string? pinned = PinnedRustVersion();
-        if (pinned is not null && !version.Contains(value: pinned, comparisonType: StringComparison.Ordinal))
+        if (pinned is not null && !version.Contains(
+                value: pinned,
+                comparisonType: StringComparison.Ordinal
+            ))
         {
             return new Check(
                 Status: Status.Info,
                 Title: $"Rust toolchain ({version}) — pinned is {pinned}",
-                Fix: "rustup honours native/zigote-svg/rust-toolchain.toml; a distro-packaged cargo "
-                     + "ignores it. Install rustup to build with the pinned compiler."
+                Fix:
+                "rustup honours native/zigote-svg/rust-toolchain.toml; a distro-packaged cargo "
+                + "ignores it. Install rustup to build with the pinned compiler."
             );
         }
 
@@ -422,7 +459,10 @@ public static class Doctor
     /// <summary>The channel from native/zigote-svg/rust-toolchain.toml, or null.</summary>
     private static string? PinnedRustVersion()
     {
-        foreach (string dir in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        foreach (string dir in new[] {
+                     AppContext.BaseDirectory,
+                     Directory.GetCurrentDirectory(),
+                 })
         {
             for (var d = new DirectoryInfo(dir); d is not null; d = d.Parent)
             {
@@ -437,7 +477,10 @@ public static class Doctor
                 foreach (string line in File.ReadAllLines(candidate))
                 {
                     string t = line.Trim();
-                    if (!t.StartsWith("channel", StringComparison.Ordinal)) continue;
+                    if (!t.StartsWith(
+                            value: "channel",
+                            comparisonType: StringComparison.Ordinal
+                        )) continue;
 
                     int q = t.IndexOf('"');
                     int q2 = q >= 0 ? t.IndexOf(value: '"', startIndex: q + 1) : -1;
@@ -517,12 +560,14 @@ public static class Doctor
         return fallback is { } other
             ? new Check(
                 Status: Status.Fail,
-                Title: $"JDK 21: found only version {(other.Major > 0 ? other.Major : "?")} at {other.Home} — .NET for Android needs 21",
+                Title:
+                $"JDK 21: found only version {(other.Major > 0 ? other.Major : "?")} at {other.Home} — .NET for Android needs 21",
                 Fix: $"{install}; then point $JAVA_HOME at it."
             )
             : new Check(
                 Status: Status.Fail,
-                Title: "JDK 21: no full JDK found (a JRE or headless package without `jar` does not count)",
+                Title:
+                "JDK 21: no full JDK found (a JRE or headless package without `jar` does not count)",
                 Fix: install
             );
     }
@@ -556,11 +601,20 @@ public static class Doctor
         foreach (string root in (string[]) [
                      // JetBrains installs JDKs here (Toolbox, and Rider's own "Download JDK"), which on a
                      // machine whose distro ships only a headless package is the one full JDK present.
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".jdks"),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                         path2: ".jdks"
+                     ),
                      "/usr/lib/jvm",
                      "/Library/Java/JavaVirtualMachines",
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Eclipse Adoptium"),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                         path2: "Microsoft"
+                     ),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                         path2: "Eclipse Adoptium"
+                     ),
                  ])
         {
             if (!Directory.Exists(root)) continue;
@@ -575,7 +629,13 @@ public static class Doctor
 
     /// <summary>`jar` is the canary: JREs and headless builds lack it, full JDKs always have it.</summary>
     private static bool IsFullJdk(string home) =>
-        File.Exists(Path.Combine(path1: home, path2: "bin", path3: OperatingSystem.IsWindows() ? "jar.exe" : "jar"));
+        File.Exists(
+            Path.Combine(
+                path1: home,
+                path2: "bin",
+                path3: OperatingSystem.IsWindows() ? "jar.exe" : "jar"
+            )
+        );
 
     /// <summary>
     ///     Major version from the JDK's own <c>release</c> file (<c>JAVA_VERSION="21.0.5"</c>) —
@@ -590,12 +650,17 @@ public static class Doctor
             if (!File.Exists(release)) return 0;
             foreach (string line in File.ReadLines(release))
             {
-                if (!line.StartsWith(value: "JAVA_VERSION=", comparisonType: StringComparison.Ordinal)) continue;
+                if (!line.StartsWith(
+                        value: "JAVA_VERSION=",
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
                 var version = line.AsSpan("JAVA_VERSION=".Length).Trim('"');
                 // "1.8.0" is how the 8-era wrote itself; everything current leads with the major.
                 if (version.StartsWith("1.")) version = version[2..];
                 int dot = version.IndexOf('.');
-                return int.TryParse(dot < 0 ? version : version[..dot], out int major) ? major : 0;
+                return int.TryParse(s: dot < 0 ? version : version[..dot], result: out int major)
+                    ? major
+                    : 0;
             }
         }
         catch (IOException)
@@ -611,9 +676,24 @@ public static class Doctor
         foreach (string? candidate in (ReadOnlySpan<string?>) [
                      Environment.GetEnvironmentVariable("ANDROID_HOME"),
                      Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Android", "Sdk"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Android", "sdk"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Android", "Sdk"),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                         path2: "Android",
+                         path3: "Sdk"
+                     ),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                         path2: "Library",
+                         path3: "Android",
+                         path4: "sdk"
+                     ),
+                     Path.Combine(
+                         path1: Environment.GetFolderPath(
+                             Environment.SpecialFolder.LocalApplicationData
+                         ),
+                         path2: "Android",
+                         path3: "Sdk"
+                     ),
                  ])
         {
             if (candidate is { Length: > 0 } &&

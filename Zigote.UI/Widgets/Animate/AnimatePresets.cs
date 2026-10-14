@@ -93,8 +93,13 @@ public static class AnimatePresets
         TimeSpan? delay = null)
     {
         return widget.Chain()
-            .Fade(begin: 1f, end: 0f, duration: duration ?? 180.ms, delay: delay,
-                curve: Curves.EaseInCubic)
+            .Fade(
+                begin: 1f,
+                end: 0f,
+                duration: duration ?? 180.ms,
+                delay: delay,
+                curve: Curves.EaseInCubic
+            )
             .Scale(begin: 1f, end: 0.9f);
     }
 
@@ -103,7 +108,13 @@ public static class AnimatePresets
         TimeSpan? delay = null, float distance = 16f)
     {
         return widget.Chain()
-            .Fade(begin: 1f, end: 0f, duration: duration, delay: delay, curve: Curves.EaseInCubic)
+            .Fade(
+                begin: 1f,
+                end: 0f,
+                duration: duration,
+                delay: delay,
+                curve: Curves.EaseInCubic
+            )
             .Move(begin: Offset.Zero, end: new Offset(x: 0f, y: distance));
     }
 
@@ -114,15 +125,17 @@ public static class AnimatePresets
         TimeSpan? delay = null, float amount = 6f)
     {
         return widget.Chain()
-            .Shake(duration: duration ?? 400.ms, delay: delay, amount: new Offset(x: amount, y: 0f));
+            .Shake(
+                duration: duration ?? 400.ms,
+                delay: delay,
+                amount: new Offset(x: amount, y: 0f)
+            );
     }
 
     /// <summary>Rock back and forth — the same "no" as <see cref="Attention" />, in rotation.</summary>
     public static Animate Wobble(this Widget widget, TimeSpan? duration = null,
-        TimeSpan? delay = null, float amount = 0.02f)
-    {
-        return widget.Chain().Wiggle(duration: duration ?? 500.ms, delay: delay, amount: amount);
-    }
+        TimeSpan? delay = null, float amount = 0.02f) =>
+        widget.Chain().Wiggle(duration: duration ?? 500.ms, delay: delay, amount: amount);
 
     // ── Ambient loops ─────────────────────────────────────────────────────────
 
@@ -130,7 +143,12 @@ public static class AnimatePresets
     public static Animate Pulse(this Widget widget, TimeSpan? duration = null, float amount = 1.06f)
     {
         var a = widget.Chain()
-            .Scale(duration: duration ?? 900.ms, begin: 1f, end: amount, curve: Curves.EaseInOutSine);
+            .Scale(
+                duration: duration ?? 900.ms,
+                begin: 1f,
+                end: amount,
+                curve: Curves.EaseInOutSine
+            );
         a.Loop = true;
         a.LoopReverse = true;
         return a;
@@ -140,7 +158,12 @@ public static class AnimatePresets
     public static Animate Breathe(this Widget widget, TimeSpan? duration = null, float dim = 0.55f)
     {
         var a = widget.Chain()
-            .Fade(duration: duration ?? 1.seconds, begin: 1f, end: dim, curve: Curves.EaseInOutSine);
+            .Fade(
+                duration: duration ?? 1.seconds,
+                begin: 1f,
+                end: dim,
+                curve: Curves.EaseInOutSine
+            );
         a.Loop = true;
         a.LoopReverse = true;
         return a;
@@ -150,8 +173,12 @@ public static class AnimatePresets
     public static Animate Spin(this Widget widget, TimeSpan? duration = null, bool clockwise = true)
     {
         var a = widget.Chain()
-            .Rotate(duration: duration ?? 1.2.seconds, begin: 0f, end: clockwise ? 1f : -1f,
-                curve: Curves.Linear);
+            .Rotate(
+                duration: duration ?? 1.2.seconds,
+                begin: 0f,
+                end: clockwise ? 1f : -1f,
+                curve: Curves.Linear
+            );
         a.Loop = true;
         return a;
     }
@@ -171,7 +198,7 @@ public static class AnimatePresets
         var result = new List<Widget>();
         int index = 0;
         foreach (var child in children)
-            result.Add(build(child, stepped * index++));
+            result.Add(build(arg1: child, arg2: stepped * index++));
         return result;
     }
 }

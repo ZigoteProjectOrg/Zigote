@@ -43,7 +43,14 @@ public class LiquidGroupTests
     [Fact]
     public void GroupedPanesLayEveryLensBeforeAnyContent()
     {
-        var group = new LiquidGroup(new Row(spacing: 8f) { Children = { Pane(), Pane() } });
+        var group = new LiquidGroup(
+            new Row(spacing: 8f) {
+                Children = {
+                    Pane(),
+                    Pane(),
+                },
+            }
+        );
         string[] ops = Ops(group);
         Assert.Equal(expected: 2, actual: group.PaneCount);
         // Every shadow, then every lens, then the content: one run of glass, one capture.
@@ -56,7 +63,14 @@ public class LiquidGroupTests
     [Fact]
     public void LonePanesInterleaveLensAndContent()
     {
-        string[] ops = Ops(new Row(spacing: 8f) { Children = { Pane(), Pane() } });
+        string[] ops = Ops(
+            new Row(spacing: 8f) {
+                Children = {
+                    Pane(),
+                    Pane(),
+                },
+            }
+        );
         Assert.Equal(
             expected: ["Shadow", "LiquidGlass", "Rect", "Shadow", "LiquidGlass", "Rect"],
             actual: ops
@@ -183,15 +197,38 @@ public class LiquidPaneTests
     }
 
     [Theory]
-    [InlineData(0f, 1f, 1f, 1f, 0.10f)] // clear: white at the floor
-    [InlineData(1f, 0.1f, 0.2f, 0.3f, 0.9f)] // tinted: the tint itself
-    [InlineData(0.5f, 0.55f, 0.6f, 0.65f, 0.5f)] // halfway in colour and strength alike
+    [InlineData(
+        0f,
+        1f,
+        1f,
+        1f,
+        0.035f
+    )] // clear: white at the floor
+    [InlineData(
+        1f,
+        0.1f,
+        0.2f,
+        0.3f,
+        0.9f
+    )] // tinted: the tint itself
+    [InlineData(
+        0.5f,
+        0.55f,
+        0.6f,
+        0.65f,
+        0.4675f
+    )] // halfway in colour and strength alike
     public void TintedRunsFromWhiteHazeToTheTint(float tinted, float r, float g, float b, float a)
     {
         var lens = Lens(
             new LiquidPane {
                 Elevation = 0f,
-                Tint = new Color(r: 0.1f, g: 0.2f, b: 0.3f, a: 0.9f),
+                Tint = new Color(
+                    r: 0.1f,
+                    g: 0.2f,
+                    b: 0.3f,
+                    a: 0.9f
+                ),
                 Tinted = tinted,
                 Child = new SizedBox(width: 40f, height: 20f),
             }
@@ -199,31 +236,86 @@ public class LiquidPaneTests
         Assert.Equal(expected: r, actual: lens.ColorR, precision: 3);
         Assert.Equal(expected: g, actual: lens.ColorG, precision: 3);
         Assert.Equal(expected: b, actual: lens.ColorB, precision: 3);
-        Assert.Equal(expected: a, actual: lens.ColorA, precision: 3);
+        Assert.InRange(actual: lens.ColorA, low: a - 0.00001f, high: a + 0.00001f);
     }
 
     [Fact]
     public void BevelIsNeverMoreThanAFifthOfTheShorterSide()
     {
         // A tall capsule: the material's own rim.
-        var capsule = Lens(new LiquidPane { Elevation = 0f, Child = new SizedBox(width: 120f, height: 56f) });
+        var capsule = Lens(
+            new LiquidPane {
+                Elevation = 0f,
+                Child = new SizedBox(width: 120f, height: 56f),
+            }
+        );
         Assert.InRange(actual: capsule.BorderWidth, low: 4f, high: 9f);
 
         // A chip: capped by the shape, so the centre stays clear.
-        var chip = Lens(new LiquidPane { Elevation = 0f, Child = new SizedBox(width: 60f, height: 16f) });
+        var chip = Lens(
+            new LiquidPane {
+                Elevation = 0f,
+                Child = new SizedBox(width: 60f, height: 16f),
+            }
+        );
         Assert.InRange(actual: chip.BorderWidth, low: 1f, high: 3.2f);
     }
 
     [Fact]
     public void DefaultTintIsTheThemeHazeAtOneAndTheClearFloorAtZero()
     {
-        // No theme provider in scope: the dark default, whose haze is white at 0.14.
-        var regular = Lens(new LiquidPane { Elevation = 0f, Child = new SizedBox(width: 40f, height: 20f) });
-        Assert.Equal(expected: 0.14f, actual: regular.ColorA, precision: 3);
+        // No theme provider in scope: the dark default, whose haze is white at 0.012.
+        var regular = Lens(
+            new LiquidPane {
+                Elevation = 0f,
+                Child = new SizedBox(width: 40f, height: 20f),
+            }
+        );
+        Assert.Equal(expected: 0.012f, actual: regular.ColorA, precision: 3);
         Assert.Equal(expected: 1f, actual: regular.ColorR, precision: 3);
 
         var clear = Lens(LiquidPane.Clear(new SizedBox(width: 40f, height: 20f)));
-        Assert.Equal(expected: 0.10f, actual: clear.ColorA, precision: 3);
+        Assert.Equal(expected: 0.012f, actual: clear.ColorA, precision: 3);
         Assert.Equal(expected: 1f, actual: clear.ColorR, precision: 3);
+    }
+
+    [Fact]
+    public void ClearDoesNotAdaptWhileRegularAnchorsForItsForeground()
+    {
+        var pane = LiquidPane.Clear(new SizedBox(width: 120f, height: 56f));
+        // LineHeight is the debug view's projection of the glass command's Adapt field.
+        Assert.Equal(expected: 0f, actual: Lens(pane).LineHeight);
+        pane.Tinted = 1f;
+        Assert.True(Lens(pane).LineHeight < 0f); // default dark theme carries white ink
+        pane.Tint = Color.White;
+        Assert.True(Lens(pane).LineHeight > 0f); // explicit light family carries dark ink
+        pane.Tinted = 0f;
+        Assert.Equal(expected: 0f, actual: Lens(pane).LineHeight);
+    }
+
+    [Fact]
+    public void LiveMaterialChangesRetainASingleGroupedCapture()
+    {
+        var pane = LiquidPane.Regular(new SizedBox(width: 120f, height: 56f));
+        var group = new LiquidGroup(pane);
+        group.Measure(Constraints.Loose(width: 200, height: 100));
+        group.Layout(Offset.Zero);
+        foreach (float strength in new[] {
+                     0f,
+                     0.5f,
+                     1f,
+                     0f,
+                 })
+        {
+            pane.Tinted = strength;
+            var paint = new PaintList();
+            group.Paint(paint);
+            var lens = Assert.Single(
+                collection: paint.DebugCommands,
+                predicate: c => c.Kind == ZgPaintOp.LiquidGlass
+            );
+            Assert.Equal(expected: 1, actual: group.PaneCount);
+            Assert.Equal(expected: strength == 0f, actual: lens.LineHeight == 0f);
+        }
     }
 }

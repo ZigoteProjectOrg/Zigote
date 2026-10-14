@@ -45,18 +45,26 @@ public interface IRepoApi
 public class HttpFrameApiTests
 {
     private static HttpRunner StubRunner(string body = "ok") =>
-        new(new HttpRunnerOptions
-        {
-            BaseAddress = new Uri("https://example.test/"),
-            Transport = (_, _) => ValueTask.FromResult(HttpResult<HttpResponse>.Ok(
-                HttpResponse.FromBytes(HttpStatusCode.OK, [], Encoding.UTF8.GetBytes(body))))
-        });
+        new(
+            new HttpRunnerOptions {
+                BaseAddress = new Uri("https://example.test/"),
+                Transport = (_, _) => ValueTask.FromResult(
+                    HttpResult<HttpResponse>.Ok(
+                        HttpResponse.FromBytes(
+                            status: HttpStatusCode.OK,
+                            headers: [],
+                            body: Encoding.UTF8.GetBytes(body)
+                        )
+                    )
+                ),
+            }
+        );
 
     [Fact]
     public async Task Submit_then_poll_hands_back_the_body()
     {
         using var runner = StubRunner("hello");
-        using var queue = new FrameHttpQueue(runner, capacity: 4);
+        using var queue = new FrameHttpQueue(runner: runner, capacity: 4);
 
         var handle = queue.Submit(HttpRequest.Get("thing"));
         Assert.True(handle.IsValid);
@@ -64,22 +72,25 @@ public class HttpFrameApiTests
         string? text = null;
         for (int i = 0; i < 500 && text is null; i++)
         {
-            if (queue.TryTake(handle, out var outcome))
+            if (queue.TryTake(handle: handle, outcome: out var outcome))
             {
                 Assert.True(outcome.IsOk);
                 Assert.Equal(expected: HttpStatusCode.OK, actual: outcome.Status);
                 text = Encoding.UTF8.GetString(outcome.Body);
             }
             else
-            {
-                await Task.Delay(2, TestContext.Current.CancellationToken);
-            }
+                await Task.Delay(
+                    millisecondsDelay: 2,
+                    cancellationToken: TestContext.Current.CancellationToken
+                );
         }
 
         Assert.Equal(expected: "hello", actual: text);
 
         queue.Release(handle);
-        Assert.False(queue.TryTake(handle, out _)); // a released handle never answers again
+        Assert.False(
+            queue.TryTake(handle: handle, outcome: out _)
+        ); // a released handle never answers again
         Assert.Equal(expected: 0, actual: queue.InFlight);
     }
 
@@ -87,7 +98,7 @@ public class HttpFrameApiTests
     public void A_full_queue_refuses_rather_than_growing()
     {
         using var runner = StubRunner();
-        using var queue = new FrameHttpQueue(runner, capacity: 2);
+        using var queue = new FrameHttpQueue(runner: runner, capacity: 2);
 
         var spec = HttpRequest.Get("thing");
         Assert.True(queue.Submit(spec).IsValid);
@@ -99,49 +110,70 @@ public class HttpFrameApiTests
     public void Submit_poll_and_release_allocate_nothing()
     {
         using var runner = StubRunner();
-        using var queue = new FrameHttpQueue(runner, capacity: 8);
+        using var queue = new FrameHttpQueue(runner: runner, capacity: 8);
         var spec = HttpRequest.Get("thing");
 
-        AllocGuard.AssertZeroAlloc(() =>
-        {
-            var handle = queue.Submit(spec);
-            while (!queue.TryTake(handle, out _)) Thread.SpinWait(1);
-            queue.Cancel(handle);
-            queue.Release(handle);
-        }, warmup: 50, iterations: 200);
+        AllocGuard.AssertZeroAlloc(
+            iteration: () =>
+            {
+                var handle = queue.Submit(spec);
+                while (!queue.TryTake(handle: handle, outcome: out _)) Thread.SpinWait(1);
+                queue.Cancel(handle);
+                queue.Release(handle);
+            },
+            warmup: 50,
+            iterations: 200
+        );
     }
 
     [Fact]
     public async Task The_generated_client_binds_routes_queries_and_json()
     {
         HttpSpec? seen = null;
-        using var runner = new HttpRunner(new HttpRunnerOptions
-        {
-            BaseAddress = new Uri("https://example.test/"),
-            Transport = (spec, _) =>
-            {
-                seen = spec;
-                return ValueTask.FromResult(HttpResult<HttpResponse>.Ok(HttpResponse.FromBytes(
-                    HttpStatusCode.OK, [], Encoding.UTF8.GetBytes("""{"Name":"zigote","Stars":3}"""))));
+        using var runner = new HttpRunner(
+            new HttpRunnerOptions {
+                BaseAddress = new Uri("https://example.test/"),
+                Transport = (spec, _) =>
+                {
+                    seen = spec;
+                    return ValueTask.FromResult(
+                        HttpResult<HttpResponse>.Ok(
+                            HttpResponse.FromBytes(
+                                status: HttpStatusCode.OK,
+                                headers: [],
+                                body: Encoding.UTF8.GetBytes("""{"Name":"zigote","Stars":3}""")
+                            )
+                        )
+                    );
+                },
             }
-        });
+        );
 
-        var api = new RepoApiClient(runner, HttpTestJson.Default);
+        var api = new RepoApiClient(runner: runner, json: HttpTestJson.Default);
 
-        var repo = await api.GetAsync("Zigote Project", "zigote", TestContext.Current.CancellationToken);
-        Assert.Equal(expected: new Repo("zigote", 3), actual: repo.Value);
+        var repo = await api.GetAsync(
+            owner: "Zigote Project",
+            name: "zigote",
+            ct: TestContext.Current.CancellationToken
+        );
+        Assert.Equal(expected: new Repo(Name: "zigote", Stars: 3), actual: repo.Value);
         Assert.Equal(
             expected: "https://example.test/v1/repos/Zigote%20Project/zigote",
-            actual: seen!.ResolveUri(new Uri("https://example.test/")).AbsoluteUri);
+            actual: seen!.ResolveUri(new Uri("https://example.test/")).AbsoluteUri
+        );
 
-        await api.ListAsync(2, TestContext.Current.CancellationToken);
-        Assert.Equal(expected: "https://example.test/v1/repos?page=2",
-            actual: seen.ResolveUri(new Uri("https://example.test/")).AbsoluteUri);
+        await api.ListAsync(page: 2, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(
+            expected: "https://example.test/v1/repos?page=2",
+            actual: seen.ResolveUri(new Uri("https://example.test/")).AbsoluteUri
+        );
         Assert.Equal(expected: CacheMode.Bypass, actual: seen.Policy.EffectiveCache);
 
-        await api.SearchAsync(["engine", "2d"], TestContext.Current.CancellationToken);
-        Assert.Equal(expected: "https://example.test/v1/search?tags=engine&tags=2d",
-            actual: seen.ResolveUri(new Uri("https://example.test/")).AbsoluteUri);
+        await api.SearchAsync(tags: ["engine", "2d"], ct: TestContext.Current.CancellationToken);
+        Assert.Equal(
+            expected: "https://example.test/v1/search?tags=engine&tags=2d",
+            actual: seen.ResolveUri(new Uri("https://example.test/")).AbsoluteUri
+        );
         Assert.Equal(expected: TimeSpan.FromSeconds(5), actual: seen.Policy.EffectiveDeadline);
         Assert.Equal(expected: 1, actual: seen.Policy.EffectiveRetry.MaxAttempts);
     }

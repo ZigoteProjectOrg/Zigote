@@ -27,7 +27,7 @@ public static class Glass
     private static float AutoAdapt(ThemeData theme, Color tint, float tintStrength)
     {
         bool darkGlass = tintStrength >= 0.3f
-            ? tint.R * 0.299f + tint.G * 0.587f + tint.B * 0.114f < 0.5f
+            ? (tint.R * 0.299f) + (tint.G * 0.587f) + (tint.B * 0.114f) < 0.5f
             : theme.IsDark;
         return darkGlass ? -AdaptStrength : AdaptStrength;
     }

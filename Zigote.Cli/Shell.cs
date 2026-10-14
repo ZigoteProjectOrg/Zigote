@@ -34,7 +34,9 @@ internal static class Shell
         try
         {
             var start = new ProcessStartInfo(file) {
-                RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
             };
             foreach (string argument in arguments) start.ArgumentList.Add(argument);
             using var process = Process.Start(start);
@@ -50,7 +52,8 @@ internal static class Shell
         }
         catch (Exception)
         {
-            return null; // not installed, not on PATH — a question whose answer is legitimately "no"
+            return
+                null; // not installed, not on PATH — a question whose answer is legitimately "no"
         }
     }
 
@@ -98,7 +101,11 @@ internal static class Projects
     internal static string App(string root)
     {
         var candidates = Directory
-            .EnumerateFiles(path: root, searchPattern: "*.csproj", searchOption: SearchOption.TopDirectoryOnly)
+            .EnumerateFiles(
+                path: root,
+                searchPattern: "*.csproj",
+                searchOption: SearchOption.TopDirectoryOnly
+            )
             .Concat(
                 Directory
                     .EnumerateDirectories(root)
@@ -130,9 +137,17 @@ internal static class Projects
     internal static string? Head(string root, string suffix)
     {
         var heads = Directory
-            .EnumerateFiles(path: root, searchPattern: "*.csproj", searchOption: SearchOption.AllDirectories)
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .EnumerateFiles(
+                path: root,
+                searchPattern: "*.csproj",
+                searchOption: SearchOption.AllDirectories
+            )
+            .Where(p =>
+                !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+            )
+            .Where(p =>
+                !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+            )
             .Where(p => Path.GetFileNameWithoutExtension(p)
                 .EndsWith(value: suffix, comparisonType: StringComparison.Ordinal)
             )

@@ -159,9 +159,9 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         float dir = below ? -1f : 1f;
         float half = (ArrowW / 2f) + grow;
         Span<Offset> points = [
-            new Offset(x: cx - half, y: edge - (dir * sink)),
-            new Offset(x: cx, y: edge + (dir * (ArrowH + grow))),
-            new Offset(x: cx + half, y: edge - (dir * sink)),
+            new(x: cx - half, y: edge - (dir * sink)),
+            new(x: cx, y: edge + (dir * (ArrowH + grow))),
+            new(x: cx + half, y: edge - (dir * sink)),
         ];
         paint.AddPolygon(points: points, color: color);
     }
@@ -191,9 +191,23 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
             radius: AdwMetrics.PopoverRadius
         );
         var bg = AdwPalette.For(Theme).PopoverBg;
-        if (_arrow) PaintArrow(paint: paint, mr: mr, color: Theme.Border, grow: 1f, sink: 0f);
+        if (_arrow)
+            PaintArrow(
+                paint: paint,
+                mr: mr,
+                color: Theme.Border,
+                grow: 1f,
+                sink: 0f
+            );
         paint.AddBorder(bounds: mr, color: Theme.Border, radius: AdwMetrics.PopoverRadius);
-        if (_arrow) PaintArrow(paint: paint, mr: mr, color: bg, grow: 0f, sink: 1.5f);
+        if (_arrow)
+            PaintArrow(
+                paint: paint,
+                mr: mr,
+                color: bg,
+                grow: 0f,
+                sink: 1.5f
+            );
         PaintRows(paint: paint, mr: mr);
 
         if (slide) paint.PopTranslate();
@@ -501,7 +515,7 @@ internal sealed class AdwContentPopover : AdwPopoverBase
     public AdwContentPopover(Widget child, Rect anchor, App? app = null)
         : base(
             app: app ?? App.Active ??
-                 throw new InvalidOperationException("No active App to open the popover in."),
+            throw new InvalidOperationException("No active App to open the popover in."),
             anchor: anchor,
             arrow: true
         ) => _child = child;
@@ -534,7 +548,9 @@ internal sealed class AdwContentPopover : AdwPopoverBase
     {
         base.Layout(origin);
         var mr = PopupRect();
-        _child.Layout(new Offset(x: mr.X + AdwMetrics.PopoverPadding, y: mr.Y + AdwMetrics.PopoverPadding));
+        _child.Layout(
+            new Offset(x: mr.X + AdwMetrics.PopoverPadding, y: mr.Y + AdwMetrics.PopoverPadding)
+        );
     }
 
     protected override void PaintRows(PaintList paint, Rect mr) => _child.Paint(paint);
@@ -547,7 +563,9 @@ internal sealed class AdwContentPopover : AdwPopoverBase
     public override Widget? HitTest(Offset point)
     {
         if (base.HitTest(point) is null) return null;
-        return PopupRect().Contains(px: point.X, py: point.Y) ? _child.HitTest(point) ?? this : this;
+        return PopupRect().Contains(px: point.X, py: point.Y)
+            ? _child.HitTest(point) ?? this
+            : this;
     }
 
     public override void OnPointerDown(Offset point)

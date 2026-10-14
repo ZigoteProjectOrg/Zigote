@@ -27,30 +27,31 @@ public static class DedupMiddleware
         {
             // Only safe verbs, and only when the body cannot differ: two POSTs to one URL are two
             // different intentions even when they look identical.
-            if (!spec.Verb.IsCacheable() || spec.Policy.IsStreaming || spec.Body is not HttpBody.NoBody)
-                return await next(spec, ct).ConfigureAwait(false);
+            if (!spec.Verb.IsCacheable() || spec.Policy.IsStreaming ||
+                spec.Body is not HttpBody.NoBody)
+                return await next(spec: spec, ct: ct).ConfigureAwait(false);
 
-            string key = FlightKey(spec, baseAddress);
+            string key = FlightKey(spec: spec, baseAddress: baseAddress);
             var flight = new Flight();
-            var shared = inFlight.GetOrAdd(key, flight);
+            var shared = inFlight.GetOrAdd(key: key, value: flight);
 
-            if (ReferenceEquals(shared, flight))
+            if (ReferenceEquals(objA: shared, objB: flight))
             {
                 HttpResult<HttpResponse> raw;
                 try
                 {
-                    raw = await next(spec, ct).ConfigureAwait(false);
+                    raw = await next(spec: spec, ct: ct).ConfigureAwait(false);
                 }
                 catch (Exception e)
                 {
-                    inFlight.TryRemove(new KeyValuePair<string, Flight>(key, flight));
+                    inFlight.TryRemove(new KeyValuePair<string, Flight>(key: key, value: flight));
                     flight.Outcome.SetException(e);
                     throw;
                 }
 
                 // Removal first: after this, no new follower can see the flight. Anyone who did
                 // attach incremented Followers before awaiting, so reading it now tells the truth.
-                inFlight.TryRemove(new KeyValuePair<string, Flight>(key, flight));
+                inFlight.TryRemove(new KeyValuePair<string, Flight>(key: key, value: flight));
 
                 if (Volatile.Read(ref flight.Followers) == 0)
                 {
@@ -85,7 +86,7 @@ public static class DedupMiddleware
             // away, or this follower lost the registration race above. Either way the request is
             // still wanted, so run it — the leader owned the socket, not the intention.
             if (result.Error is HttpError.Canceled && !ct.IsCancellationRequested)
-                return await next(spec, ct).ConfigureAwait(false);
+                return await next(spec: spec, ct: ct).ConfigureAwait(false);
 
             return result;
         };

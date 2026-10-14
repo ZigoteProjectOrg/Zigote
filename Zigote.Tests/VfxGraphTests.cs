@@ -167,13 +167,17 @@ public class VfxGraphTests
             toPin: "in.init"
         );
 
-        var color = new GraphNode { DefinitionId = VfxNodeLibrary.ColorValue };
-        color.Properties["color"] = GraphValue.FromFloat4(
-            x: 0.1f,
-            y: 0.2f,
-            z: 0.3f,
-            w: 1f
-        );
+        var color = new GraphNode {
+            DefinitionId = VfxNodeLibrary.ColorValue,
+            Properties = {
+                ["color"] = GraphValue.FromFloat4(
+                    x: 0.1f,
+                    y: 0.2f,
+                    z: 0.3f,
+                    w: 1f
+                ),
+            },
+        };
         doc.Nodes.Add(color);
         doc.Edges.Add(
             new GraphEdge {

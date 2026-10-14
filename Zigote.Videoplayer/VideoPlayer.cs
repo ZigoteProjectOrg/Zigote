@@ -818,7 +818,8 @@ public sealed class VideoPlayer : IDisposable
         // there is no texture. Requiring one meant a decoder that starved right after its first
         // frame could never resume — the paused clock makes no later frame due, so none is
         // presented "this tick" again, and the player sat in Buffering for good.
-        bool haveVideo = !pipe.HasVideo || presentedThisTick || pipe.Presented || TextureHandle != 0;
+        bool haveVideo = !pipe.HasVideo || presentedThisTick || pipe.Presented ||
+                         TextureHandle != 0;
         if (!haveVideo) return false;
 
         if (pipe.AudioStreamId == 0 || _useWallClock || _audio is null) return true;
@@ -926,6 +927,7 @@ public sealed class VideoPlayer : IDisposable
 
         /// <summary>This run has shown at least one frame. Frame-loop thread only.</summary>
         public bool Presented;
+
         private readonly CancellationTokenSource _cts = new();
         private readonly StringBuilder _errors = new();
 

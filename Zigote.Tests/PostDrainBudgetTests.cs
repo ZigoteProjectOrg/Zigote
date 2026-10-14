@@ -29,10 +29,11 @@ public class PostDrainBudgetTests
         var app = FakeApp();
         var order = new List<int>();
         app.Post(() =>
-        {
-            order.Add(1);
-            app.Post(() => order.Add(3));
-        });
+            {
+                order.Add(1);
+                app.Post(() => order.Add(3));
+            }
+        );
         app.Post(() => order.Add(2));
 
         app.DrainPosted();
@@ -51,10 +52,11 @@ public class PostDrainBudgetTests
         {
             int n = i;
             app.Post(() =>
-            {
-                Thread.Sleep(2); // each callback alone spends the whole budget
-                order.Add(n);
-            });
+                {
+                    Thread.Sleep(2); // each callback alone spends the whole budget
+                    order.Add(n);
+                }
+            );
         }
 
         app.DrainPosted();
@@ -100,9 +102,12 @@ public class PostDrainBudgetTests
         var stats = app.LastPostDrain;
         Assert.Equal(expected: 1, actual: stats.Ran);
         Assert.Equal(expected: 1, actual: stats.Pending);
-        Assert.True(stats.SlowestMs >= 5, $"slowest {stats.SlowestMs}");
-        Assert.True(stats.ElapsedMs >= 5, $"elapsed {stats.ElapsedMs}");
-        Assert.True(stats.OldestWaitMs >= 3, $"waited {stats.OldestWaitMs}");
+        Assert.True(condition: stats.SlowestMs >= 5, userMessage: $"slowest {stats.SlowestMs}");
+        Assert.True(condition: stats.ElapsedMs >= 5, userMessage: $"elapsed {stats.ElapsedMs}");
+        Assert.True(
+            condition: stats.OldestWaitMs >= 3,
+            userMessage: $"waited {stats.OldestWaitMs}"
+        );
     }
 
     [Fact]

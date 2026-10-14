@@ -12,7 +12,8 @@ namespace Zigote.Tests;
 /// </summary>
 public class HttpFileTests
 {
-    private static readonly byte[] Content = Enumerable.Range(0, 1000).Select(i => (byte)i).ToArray();
+    private static readonly byte[] Content =
+        Enumerable.Range(start: 0, count: 1000).Select(i => (byte)i).ToArray();
 
     private sealed class RangeOrigin
     {
@@ -30,30 +31,48 @@ public class HttpFileTests
             // with the whole thing, and HttpFile is required to notice rather than splice.
             bool whole = !ServeRanges || range is null || (ifRange is not null && ifRange != ETag);
             if (whole)
-                return ValueTask.FromResult(HttpResult<HttpResponse>.Ok(HttpResponse.FromBytes(
-                    HttpStatusCode.OK, [new HeaderPair("ETag", ETag)], Content)));
+            {
+                return ValueTask.FromResult(
+                    HttpResult<HttpResponse>.Ok(
+                        HttpResponse.FromBytes(
+                            status: HttpStatusCode.OK,
+                            headers: [new HeaderPair(Name: "ETag", Value: ETag)],
+                            body: Content
+                        )
+                    )
+                );
+            }
 
-            var span = range!["bytes=".Length..].Split('-');
+            string[] span = range!["bytes=".Length..].Split('-');
             int start = int.Parse(span[0]);
             int end = span[1].Length == 0 ? Content.Length - 1 : int.Parse(span[1]);
-            end = Math.Min(end, Content.Length - 1);
+            end = Math.Min(val1: end, val2: Content.Length - 1);
 
-            return ValueTask.FromResult(HttpResult<HttpResponse>.Ok(HttpResponse.FromBytes(
-                HttpStatusCode.PartialContent,
-                [
-                    new HeaderPair("ETag", ETag),
-                    new HeaderPair("Content-Range", $"bytes {start}-{end}/{Content.Length}"),
-                    new HeaderPair("Accept-Ranges", "bytes")
-                ],
-                Content[start..(end + 1)])));
+            return ValueTask.FromResult(
+                HttpResult<HttpResponse>.Ok(
+                    HttpResponse.FromBytes(
+                        status: HttpStatusCode.PartialContent,
+                        headers: [
+                            new HeaderPair(Name: "ETag", Value: ETag),
+                            new HeaderPair(
+                                Name: "Content-Range",
+                                Value: $"bytes {start}-{end}/{Content.Length}"
+                            ),
+                            new HeaderPair(Name: "Accept-Ranges", Value: "bytes"),
+                        ],
+                        body: Content[start..(end + 1)]
+                    )
+                )
+            );
         }
     }
 
-    private static HttpRunner Runner(RangeOrigin origin) => new(new HttpRunnerOptions
-    {
-        BaseAddress = new Uri("https://assets.test/"),
-        Transport = origin.Send
-    });
+    private static HttpRunner Runner(RangeOrigin origin) => new(
+        new HttpRunnerOptions {
+            BaseAddress = new Uri("https://assets.test/"),
+            Transport = origin.Send,
+        }
+    );
 
     [Fact]
     public async Task Reads_the_footer_without_downloading_the_file()
@@ -61,16 +80,20 @@ public class HttpFileTests
         var origin = new RangeOrigin();
         using var runner = Runner(origin);
 
-        var opened = await HttpFile.OpenAsync(runner, HttpRequest.Get("big.bin"), blockSize: 100,
-            ct: TestContext.Current.CancellationToken);
+        var opened = await HttpFile.OpenAsync(
+            runner: runner,
+            spec: HttpRequest.Get("big.bin"),
+            blockSize: 100,
+            ct: TestContext.Current.CancellationToken
+        );
         await using var file = opened.Unwrap();
 
         Assert.Equal(expected: 1000, actual: file.Length);
         Assert.Equal(expected: "\"v1\"", actual: file.Validator);
 
-        file.Seek(-4, SeekOrigin.End);
+        file.Seek(offset: -4, origin: SeekOrigin.End);
         byte[] footer = new byte[4];
-        int read = await file.ReadAsync(footer, TestContext.Current.CancellationToken);
+        int read = await file.ReadAsync(buffer: footer, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(expected: 4, actual: read);
         Assert.Equal(expected: Content[996..], actual: footer);
@@ -83,14 +106,24 @@ public class HttpFileTests
         var origin = new RangeOrigin();
         using var runner = Runner(origin);
 
-        await using var file = (await HttpFile.OpenAsync(runner, HttpRequest.Get("big.bin"), blockSize: 100,
-            ct: TestContext.Current.CancellationToken)).Unwrap();
+        await using var file = (await HttpFile.OpenAsync(
+            runner: runner,
+            spec: HttpRequest.Get("big.bin"),
+            blockSize: 100,
+            ct: TestContext.Current.CancellationToken
+        )).Unwrap();
 
         byte[] buffer = new byte[10];
-        file.Seek(0, SeekOrigin.Begin);
-        await file.ReadExactlyAsync(buffer, TestContext.Current.CancellationToken);
-        file.Seek(50, SeekOrigin.Begin);
-        await file.ReadExactlyAsync(buffer, TestContext.Current.CancellationToken);
+        file.Seek(offset: 0, origin: SeekOrigin.Begin);
+        await file.ReadExactlyAsync(
+            buffer: buffer,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        file.Seek(offset: 50, origin: SeekOrigin.Begin);
+        await file.ReadExactlyAsync(
+            buffer: buffer,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(expected: Content[50..60], actual: buffer);
         Assert.Equal(expected: 2, actual: origin.Requests); // probe + one block covering both reads
@@ -102,14 +135,22 @@ public class HttpFileTests
         var origin = new RangeOrigin();
         using var runner = Runner(origin);
 
-        await using var file = (await HttpFile.OpenAsync(runner, HttpRequest.Get("big.bin"), blockSize: 100,
-            ct: TestContext.Current.CancellationToken)).Unwrap();
+        await using var file = (await HttpFile.OpenAsync(
+            runner: runner,
+            spec: HttpRequest.Get("big.bin"),
+            blockSize: 100,
+            ct: TestContext.Current.CancellationToken
+        )).Unwrap();
 
         origin.ETag = "\"v2\"";
-        file.Seek(500, SeekOrigin.Begin);
+        file.Seek(offset: 500, origin: SeekOrigin.Begin);
 
         await Assert.ThrowsAsync<IOException>(async () =>
-            await file.ReadExactlyAsync(new byte[10], TestContext.Current.CancellationToken));
+            await file.ReadExactlyAsync(
+                buffer: new byte[10],
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
     }
 
     [Fact]
@@ -118,8 +159,11 @@ public class HttpFileTests
         var origin = new RangeOrigin { ServeRanges = false };
         using var runner = Runner(origin);
 
-        var result = await HttpFile.OpenAsync(runner, HttpRequest.Get("big.bin"),
-            ct: TestContext.Current.CancellationToken);
+        var result = await HttpFile.OpenAsync(
+            runner: runner,
+            spec: HttpRequest.Get("big.bin"),
+            ct: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(expected: new HttpError.Policy(PolicyFault.Unsupported), actual: result.Error);
     }
@@ -129,22 +173,45 @@ public class HttpFileTests
     {
         var origin = new RangeOrigin();
         using var runner = Runner(origin);
-        string path = Path.Combine(Path.GetTempPath(), $"zigote-http-{Guid.NewGuid():N}.bin");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote-http-{Guid.NewGuid():N}.bin"
+        );
 
         try
         {
             // Pretend a previous attempt died after 400 bytes — with the validator it recorded,
             // which is what entitles the resume to append rather than start over.
-            await File.WriteAllBytesAsync(path + ".part", Content[..400], TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(path + ".part.validator", "\"v1\"", TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(
+                path: path + ".part",
+                bytes: Content[..400],
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            await File.WriteAllTextAsync(
+                path: path + ".part.validator",
+                contents: "\"v1\"",
+                cancellationToken: TestContext.Current.CancellationToken
+            );
 
-            var length = await HttpFile.DownloadAsync(runner, HttpRequest.Get("big.bin"), path,
-                ct: TestContext.Current.CancellationToken);
+            var length = await HttpFile.DownloadAsync(
+                runner: runner,
+                spec: HttpRequest.Get("big.bin"),
+                path: path,
+                ct: TestContext.Current.CancellationToken
+            );
 
             Assert.Equal(expected: 1000L, actual: length.Unwrap());
-            Assert.Equal(expected: Content,
-                actual: await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
-            Assert.Equal(expected: 1, actual: origin.Requests); // one ranged request for the remainder
+            Assert.Equal(
+                expected: Content,
+                actual: await File.ReadAllBytesAsync(
+                    path: path,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            );
+            Assert.Equal(
+                expected: 1,
+                actual: origin.Requests
+            ); // one ranged request for the remainder
         }
         finally
         {

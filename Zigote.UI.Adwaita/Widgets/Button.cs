@@ -251,7 +251,9 @@ public class AdwButton : ComposedWidget
         // .circular is icon-only in Adwaita, so the label is dropped from the content (it survives
         // as the accessible name) rather than allowed to size the square.
         _defaultContent = Content is null
-            ? new AdwButtonContent(iconName: IconName, label: Circular ? "" : Label) { IconShadow = IconShadow }
+            ? new AdwButtonContent(iconName: IconName, label: Circular ? "" : Label) {
+                IconShadow = IconShadow,
+            }
             : null;
         var content = Content ?? _defaultContent!;
 

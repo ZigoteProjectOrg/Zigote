@@ -400,10 +400,13 @@ public class AssetStreamingTests
         for (int i = 0; i < handles.Length; i++)
             handles[i] = m.Acquire(id: AssetId.New(), loader: loader);
 
-        PumpUntil<FakeAsset>(m: m, done: () => Array.TrueForAll(
-            array: handles,
-            match: h => h.IsLoaded
-        ));
+        PumpUntil<FakeAsset>(
+            m: m,
+            done: () => Array.TrueForAll(
+                array: handles,
+                match: h => h.IsLoaded
+            )
+        );
 
         Assert.All(collection: handles, action: h => Assert.True(h.IsLoaded));
         Assert.True(

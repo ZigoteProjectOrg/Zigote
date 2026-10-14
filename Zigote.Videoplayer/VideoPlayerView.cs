@@ -66,15 +66,24 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
     private AdwButton _speed = null!;
     private AnimatedOpacity _spinner = null!;
     private AnimatedOpacity _centre = null!;
-    private readonly Icon _centreIcon = new(MaterialIcons.PlayArrow) { Size = 40f, Color = Colors.White };
+
+    private readonly Icon _centreIcon = new(MaterialIcons.PlayArrow) {
+        Size = 40f,
+        Color = Colors.White,
+    };
+
     private AnimatedOpacity _holdPill = null!;
     private VideoGestureSurface _surface = null!;
     private Label _status = null!;
     private MediaSlider _volume = null!;
 
-    public VideoPlayerView(VideoPlayer player, VideoFit fit = VideoFit.Contain) : base(player) => _fit = fit;
+    public VideoPlayerView(VideoPlayer player, VideoFit fit = VideoFit.Contain) : base(player) =>
+        _fit = fit;
 
-    private VideoPlayerView(VideoPlayerView inline) : this(player: inline.Player, fit: VideoFit.Contain)
+    private VideoPlayerView(VideoPlayerView inline) : this(
+        player: inline.Player,
+        fit: VideoFit.Contain
+    )
     {
         _fullscreenOf = inline;
         AltText = inline.AltText;
@@ -120,37 +129,69 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
 
         var white = Colors.White;
         var dim = Colors.White.WithAlpha(0.7f);
-        _elapsed = new Label(text: "0:00", fontSize: 12f, color: white) { FontWeight = FontWeight.Bold };
-        _remaining = new Label(text: "0:00", fontSize: 12f, color: dim) { FontWeight = FontWeight.Bold };
+        _elapsed =
+            new Label(text: "0:00", fontSize: 12f, color: white) { FontWeight = FontWeight.Bold };
+        _remaining =
+            new Label(text: "0:00", fontSize: 12f, color: dim) { FontWeight = FontWeight.Bold };
         _status = new Label(text: "", fontSize: 12f, color: dim);
         _seek = new MediaSlider {
             OnChanged = OnScrub,
             HoverLabel = f => Clock(f * Player.Duration.TotalSeconds),
             SemanticsLabel = "Seek",
         };
-        _volume = new MediaSlider { OnChanged = OnVolume, SemanticsLabel = "Volume" };
-        _play = IconButton(icon: MaterialIcons.PlayArrow, label: "Play", onPressed: Refocus(Player.TogglePlayPause));
-        _mute = IconButton(icon: MaterialIcons.VolumeUp, label: "Mute", onPressed: Refocus(ToggleMute));
-        _speed = new AdwButton(label: "1×", onPressed: OpenSpeedMenu) { Style = AdwButtonStyle.Flat };
+        _volume = new MediaSlider {
+            OnChanged = OnVolume,
+            SemanticsLabel = "Volume",
+        };
+        _play = IconButton(
+            icon: MaterialIcons.PlayArrow,
+            label: "Play",
+            onPressed: Refocus(Player.TogglePlayPause)
+        );
+        _mute = IconButton(
+            icon: MaterialIcons.VolumeUp,
+            label: "Mute",
+            onPressed: Refocus(ToggleMute)
+        );
+        _speed = new AdwButton(label: "1×", onPressed: OpenSpeedMenu) {
+            Style = AdwButtonStyle.Flat,
+        };
         _pip = IconButton(
             icon: MaterialIcons.PictureInPictureAlt,
             label: "Picture in picture",
             onPressed: TogglePictureInPicture
         );
-        _fullscreen = IconButton(icon: MaterialIcons.Fullscreen, label: "Fullscreen", onPressed: ToggleFullscreen);
+        _fullscreen = IconButton(
+            icon: MaterialIcons.Fullscreen,
+            label: "Fullscreen",
+            onPressed: ToggleFullscreen
+        );
         _surface = new VideoGestureSurface(this);
 
-        var trailing = new Row(crossAxisAlignment: CrossAxisAlignment.Center, mainAxisSize: MainAxisSize.Min) {
-            Children = { _status, new SizedBox(8), _speed },
-        };
+        var trailing =
+            new Row(crossAxisAlignment: CrossAxisAlignment.Center, mainAxisSize: MainAxisSize.Min) {
+                Children = {
+                    _status,
+                    new SizedBox(8),
+                    _speed,
+                },
+            };
         if (AllowPictureInPicture) trailing.Children.Add(_pip);
         if (AllowFullscreen) trailing.Children.Add(_fullscreen);
 
         _panel = Pane(
             radius: 22f,
             child: new Padding(
-                padding: EdgeInsets.Only(left: 14f, top: 8f, right: 8f, bottom: 6f),
-                child: new Column(crossAxisAlignment: CrossAxisAlignment.Stretch, mainAxisSize: MainAxisSize.Min) {
+                padding: EdgeInsets.Only(
+                    left: 14f,
+                    top: 8f,
+                    right: 8f,
+                    bottom: 6f
+                ),
+                child: new Column(
+                    crossAxisAlignment: CrossAxisAlignment.Stretch,
+                    mainAxisSize: MainAxisSize.Min
+                ) {
                     Children = {
                         new Row(crossAxisAlignment: CrossAxisAlignment.Center, spacing: 10f) {
                             Children = {
@@ -180,7 +221,12 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
                 Alignment = Alignment.BottomCenter,
                 HeightFactor = 1f,
                 Child = new ConstrainedBox(
-                    constraints: new Constraints(minWidth: 0f, maxWidth: 720f, minHeight: 0f, maxHeight: float.PositiveInfinity),
+                    constraints: new Constraints(
+                        minWidth: 0f,
+                        maxWidth: 720f,
+                        minHeight: 0f,
+                        maxHeight: float.PositiveInfinity
+                    ),
                     child: _panel
                 ),
             }
@@ -199,7 +245,11 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
                     onPressed: Refocus(_surface.TogglePlay),
                     semantics: "Play"
                 )
-                : new Pressable { Child = Pane(child: centreBody, radius: 34f), OnPressed = Refocus(_surface.TogglePlay), SemanticsLabel = "Play" }
+                : new Pressable {
+                    Child = Pane(child: centreBody, radius: 34f),
+                    OnPressed = Refocus(_surface.TogglePlay),
+                    SemanticsLabel = "Play",
+                }
         );
 
         // Press-and-hold says why the video is suddenly fast.
@@ -212,8 +262,13 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
                     padding: EdgeInsets.Symmetric(horizontal: 16f, vertical: 7f),
                     child: new Row(mainAxisSize: MainAxisSize.Min, spacing: 6f) {
                         Children = {
-                            new Label(text: "2×", fontSize: 14f, color: Colors.White) { FontWeight = FontWeight.Bold },
-                            new Icon(MaterialIcons.FastForward) { Size = 18f, Color = Colors.White },
+                            new Label(text: "2×", fontSize: 14f, color: Colors.White) {
+                                FontWeight = FontWeight.Bold,
+                            },
+                            new Icon(MaterialIcons.FastForward) {
+                                Size = 18f,
+                                Color = Colors.White,
+                            },
                         },
                     }
                 )
@@ -232,9 +287,18 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
                         left: 0,
                         right: 0,
                         top: 16,
-                        child: new Align { Alignment = Alignment.TopCenter, HeightFactor = 1f, Child = _holdPill }
+                        child: new Align {
+                            Alignment = Alignment.TopCenter,
+                            HeightFactor = 1f,
+                            Child = _holdPill,
+                        }
                     ),
-                    new Positioned(left: 0, right: 0, bottom: 0, child: Controls),
+                    new Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Controls
+                    ),
                 },
             }
         );
@@ -277,7 +341,8 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
         _seek.SetBuffered(
             start: (float)Player.Progress,
             end: (float)Math.Clamp(
-                value: (Player.Position.Value.TotalSeconds + Player.Buffered.Value.TotalSeconds) / duration,
+                value: (Player.Position.Value.TotalSeconds + Player.Buffered.Value.TotalSeconds) /
+                       duration,
                 min: 0,
                 max: 1
             )
@@ -299,14 +364,19 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
             }
         );
         _spinner.Opacity = state is PlaybackState.Buffering or PlaybackState.Opening ? 1f : 0f;
-        bool showCentre = !playing && state is not PlaybackState.Opening and not PlaybackState.Failed && !InPictureInPicture;
+        bool showCentre = !playing &&
+                          state is not PlaybackState.Opening and not PlaybackState.Failed &&
+                          !InPictureInPicture;
         _centre.Opacity = showCentre ? 1f : 0f;
-        string centreGlyph = state == PlaybackState.Ended ? MaterialIcons.Replay : MaterialIcons.PlayArrow;
+        string centreGlyph = state == PlaybackState.Ended
+            ? MaterialIcons.Replay
+            : MaterialIcons.PlayArrow;
         if (_centreIcon.IconName != centreGlyph)
         {
             _centreIcon.IconName = centreGlyph;
             _centreIcon.MarkNeedsPaint();
         }
+
         _surface.MarkNeedsPaint(); // the centre play glyph follows the state
     }
 
@@ -334,7 +404,10 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
     private void SyncPip()
     {
         bool here = PictureInPicture.Current.Value == Player;
-        SetIcon(button: _pip, icon: here ? MaterialIcons.PictureInPicture : MaterialIcons.PictureInPictureAlt);
+        SetIcon(
+            button: _pip,
+            icon: here ? MaterialIcons.PictureInPicture : MaterialIcons.PictureInPictureAlt
+        );
         _surface.MarkNeedsPaint(); // the "playing in picture-in-picture" card
         SyncTransport(); // the centre button stays out of the way of that card
     }
@@ -458,10 +531,14 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
             );
         }
 
-        var loop = new AdwMenuItem(label: "Loop", onActivated: () => Player.Loop.Value = !Player.Loop.Value) {
-            Role = AdwMenuItemRole.Check,
-            Checked = Player.Loop.Value,
-        };
+        var loop =
+            new AdwMenuItem(
+                label: "Loop",
+                onActivated: () => Player.Loop.Value = !Player.Loop.Value
+            ) {
+                Role = AdwMenuItemRole.Check,
+                Checked = Player.Loop.Value,
+            };
         AdwMenuButton.Show(anchor: _speed.Bounds, sections: [items, [loop]], minWidth: 180f);
     }
 
@@ -552,7 +629,10 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
 
     public override void Paint(PaintList paint)
     {
-        var center = new Offset(x: Bounds.X + (Bounds.Width / 2f), y: Bounds.Y + (Bounds.Height / 2f));
+        var center = new Offset(
+            x: Bounds.X + (Bounds.Width / 2f),
+            y: Bounds.Y + (Bounds.Height / 2f)
+        );
 
         if (view.InPictureInPicture)
         {
@@ -560,12 +640,17 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
             Icons.Draw(
                 paint: paint,
                 glyph: MaterialIcons.PictureInPictureAlt,
-                box: new Rect(x: center.X - 24f, y: center.Y - 40f, width: 48f, height: 48f),
+                box: new Rect(
+                    x: center.X - 24f,
+                    y: center.Y - 40f,
+                    width: 48f,
+                    height: 48f
+                ),
                 color: Colors.White.WithAlpha(0.8f),
                 size: 40f
             );
             const string text = "Playing in picture-in-picture";
-            var size = Zigote.UI.TextShaping.TextMeasure.Measure(text: text, fontSize: 13f);
+            var size = UI.TextShaping.TextMeasure.Measure(text: text, fontSize: 13f);
             paint.AddText(
                 text: text,
                 baselineX: center.X - (size.Width / 2f),
@@ -582,11 +667,21 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
             float alpha = 1f - (t * t);
             float scale = 1f + (0.25f * t);
             var at = new Offset(x: Bounds.X + (Bounds.Width * _flashX), y: center.Y);
-            Disc(paint: paint, at: at, radius: 30f * scale, glyph: _flashGlyph, alpha: alpha);
+            Disc(
+                paint: paint,
+                at: at,
+                radius: 30f * scale,
+                glyph: _flashGlyph,
+                alpha: alpha
+            );
             if (_flashText is not null)
             {
                 paint.PushAlpha(alpha);
-                var size = Zigote.UI.TextShaping.TextMeasure.Measure(text: _flashText, fontSize: 13f, weight: FontWeight.Bold);
+                var size = UI.TextShaping.TextMeasure.Measure(
+                    text: _flashText,
+                    fontSize: 13f,
+                    weight: FontWeight.Bold
+                );
                 paint.AddText(
                     text: _flashText,
                     baselineX: at.X - (size.Width / 2f),
@@ -606,7 +701,12 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
     {
         paint.PushAlpha(alpha);
         paint.AddRect(
-            bounds: new Rect(x: at.X - radius, y: at.Y - radius, width: radius * 2f, height: radius * 2f),
+            bounds: new Rect(
+                x: at.X - radius,
+                y: at.Y - radius,
+                width: radius * 2f,
+                height: radius * 2f
+            ),
             color: Colors.Black.WithAlpha(0.5f),
             radius: radius
         );
@@ -614,7 +714,12 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
         Icons.Draw(
             paint: paint,
             glyph: glyph,
-            box: new Rect(x: at.X - radius, y: at.Y - radius, width: radius * 2f, height: radius * 2f),
+            box: new Rect(
+                x: at.X - radius,
+                y: at.Y - radius,
+                width: radius * 2f,
+                height: radius * 2f
+            ),
             color: Colors.White,
             size: glyphSize
         );
@@ -793,9 +898,12 @@ internal sealed class VideoGestureSurface(VideoPlayerView view) : Widget
             case KeyCode.P:
                 view.TogglePictureInPicture();
                 break;
-            case >= KeyCode.Digit1 and <= KeyCode.Digit0 when Player.Media.Value?.IsSeekable == true:
+            case >= KeyCode.Digit1 and <= KeyCode.Digit0
+                when Player.Media.Value?.IsSeekable == true:
                 // 1–9 jump to 10–90 %, 0 to the start — the number row as a chapter bar.
-                int tenth = scancode == (uint)KeyCode.Digit0 ? 0 : (int)(scancode - (uint)KeyCode.Digit1) + 1;
+                int tenth = scancode == (uint)KeyCode.Digit0
+                    ? 0
+                    : (int)(scancode - (uint)KeyCode.Digit1) + 1;
                 Player.Seek(Player.Duration * (tenth / 10.0));
                 view.ShowControls();
                 break;

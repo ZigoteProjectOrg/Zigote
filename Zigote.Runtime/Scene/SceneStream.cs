@@ -48,12 +48,18 @@ internal sealed class SceneStream
         int size = Unsafe.SizeOf<T>();
         // Every record must be a multiple of 8 or the native decoder rejects the batch; the Zig
         // side asserts the same thing at comptime, so this can only trip if the two disagree.
-        Debug.Assert(size % 8 == 0, $"scene op {kind} is {size} bytes, not a multiple of 8");
+        Debug.Assert(
+            condition: size % 8 == 0,
+            message: $"scene op {kind} is {size} bytes, not a multiple of 8"
+        );
 
         var span = Reserve(size);
         MemoryMarshal.Write(destination: span, value: in record);
         // The header is at offset 0 of every op (asserted on the Zig side).
-        var header = new ZgSceneOpHeader { Kind = (uint)kind, Size = (uint)size };
+        var header = new ZgSceneOpHeader {
+            Kind = (uint)kind,
+            Size = (uint)size,
+        };
         MemoryMarshal.Write(destination: span, value: in header);
     }
 
@@ -64,13 +70,19 @@ internal sealed class SceneStream
         float sx, float sy, float sz
     ) =>
         Write(
-            ZgSceneOp.Transform,
-            new ZgSceneTransform
-            {
+            kind: ZgSceneOp.Transform,
+            record: new ZgSceneTransform {
                 Node = node,
-                X = x, Y = y, Z = z,
-                Qx = qx, Qy = qy, Qz = qz, Qw = qw,
-                Sx = sx, Sy = sy, Sz = sz,
+                X = x,
+                Y = y,
+                Z = z,
+                Qx = qx,
+                Qy = qy,
+                Qz = qz,
+                Qw = qw,
+                Sx = sx,
+                Sy = sy,
+                Sz = sz,
             }
         );
 
@@ -80,20 +92,30 @@ internal sealed class SceneStream
         float intensity, float range, float innerAngle, float outerAngle
     ) =>
         Write(
-            ZgSceneOp.Light,
-            new ZgSceneLight
-            {
-                Node = node, Kind = kind, CastShadows = castShadows ? 1u : 0u,
-                R = r, G = g, B = b,
-                Intensity = intensity, Range = range,
-                InnerAngle = innerAngle, OuterAngle = outerAngle,
+            kind: ZgSceneOp.Light,
+            record: new ZgSceneLight {
+                Node = node,
+                Kind = kind,
+                CastShadows = castShadows ? 1u : 0u,
+                R = r,
+                G = g,
+                B = b,
+                Intensity = intensity,
+                Range = range,
+                InnerAngle = innerAngle,
+                OuterAngle = outerAngle,
             }
         );
 
     public void Camera(ulong node, float fovyDegrees, float near, float far) =>
         Write(
-            ZgSceneOp.Camera,
-            new ZgSceneCamera { Node = node, FovyDegrees = fovyDegrees, Near = near, Far = far }
+            kind: ZgSceneOp.Camera,
+            record: new ZgSceneCamera {
+                Node = node,
+                FovyDegrees = fovyDegrees,
+                Near = near,
+                Far = far,
+            }
         );
 
     /// <summary>
@@ -110,25 +132,47 @@ internal sealed class SceneStream
         float alphaCutoff, uint effect, uint alphaMode, bool doubleSided
     ) =>
         Write(
-            ZgSceneOp.Material,
-            new ZgSceneMaterial
-            {
+            kind: ZgSceneOp.Material,
+            record: new ZgSceneMaterial {
                 Node = node,
-                ColorR = colorR, ColorG = colorG, ColorB = colorB,
-                Metallic = metallic, Roughness = roughness,
-                Clearcoat = clearcoat, ClearcoatRoughness = clearcoatRoughness, Specular = specular,
-                EmissiveR = emissiveR, EmissiveG = emissiveG, EmissiveB = emissiveB,
-                Ior = ior, Transmission = transmission, OcclusionStrength = occlusionStrength,
-                AlphaCutoff = alphaCutoff, Effect = effect, AlphaMode = alphaMode,
+                ColorR = colorR,
+                ColorG = colorG,
+                ColorB = colorB,
+                Metallic = metallic,
+                Roughness = roughness,
+                Clearcoat = clearcoat,
+                ClearcoatRoughness = clearcoatRoughness,
+                Specular = specular,
+                EmissiveR = emissiveR,
+                EmissiveG = emissiveG,
+                EmissiveB = emissiveB,
+                Ior = ior,
+                Transmission = transmission,
+                OcclusionStrength = occlusionStrength,
+                AlphaCutoff = alphaCutoff,
+                Effect = effect,
+                AlphaMode = alphaMode,
                 DoubleSided = doubleSided ? 1u : 0u,
             }
         );
 
     public void Visibility(ulong node, bool visible) =>
-        Write(ZgSceneOp.Visibility, new ZgSceneVisibility { Node = node, Visible = visible ? 1u : 0u });
+        Write(
+            kind: ZgSceneOp.Visibility,
+            record: new ZgSceneVisibility {
+                Node = node,
+                Visible = visible ? 1u : 0u,
+            }
+        );
 
     public void Primitive(ulong node, uint primType) =>
-        Write(ZgSceneOp.Primitive, new ZgScenePrimitive { Node = node, PrimType = primType });
+        Write(
+            kind: ZgSceneOp.Primitive,
+            record: new ZgScenePrimitive {
+                Node = node,
+                PrimType = primType,
+            }
+        );
 
     /// <summary>Hand the batch to native and reset. A batch native rejects is dropped whole.</summary>
     public unsafe void Flush()

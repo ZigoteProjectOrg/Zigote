@@ -87,7 +87,8 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
 
     // Effective metrics. 32pt rows and a chevron inside them are a pointer rhythm; on a phone the
     // rows grow to a finger target and the per-level indent tightens so deep nodes keep their label.
-    private float RowH => _compact ? MathF.Max(x: RowHeight, y: AdwTouchMetrics.MinTarget) : RowHeight;
+    private float RowH =>
+        _compact ? MathF.Max(x: RowHeight, y: AdwTouchMetrics.MinTarget) : RowHeight;
 
     private float Indent => _compact ? MathF.Min(x: IndentPerLevel, y: 12f) : IndentPerLevel;
 

@@ -22,7 +22,8 @@ public sealed class DateTimePage : ComposedWidget
 
         return new GalleryPage(
             title: "Date & Time",
-            description: "A month at a glance, a clock you can spin, and both folded into a button or a row.",
+            description:
+            "A month at a glance, a clock you can spin, and both folded into a button or a row.",
             iconName: MaterialIcons.CalendarMonth
         ) {
             Children = {
@@ -39,14 +40,20 @@ public sealed class DateTimePage : ComposedWidget
                 ),
                 Demo.Titled(
                     title: "In a Button",
-                    description: "The compact form for a toolbar or a dialog: the value, and the picker on click.",
+                    description:
+                    "The compact form for a toolbar or a dialog: the value, and the picker on click.",
                     child: Demo.Stage(
                         Demo.Bar(
-                            new AdwDateButton(value: _date.Peek(), onChanged: d => _date.Value = d) {
+                            new AdwDateButton(
+                                value: _date.Peek(),
+                                onChanged: d => _date.Value = d
+                            ) {
                                 IsMarked = HasEvent,
                             },
                             new AdwTimeButton(value: _time.Peek(), onChanged: t => _time.Value = t),
-                            new Watch(() => Demo.Value($"{_date.Value:ddd d MMM} · {_time.Value:HH:mm}"))
+                            new Watch(() =>
+                                Demo.Value($"{_date.Value:ddd d MMM} · {_time.Value:HH:mm}")
+                            )
                         )
                     )
                 ),
@@ -57,7 +64,10 @@ public sealed class DateTimePage : ComposedWidget
                     "either can be forced, and minutes can step by five.",
                     child: Demo.Stage(
                         Demo.Bar(
-                            new AdwTimePicker(value: _time.Peek(), onChanged: t => _time.Value = t) {
+                            new AdwTimePicker(
+                                value: _time.Peek(),
+                                onChanged: t => _time.Value = t
+                            ) {
                                 Use24Hour = true,
                                 SemanticsLabel = "24-hour time",
                             },
@@ -81,7 +91,8 @@ public sealed class DateTimePage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "Rows",
+                    title: "Rows",
+                    description:
                     "A form in a boxed list. The end date cannot come before the start.",
                     new AdwDateRow(
                         title: "Starts",
@@ -92,16 +103,26 @@ public sealed class DateTimePage : ComposedWidget
                             if (_ends.Peek() < d) _ends.Value = d;
                         }
                     ),
-                    new AdwTimeRow(title: "At", value: _time.Peek(), onChanged: t => _time.Value = t) {
+                    new AdwTimeRow(
+                        title: "At",
+                        value: _time.Peek(),
+                        onChanged: t => _time.Value = t
+                    ) {
                         MinuteStep = 15,
                     },
-                    new Watch(() => new AdwDateRow(title: "Ends", value: _ends.Value, onChanged: d => _ends.Value = d) {
+                    new Watch(() =>
+                        new AdwDateRow(
+                            title: "Ends",
+                            value: _ends.Value,
+                            onChanged: d => _ends.Value = d
+                        ) {
                             MinDate = _starts.Value,
                         }
                     ),
                     new AdwButtonRow(
                         title: "Add to Calendar",
-                        onPressed: () => host?.Toast($"Added {AdwDateFormat.Medium(_starts.Peek())}")
+                        onPressed: () =>
+                            host?.Toast($"Added {AdwDateFormat.Medium(_starts.Peek())}")
                     )
                 ),
             },

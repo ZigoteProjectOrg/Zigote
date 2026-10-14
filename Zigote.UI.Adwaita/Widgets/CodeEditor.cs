@@ -92,7 +92,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     // Undo/redo: snapshot stacks of the whole document + caret/selection. Cleared when a new document
     // is loaded (SetTextInternal). See RecordEdit / Undo / Redo.
     private readonly List<DocSnapshot> _undo = [];
+
     private readonly List<VisualRow> _visualRows = [];
+
     // Multi-cursor: the primary caret lives in the _caret*/_anchor* fields, so everything written
     // for one caret keeps working untouched; the additional carets park here and ForEachCaret swaps
     // them through those fields one at a time.
@@ -111,7 +113,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     // Incremental find (⌘F): the query while the bar is open, null when closed. Typed text goes to
     // the query instead of the document.
     private string? _find;
-    private string? _findLabel; // "3/17" — rebuilt lazily after the query, selection or text changes
+
+    private string?
+        _findLabel; // "3/17" — rebuilt lazily after the query, selection or text changes
 
     // The whole-line text last put on the clipboard by a selection-less copy/cut; pasting that exact
     // text inserts it as a line above the caret rather than splitting the current line.
@@ -320,8 +324,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         var primary = Primary;
         _extra.Add(primary);
-        _extra.Sort(
-            static (a, b) =>
+        _extra.Sort(static (a, b) =>
             {
                 var (sa, sb) = (Range(a).Start, Range(b).Start);
                 return sa.Line != sb.Line ? sa.Line.CompareTo(sb.Line) : sa.Col.CompareTo(sb.Col);
@@ -461,11 +464,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         parts[^1] += _lines[e.Line][e.Col..];
         _lines.RemoveRange(index: s.Line, count: e.Line - s.Line + 1);
         _lines.InsertRange(index: s.Line, collection: parts);
-        MapCarets(p => !Before(a: e, b: p) // p strictly before e: untouched, or swallowed by the edit
-            ? Before(a: p, b: s) ? p : end
-            : p.Line == e.Line
-                ? (end.Line, end.Col + p.Col - e.Col)
-                : (p.Line + end.Line - e.Line, p.Col)
+        MapCarets(p =>
+            !Before(a: e, b: p) // p strictly before e: untouched, or swallowed by the edit
+                ? Before(a: p, b: s) ? p : end
+                : p.Line == e.Line
+                    ? (end.Line, end.Col + p.Col - e.Col)
+                    : (p.Line + end.Line - e.Line, p.Col)
         );
         return end;
     }
@@ -733,9 +737,21 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
             int limit = k == 0 ? from.Col : int.MaxValue;
             int last = -1;
-            for (int i = NextMatch(s: s, needle: needle, from: 0, wholeWord: wholeWord, cmp: cmp);
+            for (int i = NextMatch(
+                     s: s,
+                     needle: needle,
+                     from: 0,
+                     wholeWord: wholeWord,
+                     cmp: cmp
+                 );
                  i >= 0 && i < limit;
-                 i = NextMatch(s: s, needle: needle, from: i + 1, wholeWord: wholeWord, cmp: cmp))
+                 i = NextMatch(
+                     s: s,
+                     needle: needle,
+                     from: i + 1,
+                     wholeWord: wholeWord,
+                     cmp: cmp
+                 ))
                 last = i;
             if (last >= 0) return (l, last);
         }
@@ -829,7 +845,13 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         int primary = 0;
         for (int l = 0; l < _lines.Count; l++)
         {
-            for (int i = NextMatch(s: _lines[l], needle: needle, from: 0, wholeWord: wholeWord, cmp: cmp);
+            for (int i = NextMatch(
+                     s: _lines[l],
+                     needle: needle,
+                     from: 0,
+                     wholeWord: wholeWord,
+                     cmp: cmp
+                 );
                  i >= 0;
                  i = NextMatch(
                      s: _lines[l],
@@ -840,7 +862,14 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
                  ))
             {
                 if ((l, i) == s) primary = all.Count;
-                all.Add(new Sel(AnchorLine: l, AnchorCol: i, CaretLine: l, CaretCol: i + needle.Length));
+                all.Add(
+                    new Sel(
+                        AnchorLine: l,
+                        AnchorCol: i,
+                        CaretLine: l,
+                        CaretCol: i + needle.Length
+                    )
+                );
             }
         }
 
@@ -899,7 +928,13 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         int total = 0, current = 0;
         for (int l = 0; l < _lines.Count; l++)
         {
-            for (int i = NextMatch(s: _lines[l], needle: _find, from: 0, wholeWord: false, cmp: cmp);
+            for (int i = NextMatch(
+                     s: _lines[l],
+                     needle: _find,
+                     from: 0,
+                     wholeWord: false,
+                     cmp: cmp
+                 );
                  i >= 0;
                  i = NextMatch(
                      s: _lines[l],
@@ -1363,10 +1398,22 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             // The GNOME source-view scheme, drawn from the Adwaita accent hues in their standalone
             // (readable-as-text) variants so it holds in both appearances: orange keywords, teal
             // types, green strings, purple literals, and comments simply dimmed.
-            TokenKind.Keyword => AdwAccentColors.Standalone(accent: AdwAccent.Orange, dark: _theme.IsDark),
-            TokenKind.Type => AdwAccentColors.Standalone(accent: AdwAccent.Teal, dark: _theme.IsDark),
-            TokenKind.String => AdwAccentColors.Standalone(accent: AdwAccent.Green, dark: _theme.IsDark),
-            TokenKind.Number => AdwAccentColors.Standalone(accent: AdwAccent.Purple, dark: _theme.IsDark),
+            TokenKind.Keyword => AdwAccentColors.Standalone(
+                accent: AdwAccent.Orange,
+                dark: _theme.IsDark
+            ),
+            TokenKind.Type => AdwAccentColors.Standalone(
+                accent: AdwAccent.Teal,
+                dark: _theme.IsDark
+            ),
+            TokenKind.String => AdwAccentColors.Standalone(
+                accent: AdwAccent.Green,
+                dark: _theme.IsDark
+            ),
+            TokenKind.Number => AdwAccentColors.Standalone(
+                accent: AdwAccent.Purple,
+                dark: _theme.IsDark
+            ),
             TokenKind.Comment => _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity),
             _ => _theme.OnSurface,
         };
@@ -1629,7 +1676,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         // Other occurrences of the find query, or of a single-line selection.
         {
             var (s, e) = OrderedSelection();
-            ReadOnlySpan<char> needle = !string.IsNullOrEmpty(_find)
+            var needle = !string.IsNullOrEmpty(_find)
                 ? _find
                 : HasSelection && s.Line == e.Line
                     ? _lines[s.Line].AsSpan()[s.Col..e.Col]
@@ -1641,7 +1688,13 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
                 {
                     var row = _visualRows[visual];
                     string text = _lines[row.Line];
-                    for (int i = NextMatch(s: text, needle: needle, from: 0, wholeWord: false, cmp: cmp);
+                    for (int i = NextMatch(
+                             s: text,
+                             needle: needle,
+                             from: 0,
+                             wholeWord: false,
+                             cmp: cmp
+                         );
                          i >= 0 && i < row.End;
                          i = NextMatch(
                              s: text,
@@ -2336,7 +2389,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             return;
         }
 
-        if (c == '}' && _caretCol >= TabWidth && line.AsSpan(start: 0, length: _caretCol).IsWhiteSpace())
+        if (c == '}' && _caretCol >= TabWidth &&
+            line.AsSpan(start: 0, length: _caretCol).IsWhiteSpace())
         {
             Replace(s: (_caretLine, _caretCol - TabWidth), e: caret, text: "}");
             return;
@@ -2714,8 +2768,10 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         int start;
         if (toLineStart) start = 0;
-        else if (word) start = TextNavigation.WordBoundary(text: line, index: _caretCol, direction: -1);
-        else if (_caretCol < line.Length && Openers.IndexOf(line[_caretCol - 1]) is >= 0 and var o &&
+        else if (word)
+            start = TextNavigation.WordBoundary(text: line, index: _caretCol, direction: -1);
+        else if (_caretCol < line.Length &&
+                 Openers.IndexOf(line[_caretCol - 1]) is >= 0 and var o &&
                  line[_caretCol] == Closers[o])
         {
             // An empty pair goes as one.
@@ -2818,7 +2874,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         {
             (int a, int b) = runs[r];
             if (b < _lines.Count - 1) Splice(s: (a, 0), e: (b + 1, 0), text: "");
-            else if (a > 0) Splice(s: (a - 1, _lines[a - 1].Length), e: (b, _lines[b].Length), text: "");
+            else if (a > 0)
+                Splice(s: (a - 1, _lines[a - 1].Length), e: (b, _lines[b].Length), text: "");
             else Splice(s: (0, 0), e: (b, _lines[b].Length), text: "");
         }
 
@@ -2917,7 +2974,13 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         string line = _lines[_caretLine];
         var row = SoftWrap
             ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)]
-            : new VisualRow(Line: _caretLine, Start: 0, End: line.Length, Width: 0f, FastGrid: true);
+            : new VisualRow(
+                Line: _caretLine,
+                Start: 0,
+                End: line.Length,
+                Width: 0f,
+                FastGrid: true
+            );
         if (dir > 0)
         {
             _caretCol = row.End;
@@ -2939,9 +3002,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     {
         var edge = Primary;
         foreach (var x in _extra)
-        {
-            if (dir < 0 ? x.CaretLine < edge.CaretLine : x.CaretLine > edge.CaretLine) edge = x;
-        }
+            if (dir < 0 ? x.CaretLine < edge.CaretLine : x.CaretLine > edge.CaretLine)
+                edge = x;
 
         int row = RowForCaret(line: edge.CaretLine, col: edge.CaretCol);
         int target = row + dir;

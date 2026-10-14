@@ -51,12 +51,20 @@ public sealed class ButtonsPage : ComposedWidget
                     "Pills for status pages and dialogs, circles for icons, compact for toolbars.",
                     child: Demo.Stage(
                         Demo.Bar(
-                            new AdwButton(label: "Pill", onPressed: () => host.Toast("Pill")) { Pill = true },
-                            new AdwButton(label: "Pill Suggested", onPressed: () => host.Toast("Pill Suggested")) {
+                            new AdwButton(label: "Pill", onPressed: () => host.Toast("Pill")) {
+                                Pill = true,
+                            },
+                            new AdwButton(
+                                label: "Pill Suggested",
+                                onPressed: () => host.Toast("Pill Suggested")
+                            ) {
                                 Pill = true,
                                 Style = AdwButtonStyle.Suggested,
                             },
-                            new AdwButton(label: "Compact", onPressed: () => host.Toast("Compact")) { Compact = true },
+                            new AdwButton(
+                                label: "Compact",
+                                onPressed: () => host.Toast("Compact")
+                            ) { Compact = true },
                             new AdwButton(label: "Add", onPressed: () => host.Toast("Add")) {
                                 IconName = MaterialIcons.Add,
                                 Circular = true,

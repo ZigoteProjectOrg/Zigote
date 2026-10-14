@@ -17,11 +17,11 @@ public readonly record struct HeaderPair(string Name, string Value);
 public readonly record struct RoutePath(string Template, ImmutableArray<QueryParam> Bindings)
 {
     /// <summary>A path with nothing to bind.</summary>
-    public static RoutePath Literal(string path) => new(path, []);
+    public static RoutePath Literal(string path) => new(Template: path, Bindings: []);
 
     /// <summary>This path with <paramref name="name" /> bound to <paramref name="value" />.</summary>
     public RoutePath Bind(string name, string value) =>
-        this with { Bindings = Safe.Add(new QueryParam(name, value)) };
+        this with { Bindings = Safe.Add(new QueryParam(Name: name, Value: value)) };
 
     /// <summary>
     ///     The template with every <c>{placeholder}</c> replaced by its percent-encoded binding.
@@ -35,17 +35,20 @@ public readonly record struct RoutePath(string Template, ImmutableArray<QueryPar
         var sb = new StringBuilder(Template.Length + 16);
         for (int i = 0; i < Template.Length;)
         {
-            int open = Template.IndexOf('{', i);
+            int open = Template.IndexOf(value: '{', startIndex: i);
             if (open < 0)
             {
-                sb.Append(Template, i, Template.Length - i);
+                sb.Append(value: Template, startIndex: i, count: Template.Length - i);
                 break;
             }
 
-            int close = Template.IndexOf('}', open);
-            if (close < 0) throw new InvalidOperationException($"Unterminated placeholder in route '{Template}'.");
+            int close = Template.IndexOf(value: '}', startIndex: open);
+            if (close < 0)
+                throw new InvalidOperationException(
+                    $"Unterminated placeholder in route '{Template}'."
+                );
 
-            sb.Append(Template, i, open - i);
+            sb.Append(value: Template, startIndex: i, count: open - i);
             string name = Template[(open + 1)..close];
             sb.Append(Uri.EscapeDataString(Lookup(name)));
             i = close + 1;
@@ -55,13 +58,17 @@ public readonly record struct RoutePath(string Template, ImmutableArray<QueryPar
     }
 
     /// <summary>Bindings, tolerating a <c>default(RoutePath)</c>.</summary>
-    private ImmutableArray<QueryParam> Safe => Bindings.IsDefault ? ImmutableArray<QueryParam>.Empty : Bindings;
+    private ImmutableArray<QueryParam> Safe =>
+        Bindings.IsDefault ? ImmutableArray<QueryParam>.Empty : Bindings;
 
     private string Lookup(string name)
     {
         foreach (var b in Safe)
-            if (string.Equals(b.Name, name, StringComparison.Ordinal))
+        {
+            if (string.Equals(a: b.Name, b: name, comparisonType: StringComparison.Ordinal))
                 return b.Value;
+        }
+
         throw new InvalidOperationException($"Route '{Template}' has no binding for '{{{name}}}'.");
     }
 }
@@ -103,7 +110,10 @@ public sealed record HttpSpec
 
     /// <summary>A spec for <paramref name="verb" /> at <paramref name="template" />.</summary>
     public static HttpSpec For(HttpVerb verb, string template) =>
-        new() { Verb = verb, Path = RoutePath.Literal(template) };
+        new() {
+            Verb = verb,
+            Path = RoutePath.Literal(template),
+        };
 
     /// <summary>
     ///     The absolute URI this spec addresses. A path that already parses as absolute wins;
@@ -112,21 +122,34 @@ public sealed record HttpSpec
     public Uri ResolveUri(Uri? baseAddress)
     {
         string relative = RenderTarget();
-        if (Uri.TryCreate(relative, UriKind.Absolute, out var absolute) &&
+        if (Uri.TryCreate(
+                uriString: relative,
+                uriKind: UriKind.Absolute,
+                result: out var absolute
+            ) &&
             (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
             return absolute;
 
         if (baseAddress is null)
+        {
             throw new InvalidOperationException(
-                $"Route '{Path.Template}' is relative and the runner has no BaseAddress.");
+                $"Route '{Path.Template}' is relative and the runner has no BaseAddress."
+            );
+        }
 
-        return new Uri(baseAddress, relative.TrimStart('/'));
+        return new Uri(baseUri: baseAddress, relativeUri: relative.TrimStart('/'));
     }
 
     /// <summary>Whether the template itself carries the scheme, so no base address is involved.</summary>
     internal bool HasAbsoluteTemplate =>
-        Path.Template.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-        Path.Template.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        Path.Template.StartsWith(
+            value: "http://",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ) ||
+        Path.Template.StartsWith(
+            value: "https://",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
 
     /// <summary>
     ///     The host this request goes to, without allocating a <see cref="Uri" /> on the common
@@ -135,7 +158,9 @@ public sealed record HttpSpec
     ///     the pipeline's single biggest constant factor.
     /// </summary>
     internal string ResolveHost(Uri? baseAddress) =>
-        !HasAbsoluteTemplate && baseAddress is not null ? baseAddress.Host : ResolveUri(baseAddress).Host;
+        !HasAbsoluteTemplate && baseAddress is not null
+            ? baseAddress.Host
+            : ResolveUri(baseAddress).Host;
 
     /// <summary>
     ///     The identity of this request for cache and dedup: verb plus target. <c>Vary</c>-selected
@@ -152,12 +177,23 @@ public sealed record HttpSpec
     {
         string target = RenderTarget();
         if (HasAbsoluteTemplate || baseAddress is null)
-            return string.Concat(Verb.Token(), " ", target);
+            return string.Concat(str0: Verb.Token(), str1: " ", str2: target);
 
         string root = baseAddress.AbsoluteUri;
         return root.EndsWith('/')
-            ? string.Concat(Verb.Token(), " ", root, target.TrimStart('/'))
-            : string.Concat(Verb.Token(), " ", root, "/", target.TrimStart('/'));
+            ? string.Concat(
+                str0: Verb.Token(),
+                str1: " ",
+                str2: root,
+                str3: target.TrimStart('/')
+            )
+            : string.Concat(
+                Verb.Token(),
+                " ",
+                root,
+                "/",
+                target.TrimStart('/')
+            );
     }
 
     /// <summary>The rendered path plus the encoded query — everything after the authority.</summary>

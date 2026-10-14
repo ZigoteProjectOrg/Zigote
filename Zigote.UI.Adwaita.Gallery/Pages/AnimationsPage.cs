@@ -65,6 +65,7 @@ public sealed class AnimationsPage : ComposedWidget
 
     /// <summary>Live read-out, so the spring parameters can be seen doing something.</summary>
     private readonly Label _readout = new(text: "0.000", fontSize: 12f);
+
     private bool _alternate;
     private bool _clamp;
 

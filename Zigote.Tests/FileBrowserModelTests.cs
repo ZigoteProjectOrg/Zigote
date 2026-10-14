@@ -249,7 +249,9 @@ public class FileBrowserModelTests
         Assert.True(
             AdwFileBrowserModel.NaturalCompare(a: "Scene10", b: "scene9") > 0
         ); // case-insensitive
-        Assert.True(AdwFileBrowserModel.NaturalCompare(a: "a07", b: "a7") > 0); // zeros break the tie
+        Assert.True(
+            AdwFileBrowserModel.NaturalCompare(a: "a07", b: "a7") > 0
+        ); // zeros break the tie
         Assert.Equal(expected: 0, actual: AdwFileBrowserModel.NaturalCompare(a: "Same", b: "same"));
     }
 

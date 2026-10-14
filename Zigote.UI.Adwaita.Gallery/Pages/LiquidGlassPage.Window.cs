@@ -188,7 +188,7 @@ public sealed partial class LiquidGlassPage
         var palette = AdwPalette.For(_theme);
 
         var library = new AdwPreferencesGroup();
-        foreach (var (title, artist, length) in Songs)
+        foreach ((string title, string artist, string length) in Songs)
         {
             library.Rows.Add(
                 new AdwActionRow(title: title, subtitle: artist) {
@@ -294,7 +294,10 @@ public sealed partial class LiquidGlassPage
                         text: art.Artist,
                         style: AdwTypography.Caption,
                         color: palette.ViewFg
-                    ) { MaxLines = 1, Overflow = TextOverflow.Ellipsis },
+                    ) {
+                        MaxLines = 1,
+                        Overflow = TextOverflow.Ellipsis,
+                    },
                 },
             };
     }

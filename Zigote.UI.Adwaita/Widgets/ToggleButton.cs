@@ -71,13 +71,13 @@ public sealed class AdwToggleButton : ComposedWidget
             Enabled = Enabled,
             FocusRadius = radius,
             SemanticsLabel = Label,
+            OnPressed = () =>
+            {
+                Active = !Active;
+                OnToggled?.Invoke(Active);
+            },
+            OnStateChanged = () => _applyColors!.Invoke(),
         };
-        pressable.OnPressed = () =>
-        {
-            Active = !Active;
-            OnToggled?.Invoke(Active);
-        };
-        pressable.OnStateChanged = () => _applyColors!.Invoke();
 
         var fill = new FillTransition(c =>
             {

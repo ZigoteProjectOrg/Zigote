@@ -55,8 +55,13 @@ public sealed class GraphEditorPanel : Widget
         // Surface the compiled artifact to callers (e.g., apply a shader graph onto a material).
         if (onCompiled is not null)
         {
-            State.CompileChanged += () => { if (State.LastCompileResult?.Success == true) onCompiled(State.LastCompileResult.CompiledArtifact); };
-            if (State.LastCompileResult?.Success == true) onCompiled(State.LastCompileResult.CompiledArtifact);
+            State.CompileChanged += () =>
+            {
+                if (State.LastCompileResult?.Success == true)
+                    onCompiled(State.LastCompileResult.CompiledArtifact);
+            };
+            if (State.LastCompileResult?.Success == true)
+                onCompiled(State.LastCompileResult.CompiledArtifact);
         }
 
 
@@ -93,11 +98,24 @@ public sealed class GraphEditorPanel : Widget
             }
             : _split;
 
-        _canvas.SearchRequested += (wx, wy) => _search.Show(wx, wy, _canvas.SearchConnection);
+        _canvas.SearchRequested += (wx, wy) => _search.Show(
+            worldX: wx,
+            worldY: wy,
+            connection: _canvas.SearchConnection
+        );
         _search.VisibilityChanged += MarkNeedsLayout;
-        _search.Closed += () => { _canvas.CancelNodeSearch(); _app.RequestFocus(_canvas); };
+        _search.Closed += () =>
+        {
+            _canvas.CancelNodeSearch();
+            _app.RequestFocus(_canvas);
+        };
         _search.NodeChosen += (defId, wx, wy) =>
-            _canvas.AddNodeFromSearch(defId, _search.ChosenPinId, wx, wy);
+            _canvas.AddNodeFromSearch(
+                definitionId: defId,
+                pinId: _search.ChosenPinId,
+                worldX: wx,
+                worldY: wy
+            );
     }
 
     public GraphEditorState State { get; }
@@ -109,10 +127,7 @@ public sealed class GraphEditorPanel : Widget
         set
         {
             _split.Second = value ? _inspectorSide : null;
-            if (_inspectorButton is not null)
-            {
-                _inspectorButton.Style = Toggled(value);
-            }
+            if (_inspectorButton is not null) _inspectorButton.Style = Toggled(value);
             MarkNeedsLayout();
         }
     }
@@ -140,20 +155,25 @@ public sealed class GraphEditorPanel : Widget
         {
             int errCount =
                 result.Diagnostics.Count(d => d.Severity == GraphDiagnosticSeverity.Error);
-            _statusLabel.Text = result.Diagnostics.FirstOrDefault(d => d.Severity == GraphDiagnosticSeverity.Error)?.Message ?? $"{errCount} errors";
+            _statusLabel.Text =
+                result.Diagnostics.FirstOrDefault(d => d.Severity == GraphDiagnosticSeverity.Error)
+                    ?.Message ?? $"{errCount} errors";
             _statusLabel.Color = _theme.Error;
         }
     }
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
 
-    private static AdwButtonStyle Toggled(bool on) => on ? AdwButtonStyle.Suggested : AdwButtonStyle.Flat;
+    private static AdwButtonStyle Toggled(bool on) =>
+        on ? AdwButtonStyle.Suggested : AdwButtonStyle.Flat;
 
     private Widget BuildToolbar()
     {
         AdwButton Tb(string icon, string? label, Action? onClick) =>
             new(label: label ?? "", onPressed: onClick) {
-                IconName = icon, Style = AdwButtonStyle.Flat, Compact = true,
+                IconName = icon,
+                Style = AdwButtonStyle.Flat,
+                Compact = true,
             };
 
         var undoBtn = Tb(icon: Icons.Undo, label: null, onClick: () => State.Commands.Undo());
@@ -161,7 +181,11 @@ public sealed class GraphEditorPanel : Widget
         var frameBtn = Tb(
             icon: Icons.Fullscreen,
             label: "Frame all",
-            onClick: () => { _canvas.FrameAll(); _canvas.MarkNeedsLayout(); }
+            onClick: () =>
+            {
+                _canvas.FrameAll();
+                _canvas.MarkNeedsLayout();
+            }
         );
 
         // View toggles — the suggested style reflects the "on" state (minimap off by default; inspector on).
@@ -196,7 +220,11 @@ public sealed class GraphEditorPanel : Widget
                     MainAxisAlignment = MainAxisAlignment.Start,
                     CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
-                        Tb(Icons.Add, "Add node", () => _canvas.OpenNodeSearch()),
+                        Tb(
+                            icon: Icons.Add,
+                            label: "Add node",
+                            onClick: () => _canvas.OpenNodeSearch()
+                        ),
                         new SizedBox(12f),
                         undoBtn,
                         new SizedBox(2f),
@@ -245,10 +273,19 @@ public sealed class GraphEditorPanel : Widget
         if (_search.IsVisible)
         {
             var cb = _canvas.Bounds;
-            float width = MathF.Max(0f, MathF.Min(340f, cb.Width - 16f)), height = MathF.Max(0f, MathF.Min(420f, cb.Height - 16f));
-            float sx = Math.Clamp(_canvas.SearchAnchor.X, cb.X + 8f, MathF.Max(cb.X + 8f, cb.Right - width - 8f));
-            float sy = Math.Clamp(_canvas.SearchAnchor.Y, cb.Y + 8f, MathF.Max(cb.Y + 8f, cb.Bottom - height - 8f));
-            _search.Measure(Constraints.Tight(width, height));
+            float width = MathF.Max(x: 0f, y: MathF.Min(x: 340f, y: cb.Width - 16f)),
+                height = MathF.Max(x: 0f, y: MathF.Min(x: 420f, y: cb.Height - 16f));
+            float sx = Math.Clamp(
+                value: _canvas.SearchAnchor.X,
+                min: cb.X + 8f,
+                max: MathF.Max(x: cb.X + 8f, y: cb.Right - width - 8f)
+            );
+            float sy = Math.Clamp(
+                value: _canvas.SearchAnchor.Y,
+                min: cb.Y + 8f,
+                max: MathF.Max(x: cb.Y + 8f, y: cb.Bottom - height - 8f)
+            );
+            _search.Measure(Constraints.Tight(width: width, height: height));
             _search.Layout(new Offset(x: sx, y: sy));
         }
     }
@@ -273,7 +310,7 @@ public sealed class GraphEditorPanel : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (_search.IsVisible && !_search.Bounds.Contains(point.X, point.Y)) _search.Hide();
+        if (_search.IsVisible && !_search.Bounds.Contains(px: point.X, py: point.Y)) _search.Hide();
     }
 
     public override IEnumerable<Widget> GetChildren()

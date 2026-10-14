@@ -65,7 +65,8 @@ public abstract class VideoChrome : ComposedWidget
         _hideTicker = CreateTicker(_ => MaybeHide());
         // Stopping brings the controls back; starting doesn't — a seek or a speed change restarts the
         // pipeline through Buffering → Playing, and that is not activity worth surfacing them for.
-        Own(Player.State.Observe(() => OnUi(() =>
+        Own(
+            Player.State.Observe(() => OnUi(() =>
                     {
                         if (!Player.IsPlaying) ShowControls();
                     }
@@ -147,7 +148,11 @@ public abstract class VideoChrome : ComposedWidget
     protected Widget Pane(Widget child, float radius)
     {
         if (Glass) return LiquidPane.Clear(child: child, radius: radius, elevation: 4f);
-        return new DecoratedBox { Fill = Colors.Black.WithAlpha(0.55f), Radius = radius, Child = child };
+        return new DecoratedBox {
+            Fill = Colors.Black.WithAlpha(0.55f),
+            Radius = radius,
+            Child = child,
+        };
     }
 
     /// <summary>A flat round icon button, the only kind on-video chrome uses.</summary>

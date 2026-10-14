@@ -31,7 +31,7 @@ public readonly struct HttpResult<T>
     public HttpError? Error { get; }
 
     /// <summary>True when this carries a value.</summary>
-    [MemberNotNullWhen(false, nameof(Error))]
+    [MemberNotNullWhen(returnValue: false, member: nameof(Error))]
     public bool IsOk => Error is null;
 
     /// <summary>The value. Throws <see cref="InvalidOperationException" /> when this is an error — check <see cref="IsOk" />, or use <see cref="Unwrap" />.</summary>
@@ -40,10 +40,10 @@ public readonly struct HttpResult<T>
         : throw new InvalidOperationException($"HttpResult is an error: {Error.Message}");
 
     /// <summary>A success.</summary>
-    public static HttpResult<T> Ok(T value) => new(value, null);
+    public static HttpResult<T> Ok(T value) => new(value: value, error: null);
 
     /// <summary>A failure.</summary>
-    public static HttpResult<T> Fail(HttpError error) => new(default!, error);
+    public static HttpResult<T> Fail(HttpError error) => new(value: default!, error: error);
 
     /// <summary>Lets a method <c>return value;</c> where an <see cref="HttpResult{T}" /> is expected.</summary>
     public static implicit operator HttpResult<T>(T value) => Ok(value);
@@ -52,7 +52,8 @@ public readonly struct HttpResult<T>
     public static implicit operator HttpResult<T>(HttpError error) => Fail(error);
 
     /// <summary>Pattern-matching deconstruction: <c>if (result.TryGet(out var v, out var e))</c>.</summary>
-    public bool TryGet([MaybeNullWhen(false)] out T value, [MaybeNullWhen(true)] out HttpError error)
+    public bool TryGet([MaybeNullWhen(false)] out T value,
+        [MaybeNullWhen(true)] out HttpError error)
     {
         value = _value;
         error = Error;

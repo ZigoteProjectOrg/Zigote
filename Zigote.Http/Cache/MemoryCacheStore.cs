@@ -1,4 +1,3 @@
-
 namespace Zigote.Http.Cache;
 
 /// <summary>
@@ -42,7 +41,8 @@ public sealed class MemoryCacheStore(long budgetBytes = 32L * 1024 * 1024) : IHt
     {
         lock (_lock)
         {
-            if (!_index.TryGetValue(key, out var node)) return ValueTask.FromResult<CachedResponse?>(null);
+            if (!_index.TryGetValue(key: key, value: out var node))
+                return ValueTask.FromResult<CachedResponse?>(null);
             _lru.Remove(node);
             _lru.AddFirst(node);
             return ValueTask.FromResult<CachedResponse?>(node.Value.Response);
@@ -56,7 +56,7 @@ public sealed class MemoryCacheStore(long budgetBytes = 32L * 1024 * 1024) : IHt
         lock (_lock)
         {
             RemoveLocked(key);
-            var node = _lru.AddFirst(new Entry(key, entry, cost));
+            var node = _lru.AddFirst(new Entry(Key: key, Response: entry, Cost: cost));
             _index[key] = node;
             _bytes += cost;
 
@@ -86,7 +86,7 @@ public sealed class MemoryCacheStore(long budgetBytes = 32L * 1024 * 1024) : IHt
 
     private void RemoveLocked(string key)
     {
-        if (!_index.Remove(key, out var node)) return;
+        if (!_index.Remove(key: key, value: out var node)) return;
         _lru.Remove(node);
         _bytes -= node.Value.Cost;
     }

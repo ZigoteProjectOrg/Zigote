@@ -73,7 +73,8 @@ public sealed class MediaSlider : Widget
     /// <summary>Set the pale read-ahead span (track fractions).</summary>
     public void SetBuffered(float start, float end)
     {
-        if (MathF.Abs(start - _bufferStart) < 0.001f && MathF.Abs(end - _bufferEnd) < 0.001f) return;
+        if (MathF.Abs(start - _bufferStart) < 0.001f &&
+            MathF.Abs(end - _bufferEnd) < 0.001f) return;
         _bufferStart = start;
         _bufferEnd = end;
         MarkNeedsPaint();
@@ -115,7 +116,11 @@ public sealed class MediaSlider : Widget
             height: thickness
         );
 
-        paint.AddRect(bounds: Span(from: 0f, to: 1f), color: Colors.White.WithAlpha(0.35f), radius: thickness / 2f);
+        paint.AddRect(
+            bounds: Span(from: 0f, to: 1f),
+            color: Colors.White.WithAlpha(0.35f),
+            radius: thickness / 2f
+        );
         if (_bufferEnd > _bufferStart)
         {
             paint.AddRect(
@@ -126,13 +131,22 @@ public sealed class MediaSlider : Widget
         }
 
         if (_value > 0f)
-            paint.AddRect(bounds: Span(from: 0f, to: _value), color: Colors.White, radius: thickness / 2f);
+            paint.AddRect(
+                bounds: Span(from: 0f, to: _value),
+                color: Colors.White,
+                radius: thickness / 2f
+            );
 
         if (!hot) return;
 
         float tx = Bounds.X + (Bounds.Width * _value);
         paint.AddRect(
-            bounds: new Rect(x: tx - (Thumb / 2f), y: cy - (Thumb / 2f), width: Thumb, height: Thumb),
+            bounds: new Rect(
+                x: tx - (Thumb / 2f),
+                y: cy - (Thumb / 2f),
+                width: Thumb,
+                height: Thumb
+            ),
             color: Colors.White,
             radius: Thumb / 2f
         );
@@ -150,7 +164,12 @@ public sealed class MediaSlider : Widget
         );
         float by = Bounds.Y - BubbleGap - BubbleHeight + 6f;
         paint.AddRect(
-            bounds: new Rect(x: bx, y: by, width: bw, height: BubbleHeight),
+            bounds: new Rect(
+                x: bx,
+                y: by,
+                width: bw,
+                height: BubbleHeight
+            ),
             color: Colors.Black.WithAlpha(0.75f),
             radius: BubbleHeight / 2f
         );

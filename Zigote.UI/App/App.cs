@@ -100,7 +100,7 @@ public partial class App : IDisposable
 
     // Lazily-created root Background scope (see the Background property). Nullable so an app that
     // never touches it pays nothing — the frame loop skips RunFrame and the idle gate skips FrameIdle.
-    private Zigote.Core.Threading.Background? _background;
+    private Core.Threading.Background? _background;
 
     // Like _posted, but drained at the END of the frame — after event dispatch, layout and paint.
     private readonly ConcurrentQueue<Action>
@@ -124,6 +124,7 @@ public partial class App : IDisposable
 
     /// <summary>The open secondary OS windows of the main app (empty on a secondary). UI thread only.</summary>
     internal IReadOnlyList<App> SecondaryWindows => _secondaryWindows;
+
     private readonly List<Snackbar> _snackbars = [];
 
     private Widget? _capturedWidget;
@@ -173,15 +174,23 @@ public partial class App : IDisposable
     private float _tooltipTimer;
     private bool _vsync = true;
 
-    private App(App parent, string title, uint width, uint height, LayerOptions? layer = null, ulong outputId = 0, bool lockSurface = false)
+    private App(App parent, string title, uint width, uint height, LayerOptions? layer = null,
+        ulong outputId = 0, bool lockSurface = false)
     {
         ParentApp = parent;
         Title = title;
         Engine = parent.Engine;
         NativeWindow = lockSurface
-            ? Engine.CreateLockWindow(outputId, title) ?? throw new InvalidOperationException("lock surface unavailable")
+            ? Engine.CreateLockWindow(outputId: outputId, title: title) ??
+              throw new InvalidOperationException("lock surface unavailable")
             : layer is { } l
-                ? Engine.CreateLayerWindow(title: title, width: width, height: height, layer: l, outputId: outputId)
+                ? Engine.CreateLayerWindow(
+                    title: title,
+                    width: width,
+                    height: height,
+                    layer: l,
+                    outputId: outputId
+                )
                 : Engine.CreateWindow(title: title, width: width, height: height);
         Theme = parent.Theme;
         _lastTicks = _clock.ElapsedTicks;
@@ -694,8 +703,8 @@ public partial class App : IDisposable
     ///     the main app's scope (one UI thread, one drain). Created on first use; child scopes for a
     ///     screen come from <c>Background.Child</c>.
     /// </summary>
-    public Zigote.Core.Threading.Background Background =>
-        ParentApp?.Background ?? (_background ??= new Zigote.Core.Threading.Background(
+    public Core.Threading.Background Background =>
+        ParentApp?.Background ?? (_background ??= new Core.Threading.Background(
             toUi: Post,
             // An idle result queued from a worker must end a long idle wait, not ride it out.
             requestFrame: WakeIfWaiting
@@ -842,11 +851,25 @@ public partial class App : IDisposable
     ///     titlebar and no chrome strip: the content is the whole surface. Width/height 0 stretch
     ///     between the anchors on that axis.
     /// </summary>
-    public App CreateLayer(string title, LayerOptions layer, uint width = 0, uint height = 0, ulong outputId = 0)
+    public App CreateLayer(string title, LayerOptions layer, uint width = 0, uint height = 0,
+        ulong outputId = 0)
     {
         if (ParentApp is not null)
-            return ParentApp.CreateLayer(title: title, layer: layer, width: width, height: height, outputId: outputId);
-        var win = new App(parent: this, title: title, width: width, height: height, layer: layer, outputId: outputId);
+            return ParentApp.CreateLayer(
+                title: title,
+                layer: layer,
+                width: width,
+                height: height,
+                outputId: outputId
+            );
+        var win = new App(
+            parent: this,
+            title: title,
+            width: width,
+            height: height,
+            layer: layer,
+            outputId: outputId
+        );
         _secondaryWindows.Add(win);
         win.SuppressChromeStrip = true;
         win.TitleBarDragHeight = 0f;
@@ -859,8 +882,17 @@ public partial class App : IDisposable
     /// </summary>
     public App CreateLockSurface(string title, ulong outputId)
     {
-        if (ParentApp is not null) return ParentApp.CreateLockSurface(title: title, outputId: outputId);
-        var win = new App(parent: this, title: title, width: 1, height: 1, layer: null, outputId: outputId, lockSurface: true);
+        if (ParentApp is not null)
+            return ParentApp.CreateLockSurface(title: title, outputId: outputId);
+        var win = new App(
+            parent: this,
+            title: title,
+            width: 1,
+            height: 1,
+            layer: null,
+            outputId: outputId,
+            lockSurface: true
+        );
         _secondaryWindows.Add(win);
         win.SuppressChromeStrip = true;
         win.TitleBarDragHeight = 0f;
@@ -1079,8 +1111,10 @@ public partial class App : IDisposable
     // of the pointer, so "why did my click miss" is answered by the code that routes the click.
     internal Widget? HitTestAt(Offset point) => HitTestAll(point);
     internal Widget? HoveredWidget => _hoveredWidget;
+
     /// <summary>Where the pointer last was in this window, in layout points.</summary>
     public Offset PointerPosition => _mousePos;
+
     internal IReadOnlyList<Widget> Overlays => _overlays;
 
     /// <summary>
@@ -1143,7 +1177,9 @@ public partial class App : IDisposable
         float density = CaptureDensity(HostScale);
         width = (uint)MathF.Max(x: 1f, y: LayoutWidth * density);
         height = (uint)MathF.Max(x: 1f, y: LayoutHeight * density);
-        return SubmitLastFrame() ? Engine.CaptureUiTexture(width: width, height: height, scale: density) : 0;
+        return SubmitLastFrame()
+            ? Engine.CaptureUiTexture(width: width, height: height, scale: density)
+            : 0;
     }
 
     // Puts the last painted frame — root and overlays — back in the engine for a capture to render.
@@ -1189,9 +1225,9 @@ public partial class App : IDisposable
         if (!_posted.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
             Reactive.HasPendingDeferred || _background is { FrameIdle: false })
             return;
-        Volatile.Write(ref _inWaitEvents, true);
+        Volatile.Write(location: ref _inWaitEvents, value: true);
         Engine.WaitEvents(maxMs);
-        Volatile.Write(ref _inWaitEvents, false);
+        Volatile.Write(location: ref _inWaitEvents, value: false);
     }
 
     public void RequestPaint()
@@ -1355,10 +1391,10 @@ public partial class App : IDisposable
         if ((Hidden || _dropStreak >= DropsBeforeBackgroundCadence) && _secondaryWindows.Count == 0)
         {
             _idledInWait = true;
-            Volatile.Write(ref _inWaitEvents, true);
+            Volatile.Write(location: ref _inWaitEvents, value: true);
             using (Profiler.Scope("WaitEvents"))
                 Engine.WaitEvents(HiddenFrameIntervalMs);
-            Volatile.Write(ref _inWaitEvents, false);
+            Volatile.Write(location: ref _inWaitEvents, value: false);
         }
         else if (!_repaint.AnyDirty && !_needsLayout && !ContinuousUpdate &&
                  !ForceContinuousRender &&
@@ -1376,11 +1412,14 @@ public partial class App : IDisposable
             // Flag first, check second: a producer on another thread queues its work and then
             // wakes us only if it sees this flag. Checking before raising it would leave a window
             // where work lands unseen and the wait runs its whole (possibly long) timeout.
-            Volatile.Write(ref _inWaitEvents, true);
+            Volatile.Write(location: ref _inWaitEvents, value: true);
             if (!HasCrossThreadWork())
+            {
                 using (Profiler.Scope("WaitEvents"))
                     Engine.WaitEvents(IdleWaitTimeoutMs());
-            Volatile.Write(ref _inWaitEvents, false);
+            }
+
+            Volatile.Write(location: ref _inWaitEvents, value: false);
         }
         else
             _idleStreak = 0;
@@ -1445,11 +1484,16 @@ public partial class App : IDisposable
         // host-side half of Deliver.WhenIdle / Slice — without it they queue forever (previously
         // only the editor's loop drained its scope).
         if (_background is { } bg)
+        {
             using (Profiler.Scope("Loop.Background"))
+            {
                 bg.RunFrame(
                     budget: BackgroundBudget(),
                     maxDeferral: TimeSpan.FromMilliseconds(BackgroundMaxDeferralMs)
                 );
+            }
+        }
+
         _afterBackgroundTicks = _clock.ElapsedTicks;
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.

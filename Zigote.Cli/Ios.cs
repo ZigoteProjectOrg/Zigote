@@ -34,14 +34,18 @@ public static class Ios
         try
         {
             using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("devices", out var runtimes)) return [];
+            if (!document.RootElement.TryGetProperty(
+                    propertyName: "devices",
+                    value: out var runtimes
+                )) return [];
             foreach (var runtime in runtimes.EnumerateObject())
             foreach (var device in runtime.Value.EnumerateArray())
             {
                 string udid = device.GetProperty("udid").GetString() ?? "";
                 string name = device.GetProperty("name").GetString() ?? udid;
                 if (udid.Length == 0) continue;
-                simulators.Add(new Device.Attached(
+                simulators.Add(
+                    new Device.Attached(
                         Serial: udid,
                         State: "device",
                         Model: name,
@@ -76,14 +80,15 @@ public static class Ios
             create: "`zigote add ios` writes one."
         );
         string rid = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture
-                     is System.Runtime.InteropServices.Architecture.Arm64
+            is System.Runtime.InteropServices.Architecture.Arm64
             ? "iossimulator-arm64"
             : "iossimulator-x64";
 
         Console.WriteLine($"  {simulator.Model} (simulator)  →  {rid}");
         Console.WriteLine("  hot reload off on iOS: edits need another `zigote run`.");
         Console.WriteLine();
-        return Shell.Dotnet([
+        return Shell.Dotnet(
+            [
                 "build", head, "-t:Run",
                 "--configuration", release ? "Release" : "Debug",
                 $"--property:ZigTargetRid={rid}",

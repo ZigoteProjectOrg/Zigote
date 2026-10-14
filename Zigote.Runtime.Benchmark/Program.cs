@@ -62,7 +62,9 @@ internal static class Program
                 Physics2DProbe.Run(rest);
                 break;
             default:
-                Console.Error.WriteLine($"unknown probe '{probe}' — expected vfx, dispatch, physics2d, ui, all, performance or performance-window");
+                Console.Error.WriteLine(
+                    $"unknown probe '{probe}' — expected vfx, dispatch, physics2d, ui, all, performance or performance-window"
+                );
                 return 1;
         }
 

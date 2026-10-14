@@ -56,10 +56,11 @@ public class ViewTests
     {
         ThemeData? seen = null;
         var view = new View(ctx =>
-        {
-            seen = ThemeProvider.Of(ctx);
-            return new Label("hi");
-        });
+            {
+                seen = ThemeProvider.Of(ctx);
+                return new Label("hi");
+            }
+        );
 
         Mount(view);
 
@@ -70,13 +71,14 @@ public class ViewTests
     public void SignalChange_RebuildsTheSubtree()
     {
         var count = new Signal<int>(0);
-        var builds = 0;
+        int builds = 0;
         Label? label = null;
         var view = new View(_ =>
-        {
-            builds++;
-            return label = new Label($"{count.Value}");
-        });
+            {
+                builds++;
+                return label = new Label($"{count.Value}");
+            }
+        );
 
         var provider = Mount(view);
         Assert.Equal(expected: 1, actual: builds);
@@ -99,10 +101,11 @@ public class ViewTests
         ThemeData? seen = null;
         Label? label = null;
         var view = new View(ctx =>
-        {
-            seen = ThemeProvider.Of(ctx);
-            return label = new Label($"{count.Value}");
-        });
+            {
+                seen = ThemeProvider.Of(ctx);
+                return label = new Label($"{count.Value}");
+            }
+        );
 
         var provider = Mount(view);
         count.Value = 5;
@@ -123,10 +126,11 @@ public class ViewTests
     {
         var themes = new List<ThemeData>();
         var view = new View(ctx =>
-        {
-            themes.Add(ThemeProvider.Of(ctx));
-            return new Label("hi");
-        });
+            {
+                themes.Add(ThemeProvider.Of(ctx));
+                return new Label("hi");
+            }
+        );
 
         var provider = Mount(view);
         provider.Detach();
@@ -143,10 +147,11 @@ public class ViewTests
     public void ThemeRead_RegistersTheView_AsProviderDependent()
     {
         var view = new View(ctx =>
-        {
-            ThemeProvider.Of(ctx);
-            return new Label("x");
-        });
+            {
+                ThemeProvider.Of(ctx);
+                return new Label("x");
+            }
+        );
         var provider = Mount(view);
         Assert.False(view.NeedsBuild);
 
@@ -160,8 +165,8 @@ public class ViewTests
     [Fact]
     public void OnMounted_IsPairedWithTheMountPeriod()
     {
-        var started = 0;
-        var disposed = 0;
+        int started = 0;
+        int disposed = 0;
         var view = new View(_ => new Label("hi")) {
             OnMounted = () =>
             {
@@ -189,9 +194,10 @@ public class ViewTests
         // Align fills the constraints, so the View's bounds are 200×200 with hittable content only
         // in the 10×10 corner.
         var view = new View(_ => new Align(
-            alignment: Alignment.TopLeft,
-            child: new SizedBox(width: 10f, height: 10f)
-        ));
+                alignment: Alignment.TopLeft,
+                child: new SizedBox(width: 10f, height: 10f)
+            )
+        );
         Mount(view);
 
         // Inside the View's bounds but past its child: a plain ComposedWidget would answer `this`

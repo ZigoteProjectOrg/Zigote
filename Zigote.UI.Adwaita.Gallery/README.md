@@ -37,15 +37,15 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 
 ## Pages
 
-| Section        | Pages                                                                                                                   |
-|----------------|-------------------------------------------------------------------------------------------------------------------------|
-| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Toolbar & Panel · Bottom Sheet · Carousel · Image Grid   |
+| Section        | Pages                                                                                                                                                                  |
+|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Toolbar & Panel · Bottom Sheet · Carousel · Image Grid                                |
 | **Controls**   | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Value Editors · Date & Time · Chips & Badges · Shortcuts · Menus & Popovers |
-| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) · Data Table (100 000 rows) · Trees & Reordering                                         |
-| **Feedback**   | Banners · Toasts · Alert Dialogs · File Chooser · Spinner · Status Pages · Avatar                                                      |
-| **Layout**     | Clamp · Wrap Box · Masonry Grid · Adaptive                                                                                             |
-| **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                        |
-| **Zigote**     | Graphs · Code Editor · Reactivity · Concurrency · Drag and Drop                                                                                |
+| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) · Data Table (100 000 rows) · Trees & Reordering                                       |
+| **Feedback**   | Banners · Toasts · Alert Dialogs · File Chooser · Spinner · Status Pages · Avatar                                                                                      |
+| **Layout**     | Clamp · Wrap Box · Masonry Grid · Adaptive                                                                                                                             |
+| **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                                                        |
+| **Zigote**     | Graphs · Code Editor · Reactivity · Concurrency · Drag and Drop                                                                                                        |
 
 The last section is the framework rather than the design system: signals and computed values driving a live order total,
 background threads writing signals under a per-frame delivery budget, and draggable payloads with drop targets.
@@ -60,15 +60,25 @@ ZIGOTE_GALLERY_PAGE=Graphs dotnet run --project Zigote.UI.Adwaita.Gallery
 
 <img src="Screenshots/graphs.png" alt="Graphs playground with typed cables and live preview" width="820">
 
-The full-height editor uses `Zigote.Graphs.Editor` with a standalone demo domain; it does not depend on Palco or audio hardware.
+The full-height editor uses `Zigote.Graphs.Editor` with a standalone demo domain; it does not depend on Palco or audio
+hardware.
 
-- **Playground:** numeric, text, boolean, integer and enum controls feed a live Preview widget. Colored sockets distinguish numbers, strings and booleans. The Switch starts collapsed; Math's optional B input demonstrates a default value.
-- **Repair wiring:** a deliberately invalid string-to-number cable and a missing required input. Follow the on-screen instructions to restore the preview. Invalid drag targets also reject duplicates, occupied inputs and feedback loops with an explanation.
+- **Playground:** numeric, text, boolean, integer and enum controls feed a live Preview widget. Colored sockets
+  distinguish numbers, strings and booleans. The Switch starts collapsed; Math's optional B input demonstrates a default
+  value.
+- **Repair wiring:** a deliberately invalid string-to-number cable and a missing required input. Follow the on-screen
+  instructions to restore the preview. Invalid drag targets also reject duplicates, occupied inputs and feedback loops
+  with an explanation.
 - **Large graph:** 29 nodes for zoom, pan, frame-all, minimap, resizing and group selection.
 
-Drop an input or output cable onto empty canvas to search compatible nodes and add-and-connect in one undo step. **Shift+A / Space** opens general search; type, select with **↑/↓**, press **Enter**, or cancel with **Escape**. The **How to use** panel covers inline editing, fine adjustments, collapsing, context actions, deletion, selection, navigation and undo/redo. Inspector and Minimap are available in the editor toolbar.
+Drop an input or output cable onto empty canvas to search compatible nodes and add-and-connect in one undo step.
+**Shift+A / Space** opens general search; type, select with **↑/↓**, press **Enter**, or cancel with **Escape**. The
+**How to use** panel covers inline editing, fine adjustments, collapsing, context actions, deletion, selection,
+navigation and undo/redo. Inspector and Minimap are available in the editor toolbar.
 
-Switching or resetting examples discards their edits. Theme changes preserve the graph document; editor history restarts when the themed editor is rebuilt. The gallery's `--self-test` also checks evaluation, invalid wiring, repair/undo/redo and feedback rejection.
+Switching or resetting examples discards their edits. Theme changes preserve the graph document; editor history restarts
+when the themed editor is rebuilt. The gallery's `--self-test` also checks evaluation, invalid wiring, repair/undo/redo
+and feedback rejection.
 
 ## Appearance
 

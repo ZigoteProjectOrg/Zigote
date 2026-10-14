@@ -19,7 +19,7 @@ public enum CacheMode
     ///     Offline mode: serve from the cache or fail. A miss is
     ///     <see cref="PolicyFault.CacheMiss" />, never a silent network call.
     /// </summary>
-    CacheOnly
+    CacheOnly,
 }
 
 /// <summary>
@@ -41,10 +41,19 @@ public readonly record struct RetryPolicy(
 {
     /// <summary>Three attempts, 200 ms base, 5 s ceiling.</summary>
     public static RetryPolicy Default { get; } =
-        new(3, TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(5));
+        new(
+            MaxAttempts: 3,
+            BaseDelay: TimeSpan.FromMilliseconds(200),
+            MaxDelay: TimeSpan.FromSeconds(5)
+        );
 
     /// <summary>No retry.</summary>
-    public static RetryPolicy None { get; } = new(1, TimeSpan.Zero, TimeSpan.Zero, 0);
+    public static RetryPolicy None { get; } = new(
+        MaxAttempts: 1,
+        BaseDelay: TimeSpan.Zero,
+        MaxDelay: TimeSpan.Zero,
+        Jitter: 0
+    );
 
     /// <summary>Backoff before attempt <paramref name="attempt" /> (1-based; attempt 1 waits nothing).</summary>
     public TimeSpan Backoff(int attempt, Random random)
@@ -52,9 +61,12 @@ public readonly record struct RetryPolicy(
         if (attempt <= 1) return TimeSpan.Zero;
         var step = BaseDelay == default ? TimeSpan.FromMilliseconds(200) : BaseDelay;
         var max = MaxDelay == default ? TimeSpan.FromSeconds(5) : MaxDelay;
-        double ms = Math.Min(step.TotalMilliseconds * Math.Pow(2, attempt - 2), max.TotalMilliseconds);
+        double ms = Math.Min(
+            val1: step.TotalMilliseconds * Math.Pow(x: 2, y: attempt - 2),
+            val2: max.TotalMilliseconds
+        );
         double jitter = 1 - Jitter + (random.NextDouble() * Jitter * 2);
-        return TimeSpan.FromMilliseconds(ms * Math.Clamp(jitter, 0, 2));
+        return TimeSpan.FromMilliseconds(ms * Math.Clamp(value: jitter, min: 0, max: 2));
     }
 }
 
@@ -148,8 +160,7 @@ public sealed record RequestPolicy
     ///     runner applies once per request, so "set on the spec" always beats "set on the runner"
     ///     field by field rather than all-or-nothing.
     /// </summary>
-    public RequestPolicy WithFallback(RequestPolicy baseline) => new()
-    {
+    public RequestPolicy WithFallback(RequestPolicy baseline) => new() {
         Deadline = Deadline ?? baseline.Deadline,
         Retry = Retry ?? baseline.Retry,
         Cache = Cache ?? baseline.Cache,
@@ -157,6 +168,6 @@ public sealed record RequestPolicy
         Idempotent = Idempotent ?? baseline.Idempotent,
         Anonymous = Anonymous ?? baseline.Anonymous,
         Streaming = Streaming ?? baseline.Streaming,
-        Progress = Progress ?? baseline.Progress
+        Progress = Progress ?? baseline.Progress,
     };
 }

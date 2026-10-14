@@ -29,7 +29,8 @@ internal interface INekosApi
     /// <summary>A fresh random set from one category. The origin sends no cache headers, so this is never stored.</summary>
     [Get("{category}")]
     [Deadline(15)]
-    Task<HttpResult<ArtFeed>> FeedAsync(string category, int amount, CancellationToken ct = default);
+    Task<HttpResult<ArtFeed>>
+        FeedAsync(string category, int amount, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -53,16 +54,18 @@ internal static class ArtSource
     ///     carries no cache headers and answers randomly, so it is honestly refetched — a page per
     ///     app run, not per scroll. The per-host gate keeps a fast fling from stampeding the CDN.
     /// </summary>
-    public static readonly HttpRunner Http = new(new HttpRunnerOptions {
-        BaseAddress = new Uri("https://nekos.best/api/v2/"),
-        Cache = new FileCacheStore(FileCacheStore.DefaultDirectory),
-        MaxConcurrencyPerHost = 6,
-        OnLog = entry =>
-        {
-            if (entry.FromCache) Interlocked.Increment(ref CacheHits);
-            else if (entry.Status is not null) Interlocked.Increment(ref NetworkAnswers);
-        },
-    });
+    public static readonly HttpRunner Http = new(
+        new HttpRunnerOptions {
+            BaseAddress = new Uri("https://nekos.best/api/v2/"),
+            Cache = new FileCacheStore(FileCacheStore.DefaultDirectory),
+            MaxConcurrencyPerHost = 6,
+            OnLog = entry =>
+            {
+                if (entry.FromCache) Interlocked.Increment(ref CacheHits);
+                else if (entry.Status is not null) Interlocked.Increment(ref NetworkAnswers);
+            },
+        }
+    );
 
     private static readonly INekosApi Api = new NekosApiClient(runner: Http, json: ArtJson.Default);
 
@@ -125,26 +128,34 @@ internal static class ArtSource
     ///     UI thread; the runner's dedup and per-host gate mean a hundred of these in flight is a
     ///     hundred tasks, not a hundred sockets.
     /// </summary>
-    public static async Task<HttpResult<ArtPiece[]>> FetchPageAsync(int page, CancellationToken ct = default)
+    public static async Task<HttpResult<ArtPiece[]>> FetchPageAsync(int page,
+        CancellationToken ct = default)
     {
         // The endpoint answers with a fresh random set every call and says nothing about caching,
         // so nothing pretends otherwise: each page is fetched once per run (the grid keeps what it
         // got), and a restart asks again. The pictures those answers point at are the cacheable
         // part, and the runner's disk cache handles them by the origin's own rules.
         string category = Categories[page % Categories.Length];
-        var result = await Api.FeedAsync(category: category, amount: PageSize, ct: ct).ConfigureAwait(false);
+        var result = await Api.FeedAsync(category: category, amount: PageSize, ct: ct)
+            .ConfigureAwait(false);
         return result.Map(static feed => (feed.Results ?? [])
             .Where(static item => item.Url is not null)
-            .Select(static item => new ArtPiece(Url: item.Url!, Artist: item.ArtistName ?? "Unknown artist"))
-            .ToArray());
+            .Select(static item => new ArtPiece(
+                    Url: item.Url!,
+                    Artist: item.ArtistName ?? "Unknown artist"
+                )
+            )
+            .ToArray()
+        );
     }
 
     /// <summary>
     ///     The picture's original bytes, for the clipboard. The tile already fetched them, so this
     ///     is the disk cache answering — a copy costs a file read, not a round trip.
     /// </summary>
-    public static ValueTask<HttpResult<byte[]>> BytesAsync(ArtPiece piece, CancellationToken ct = default) =>
-        Http.BytesAsync(HttpRequest.Get(piece.Url), ct);
+    public static ValueTask<HttpResult<byte[]>> BytesAsync(ArtPiece piece,
+        CancellationToken ct = default) =>
+        Http.BytesAsync(spec: HttpRequest.Get(piece.Url), ct: ct);
 
     /// <summary>
     ///     Saves the original to the Downloads folder. This is <see cref="HttpFile.DownloadAsync" />:
@@ -158,19 +169,31 @@ internal static class ArtSource
     {
         // The URL came off the network: only its last segment is used, and only if it is a plain
         // file name — nothing in a feed answer gets to pick a directory.
-        string name = Uri.TryCreate(piece.Url, UriKind.Absolute, out var uri)
+        string name = Uri.TryCreate(
+            uriString: piece.Url,
+            uriKind: UriKind.Absolute,
+            result: out var uri
+        )
             ? Path.GetFileName(uri.AbsolutePath)
             : "";
-        if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "artwork.png";
+        if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            name = "artwork.png";
 
         string folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        string path = Path.Combine(folder, name);
+            path1: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            path2: "Downloads"
+        );
+        string path = Path.Combine(path1: folder, path2: name);
         try
         {
             Directory.CreateDirectory(folder);
             var result = await HttpFile.DownloadAsync(
-                    Http, HttpRequest.Get(piece.Url).Deadline(TimeSpan.FromMinutes(5)), path, progress, ct)
+                    runner: Http,
+                    spec: HttpRequest.Get(piece.Url).Deadline(TimeSpan.FromMinutes(5)),
+                    path: path,
+                    progress: progress,
+                    ct: ct
+                )
                 .ConfigureAwait(false);
             return result.Error switch {
                 null => (path, null),

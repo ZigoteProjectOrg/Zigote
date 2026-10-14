@@ -9,7 +9,6 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.Editor.Widgets;
 
 namespace Zigote.Editor.Panels;
@@ -770,12 +769,12 @@ public sealed class SettingsPanel : Widget
         var slider = new AdwSlider(value) {
             Min = min,
             Max = max,
-        };
-        slider.OnChanged = v =>
-        {
-            set(v);
-            valLabel.Text = v.ToString("0.###");
-            Apply();
+            OnChanged = v =>
+            {
+                set(v);
+                valLabel.Text = v.ToString("0.###");
+                Apply();
+            },
         };
         return new Padding(
             padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),

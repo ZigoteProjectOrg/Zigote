@@ -24,13 +24,17 @@ internal static class Physics2DProbe
 
     public static void Run(string[] args)
     {
-        int tiles = args.Length > 0 && int.TryParse(args[0], out int parsed) ? parsed : 2500;
+        int tiles = args.Length > 0 && int.TryParse(s: args[0], result: out int parsed)
+            ? parsed
+            : 2500;
         int side = (int)MathF.Sqrt(tiles);
         const int characters = 20;
 
-        Console.WriteLine($"Zigote.Physics2D collision probe — {side * side:N0} static tiles, "
-                          + $"{characters} characters, {Steps:N0} steps @ {Dt * 1000f:F2} ms");
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(
+            $"Zigote.Physics2D collision probe — {side * side:N0} static tiles, "
+            + $"{characters} characters, {Steps:N0} steps @ {Dt * 1000f:F2} ms"
+        );
+        Console.WriteLine(new string(c: '─', count: 78));
 
         var world = new CollisionWorld2D();
         // A solid tilemap: one unit boxes on a grid, which is what the uniform-grid broadphase is
@@ -53,82 +57,102 @@ internal static class Physics2DProbe
 
         var half = new Vec2(x: 0.4f, y: 0.9f); // a character-sized box
 
-        double overlap = Program.Time(steps: Steps, body: () =>
-        {
-            for (int i = 0; i < probes.Length; i++)
-                _sink += world.OverlapBox(center: probes[i], halfExtents: half, mask: All, results: results);
-        });
-
-        double sweep = Program.Time(steps: Steps, body: () =>
-        {
-            for (int i = 0; i < probes.Length; i++)
+        double overlap = Program.Time(
+            steps: Steps,
+            body: () =>
             {
-                if (world.SweepBox(
+                for (int i = 0; i < probes.Length; i++)
+                    _sink += world.OverlapBox(
                         center: probes[i],
                         halfExtents: half,
-                        displacement: new Vec2(x: 0.3f, y: -0.5f),
                         mask: All,
-                        hit: out _
-                    ))
-                    _sink++;
+                        results: results
+                    );
             }
-        });
+        );
 
-        double ray = Program.Time(steps: Steps, body: () =>
-        {
-            for (int i = 0; i < probes.Length; i++)
+        double sweep = Program.Time(
+            steps: Steps,
+            body: () =>
             {
-                if (world.Raycast(
-                        origin: probes[i],
-                        direction: new Vec2(x: 0f, y: -1f),
-                        maxDistance: 4f,
-                        mask: All,
-                        hit: out _
-                    ))
-                    _sink++;
+                for (int i = 0; i < probes.Length; i++)
+                {
+                    if (world.SweepBox(
+                            center: probes[i],
+                            halfExtents: half,
+                            displacement: new Vec2(x: 0.3f, y: -0.5f),
+                            mask: All,
+                            hit: out _
+                        ))
+                        _sink++;
+                }
             }
-        });
+        );
+
+        double ray = Program.Time(
+            steps: Steps,
+            body: () =>
+            {
+                for (int i = 0; i < probes.Length; i++)
+                {
+                    if (world.Raycast(
+                            origin: probes[i],
+                            direction: new Vec2(x: 0f, y: -1f),
+                            maxDistance: 4f,
+                            mask: All,
+                            hit: out _
+                        ))
+                        _sink++;
+                }
+            }
+        );
 
         // A character controller's real step: sweep-and-slide, ground snap, trigger bookkeeping.
         var controllers = new CharacterController2D[characters];
         for (int i = 0; i < characters; i++)
         {
-            controllers[i] = new CharacterController2D(world: world, halfExtents: half)
-            {
+            controllers[i] = new CharacterController2D(world: world, halfExtents: half) {
                 Position = probes[i],
                 Velocity = new Vec2(x: 2f, y: -4f),
             };
         }
 
-        double move = Program.Time(steps: Steps, body: () =>
-        {
-            for (int i = 0; i < controllers.Length; i++)
+        double move = Program.Time(
+            steps: Steps,
+            body: () =>
             {
-                // Re-seat each step so the measurement stays on the same part of the map instead of
-                // walking the characters off the tilemap and into the empty-cell fast path.
-                controllers[i].Position = probes[i];
-                controllers[i].Velocity = new Vec2(x: 2f, y: -4f);
-                controllers[i].Move(Dt);
+                for (int i = 0; i < controllers.Length; i++)
+                {
+                    // Re-seat each step so the measurement stays on the same part of the map instead of
+                    // walking the characters off the tilemap and into the empty-cell fast path.
+                    controllers[i].Position = probes[i];
+                    controllers[i].Velocity = new Vec2(x: 2f, y: -4f);
+                    controllers[i].Move(Dt);
+                }
             }
-        });
+        );
 
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(new string(c: '─', count: 78));
         Report(label: $"OverlapBox   × {characters}", ns: overlap, characters: characters);
         Report(label: $"SweepBox     × {characters}", ns: sweep, characters: characters);
         Report(label: $"Raycast      × {characters}", ns: ray, characters: characters);
         Report(label: $"Controller.Move × {characters}", ns: move, characters: characters);
-        Console.WriteLine(new string('─', 78));
+        Console.WriteLine(new string(c: '─', count: 78));
 
         // The controller step is the one a real game actually runs every fixed tick.
         double coreShare = move * 1e-9 * (1d / Dt);
-        Console.WriteLine($"at the 120 Hz fixed step, {characters} characters cost "
-                          + $"{coreShare * 100:F2}% of one core.");
+        Console.WriteLine(
+            $"at the 120 Hz fixed step, {characters} characters cost "
+            + $"{coreShare * 100:F2}% of one core."
+        );
         Console.WriteLine();
-        Console.WriteLine(coreShare >= 0.05d
-            ? "VERDICT: on the critical path. The dictionary chase is worth removing —\n"
-              + "         start with the cheap half (candidates carry the collider, not its id)."
-            : "VERDICT: not on anyone's critical path at this scale. Re-run with more tiles and\n"
-              + "         characters before restructuring the storage.");
+        Console.WriteLine(
+            coreShare >= 0.05d
+                ? "VERDICT: on the critical path. The dictionary chase is worth removing —\n"
+                  + "         start with the cheap half (candidates carry the collider, not its id)."
+                : "VERDICT: not on anyone's critical path at this scale. Re-run with more tiles and\n"
+                  + "         characters before restructuring the storage."
+        );
     }
 
     private static void Report(string label, double ns, int characters) => Console.WriteLine(

@@ -482,7 +482,7 @@ public sealed class DockLayout : Widget
             val2: bounds.Width - 46f
         ); // leave room for the collapse + maximize buttons
         float fs = _theme.FontSizeCaption - 1f;
-        var widths = new float[leaf.PanelIds.Count];
+        float[] widths = new float[leaf.PanelIds.Count];
         float total = 0f;
         for (int i = 0; i < widths.Length; i++)
         {
@@ -504,12 +504,14 @@ public sealed class DockLayout : Widget
         for (int i = 0; i < widths.Length; i++)
         {
             float w = widths[i] * scale;
-            tabs.Add((leaf.PanelIds[i], new Rect(
-                x: x,
-                y: bounds.Y,
-                width: w,
-                height: HeaderH
-            ), i));
+            tabs.Add(
+                (leaf.PanelIds[i], new Rect(
+                    x: x,
+                    y: bounds.Y,
+                    width: w,
+                    height: HeaderH
+                ), i)
+            );
             x += w;
         }
 
@@ -656,6 +658,7 @@ public sealed class DockLayout : Widget
                     keep--;
                 title = title[..keep] + "…";
             }
+
             // Adwaita dims unselected tab labels rather than recolouring them per hover state.
             var titleColor = isActive ? _theme.OnSurface : AdwPalette.For(_theme).DimLabel;
             paint.AddText(

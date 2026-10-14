@@ -93,6 +93,7 @@ public static class InspectServer
     // A tree big enough to hit these is a runaway, not a UI; the caps keep one bad frame from turning
     // into a multi-megabyte response the panel then has to parse.
     private const int MaxNodes = 20_000;
+
     // Depth is widget nesting, not JSON nesting (each widget is an object plus a children array,
     // so a reader needs twice this). Composition-heavy pages pass 64 without being runaways —
     // a gallery page under a navigator, a split view and a scroller is ~90 deep.
@@ -309,9 +310,8 @@ public static class InspectServer
     {
         if (app.WindowId == id) return app;
         foreach (var w in app.SecondaryWindows)
-        {
-            if (w.WindowId == id && w.IsOpen) return w;
-        }
+            if (w.WindowId == id && w.IsOpen)
+                return w;
 
         return null;
     }
@@ -561,7 +561,7 @@ public static class InspectServer
 
         // A visible ~60 fps app finishes 120 frames in ~2 s; a hidden window turns at a tenth of
         // the rate, hence the generous per-frame allowance.
-        if (!done.Task.Wait(TimeSpan.FromSeconds(5 + frames / 5.0)))
+        if (!done.Task.Wait(TimeSpan.FromSeconds(5 + (frames / 5.0))))
             return Error("capture did not complete — is the app's frame loop running?");
 
         (int got, var scopes) = done.Task.Result;
@@ -601,6 +601,7 @@ public static class InspectServer
     {
         return string.Create(
             provider: CultureInfo.InvariantCulture,
+            handler:
             $"{{\"fps\":{DebugStats.Fps:0.#},\"fps_min\":{DebugStats.FpsMin:0.#},\"fps_max\":{DebugStats.FpsMax:0.#},\"frame_ms\":{DebugStats.FrameMs:0.###},\"cpu_pct\":{DebugStats.CpuPct:0.#},\"mem_mb\":{DebugStats.MemMb:0.#},\"gc_mb\":{DebugStats.GcMb:0.#},\"alloc_kb_per_frame\":{DebugStats.AllocKbPerFrame:0.##},\"gen0\":{DebugStats.Gen0Collections},\"gen1\":{DebugStats.Gen1Collections},\"gen2\":{DebugStats.Gen2Collections},\"jank_frames\":{DebugStats.JankFrames},\"total_frames\":{DebugStats.TotalFrames},\"ui_paint_commands\":{DebugStats.UiPaintCommands},\"overlay_paint_commands\":{DebugStats.OverlayPaintCommands}}}"
         );
     }
@@ -916,9 +917,24 @@ public static class InspectServer
                 if (parts.Length == 3 && !int.TryParse(s: parts[2], result: out finger))
                     return null;
                 return kind switch {
-                    "touchdown" => new TouchDownEvent(x: x, y: y, finger: finger, pressure: 1f),
-                    "touchmove" => new TouchMoveEvent(x: x, y: y, finger: finger, pressure: 1f),
-                    _ => new TouchUpEvent(x: x, y: y, finger: finger, pressure: 1f),
+                    "touchdown" => new TouchDownEvent(
+                        x: x,
+                        y: y,
+                        finger: finger,
+                        pressure: 1f
+                    ),
+                    "touchmove" => new TouchMoveEvent(
+                        x: x,
+                        y: y,
+                        finger: finger,
+                        pressure: 1f
+                    ),
+                    _ => new TouchUpEvent(
+                        x: x,
+                        y: y,
+                        finger: finger,
+                        pressure: 1f
+                    ),
                 };
             }
 

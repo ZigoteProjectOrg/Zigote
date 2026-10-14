@@ -65,9 +65,12 @@ public sealed class SvgAsset : IDisposable
         float w, h;
         nint tree;
         fixed (byte* p = svg)
-        {
-            tree = NativeSvg.Parse(data: p, len: (nuint)svg.Length, outW: &w, outH: &h);
-        }
+            tree = NativeSvg.Parse(
+                data: p,
+                len: (nuint)svg.Length,
+                outW: &w,
+                outH: &h
+            );
 
         if (tree == 0) throw new InvalidDataException("Not a valid SVG document.");
         return new SvgAsset(tree: tree, size: new Size(width: w, height: h));
@@ -95,12 +98,12 @@ public sealed class SvgAsset : IDisposable
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        ObjectDisposedException.ThrowIf(_tree == 0, this);
+        ObjectDisposedException.ThrowIf(condition: _tree == 0, instance: this);
 
         byte[] rgba = new byte[width * height * 4];
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_tree == 0, this);
+            ObjectDisposedException.ThrowIf(condition: _tree == 0, instance: this);
             fixed (byte* p = rgba)
             {
                 if (!NativeSvg.Render(
@@ -110,9 +113,9 @@ public sealed class SvgAsset : IDisposable
                         outPixels: p,
                         outLen: (nuint)rgba.Length
                     ))
-                {
-                    throw new InvalidOperationException($"SVG rasterization failed at {width}×{height}.");
-                }
+                    throw new InvalidOperationException(
+                        $"SVG rasterization failed at {width}×{height}."
+                    );
             }
         }
 
@@ -141,10 +144,8 @@ public sealed class SvgAsset : IDisposable
     {
         nuint len;
         byte* result;
-        fixed (byte* p = svg)
-        {
-            result = NativeSvg.Compile(data: p, len: (nuint)svg.Length, outLen: &len);
-        }
+        fixed (byte* p =
+                   svg) result = NativeSvg.Compile(data: p, len: (nuint)svg.Length, outLen: &len);
 
         if (result == null) throw new InvalidDataException("Not a valid SVG document.");
         try

@@ -141,14 +141,14 @@ public sealed class AdwToggleGroup : ComposedWidget
                 FocusRadius = radius,
                 SemanticsLabel = toggle.Label ?? toggle.Tooltip,
                 Enabled = _enabled,
+                OnPressed = () =>
+                {
+                    if (Active == index) return;
+                    Active = index;
+                    OnActive?.Invoke(index);
+                },
+                OnStateChanged = () => _applyColors!.Invoke(),
             };
-            pressables[i].OnPressed = () =>
-            {
-                if (Active == index) return;
-                Active = index;
-                OnActive?.Invoke(index);
-            };
-            pressables[i].OnStateChanged = () => _applyColors!.Invoke();
             row.Children.Add(
                 toggle.Tooltip is { } tip
                     ? new Tooltip(message: tip, child: pressables[i])

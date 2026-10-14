@@ -75,14 +75,39 @@ public class PaintListAppendTests
     [Fact]
     public void Shadow_fades_with_the_alpha_stack_like_every_other_command()
     {
-        var bounds = new Rect(x: 10, y: 10, width: 100, height: 60);
+        var bounds = new Rect(
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 60
+        );
         var faded = new PaintList();
         faded.PushAlpha(0.5f);
-        faded.AddShadow(bounds: bounds, color: new Color(r: 0f, g: 0f, b: 0f, a: 0.4f), borderRadius: 12f, blurRadius: 20f);
+        faded.AddShadow(
+            bounds: bounds,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.4f
+            ),
+            borderRadius: 12f,
+            blurRadius: 20f
+        );
         faded.PopAlpha();
 
         var expected = new PaintList();
-        expected.AddShadow(bounds: bounds, color: new Color(r: 0f, g: 0f, b: 0f, a: 0.2f), borderRadius: 12f, blurRadius: 20f);
+        expected.AddShadow(
+            bounds: bounds,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.2f
+            ),
+            borderRadius: 12f,
+            blurRadius: 20f
+        );
 
         Assert.True(faded.Record(0).SequenceEqual(expected.Record(0)));
     }

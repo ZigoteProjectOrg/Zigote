@@ -283,14 +283,15 @@ public static class AppHost
         {
             // Printed counts every line ever; the queue holds the last Count of them.
             int unread = (int)Math.Min(val1: app.Printed - app.Read, val2: app.Log.Count);
-            IEnumerable<string> source = newOnly ? app.Log.TakeLast(unread) : app.Log;
+            var source = newOnly ? app.Log.TakeLast(unread) : app.Log;
             if (newOnly) app.Read = app.Printed;
             if (match is not null) source = source.Where(l => match.IsMatch(l));
 
             var folded = new List<string>();
             string? last = null;
             int run = 0;
-            foreach (string line in source.TakeLast(Math.Clamp(value: lines, min: 1, max: LogLines)))
+            foreach (string line in
+                     source.TakeLast(Math.Clamp(value: lines, min: 1, max: LogLines)))
             {
                 if (line == last)
                 {
@@ -304,7 +305,8 @@ public static class AppHost
             }
 
             if (folded.Count > 0) return string.Join(separator: '\n', values: folded);
-            return newOnly ? "(nothing new)" : match is not null ? "(no matching lines)" : "(no output)";
+            return newOnly ? "(nothing new)" :
+                match is not null ? "(no matching lines)" : "(no output)";
         }
     }
 

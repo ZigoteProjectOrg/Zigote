@@ -83,21 +83,35 @@ try
         // golden-image gate covers zigote_scene_apply's decoder: same values, so the capture must
         // come out byte-identical to the one taken before the stream existed.
         {
-            var mat = new ZgSceneMaterial
-            {
+            var mat = new ZgSceneMaterial {
                 Node = ball,
-                ColorR = 0.80f, ColorG = 0.18f, ColorB = 0.16f,
-                Metallic = 0.0f, Roughness = 0.40f,
+                ColorR = 0.80f,
+                ColorG = 0.18f,
+                ColorB = 0.16f,
+                Metallic = 0.0f,
+                Roughness = 0.40f,
                 // The remaining factors are the engine's Material defaults (see
                 // engine/resources/material.zig) — the two setters this replaces left them alone,
                 // so restating them keeps the capture comparable.
-                Clearcoat = 0f, ClearcoatRoughness = 0f, Specular = 1.0f,
-                EmissiveR = 0f, EmissiveG = 0f, EmissiveB = 0f,
-                Ior = 1.5f, Transmission = 0f, OcclusionStrength = 0f,
-                AlphaCutoff = 0.5f, Effect = 0, AlphaMode = 0, DoubleSided = 0,
+                Clearcoat = 0f,
+                ClearcoatRoughness = 0f,
+                Specular = 1.0f,
+                EmissiveR = 0f,
+                EmissiveG = 0f,
+                EmissiveB = 0f,
+                Ior = 1.5f,
+                Transmission = 0f,
+                OcclusionStrength = 0f,
+                AlphaCutoff = 0.5f,
+                Effect = 0,
+                AlphaMode = 0,
+                DoubleSided = 0,
             };
             int size = System.Runtime.CompilerServices.Unsafe.SizeOf<ZgSceneMaterial>();
-            mat.Header = new ZgSceneOpHeader { Kind = (uint)ZgSceneOp.Material, Size = (uint)size };
+            mat.Header = new ZgSceneOpHeader {
+                Kind = (uint)ZgSceneOp.Material,
+                Size = (uint)size,
+            };
             Span<byte> buf = stackalloc byte[size];
             System.Runtime.InteropServices.MemoryMarshal.Write(destination: buf, value: in mat);
             var st = e.SceneApply(buf);
@@ -133,17 +147,24 @@ try
                 e.SceneSetMeshPrimitive(nodeHandle: n, primType: 2);
                 e.SceneSetMeshColor(
                     nodeHandle: n,
-                    r: (i % 7) / 7f,
-                    g: (i % 5) / 5f,
-                    b: (i % 3) / 3f
+                    r: i % 7 / 7f,
+                    g: i % 5 / 5f,
+                    b: i % 3 / 3f
                 );
                 float gx = ((i % side) - (side / 2f)) * 0.6f;
                 float gy = ((i / side) - (side / 2f)) * 0.6f;
                 e.SceneUpdateNode(
                     nodeHandle: n,
-                    x: gx, y: gy, z: -2f,
-                    qx: 0f, qy: 0f, qz: 0f, qw: 1f,
-                    sx: 0.2f, sy: 0.2f, sz: 0.2f
+                    x: gx,
+                    y: gy,
+                    z: -2f,
+                    qx: 0f,
+                    qy: 0f,
+                    qz: 0f,
+                    qw: 1f,
+                    sx: 0.2f,
+                    sy: 0.2f,
+                    sz: 0.2f
                 );
             }
 
@@ -1307,17 +1328,62 @@ try
     if (!scene && !string.IsNullOrEmpty(allCmdsShot))
     {
         var p2 = new PaintList();
-        p2.AddRect(bounds: new Rect(x: 0, y: 0, width: w, height: h), color: ThemeData.Dark.Background);
+        p2.AddRect(
+            bounds: new Rect(
+                x: 0,
+                y: 0,
+                width: w,
+                height: h
+            ),
+            color: ThemeData.Dark.Background
+        );
 
         // RECT (square + rounded) and BORDER
-        p2.AddRect(new Rect(x: 10, y: 10, width: 80, height: 60), new Color(r: 0.9f, g: 0.2f, b: 0.2f));
-        p2.AddRect(new Rect(x: 100, y: 10, width: 80, height: 60), new Color(r: 0.2f, g: 0.8f, b: 0.3f), radius: 14f);
-        p2.AddBorder(new Rect(x: 190, y: 10, width: 80, height: 60), new Color(r: 0.3f, g: 0.55f, b: 1f), radius: 10f, width: 4f);
+        p2.AddRect(
+            bounds: new Rect(
+                x: 10,
+                y: 10,
+                width: 80,
+                height: 60
+            ),
+            color: new Color(r: 0.9f, g: 0.2f, b: 0.2f)
+        );
+        p2.AddRect(
+            bounds: new Rect(
+                x: 100,
+                y: 10,
+                width: 80,
+                height: 60
+            ),
+            color: new Color(r: 0.2f, g: 0.8f, b: 0.3f),
+            radius: 14f
+        );
+        p2.AddBorder(
+            bounds: new Rect(
+                x: 190,
+                y: 10,
+                width: 80,
+                height: 60
+            ),
+            color: new Color(r: 0.3f, g: 0.55f, b: 1f),
+            radius: 10f,
+            width: 4f
+        );
 
         // SHADOW
         p2.AddShadow(
-            bounds: new Rect(x: 280, y: 10, width: 80, height: 60),
-            color: new Color(r: 0f, g: 0f, b: 0f, a: 0.7f),
+            bounds: new Rect(
+                x: 280,
+                y: 10,
+                width: 80,
+                height: 60
+            ),
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.7f
+            ),
             borderRadius: 12f,
             blurRadius: 10f,
             spread: 2f
@@ -1334,27 +1400,65 @@ try
 
         // BEZIER
         p2.AddBezier(
-            x0: 20f, y0: 140f, x1: 90f, y1: 190f,
-            x2: 160f, y2: 110f, x3: 230f, y3: 160f,
-            color: new Color(r: 1f, g: 0.75f, b: 0.1f), width: 3f
+            x0: 20f,
+            y0: 140f,
+            x1: 90f,
+            y1: 190f,
+            x2: 160f,
+            y2: 110f,
+            x3: 230f,
+            y3: 160f,
+            color: new Color(r: 1f, g: 0.75f, b: 0.1f),
+            width: 3f
         );
 
         // POLYGON
-        Span<Offset> tri =
-        [
-            new Offset(x: 260f, y: 160f), new Offset(x: 320f, y: 120f),
-            new Offset(x: 350f, y: 175f), new Offset(x: 290f, y: 185f),
+        Span<Offset> tri = [
+            new(x: 260f, y: 160f), new(x: 320f, y: 120f),
+            new(x: 350f, y: 175f), new(x: 290f, y: 185f),
         ];
         p2.AddPolygon(points: tri, color: new Color(r: 0.85f, g: 0.35f, b: 0.9f));
 
         // CLIP_START / CLIP_END around a rect that overhangs the clip
-        p2.AddClipStart(new Rect(x: 20, y: 200, width: 100, height: 60), radius: 12f);
-        p2.AddRect(new Rect(x: 0, y: 190, width: 200, height: 100), new Color(r: 0.2f, g: 0.6f, b: 0.9f));
+        p2.AddClipStart(
+            bounds: new Rect(
+                x: 20,
+                y: 200,
+                width: 100,
+                height: 60
+            ),
+            radius: 12f
+        );
+        p2.AddRect(
+            bounds: new Rect(
+                x: 0,
+                y: 190,
+                width: 200,
+                height: 100
+            ),
+            color: new Color(r: 0.2f, g: 0.6f, b: 0.9f)
+        );
         p2.AddClipEnd();
 
         // PUSH_OPACITY / POP_OPACITY
-        p2.AddPushOpacity(bounds: new Rect(x: 140, y: 200, width: 100, height: 60), alpha: 0.45f);
-        p2.AddRect(new Rect(x: 140, y: 200, width: 100, height: 60), new Color(r: 1f, g: 1f, b: 1f));
+        p2.AddPushOpacity(
+            bounds: new Rect(
+                x: 140,
+                y: 200,
+                width: 100,
+                height: 60
+            ),
+            alpha: 0.45f
+        );
+        p2.AddRect(
+            bounds: new Rect(
+                x: 140,
+                y: 200,
+                width: 100,
+                height: 60
+            ),
+            color: new Color(r: 1f, g: 1f, b: 1f)
+        );
         p2.AddPopOpacity();
 
         // TRANSFORM_PUSH / TRANSFORM_POP
@@ -1363,14 +1467,36 @@ try
             * Matrix2D.Rotation(0.4f)
             * Matrix2D.Scale(sx: 0.9f, sy: 0.9f)
         );
-        p2.AddRect(new Rect(x: 0, y: 0, width: 70, height: 40), new Color(r: 0.95f, g: 0.6f, b: 0.2f));
+        p2.AddRect(
+            bounds: new Rect(
+                x: 0,
+                y: 0,
+                width: 70,
+                height: 40
+            ),
+            color: new Color(r: 0.95f, g: 0.6f, b: 0.2f)
+        );
         p2.PopTransform();
 
         // LIQUID_GLASS over the content drawn so far
         p2.AddLiquidGlass(
-            bounds: new Rect(x: 20, y: 300, width: 140, height: 70),
-            color: new Color(r: 1f, g: 1f, b: 1f, a: 0.18f),
-            radius: 18f, thickness: 8f, glowX: 0.3f, glowY: 0.3f, pinch: 0.4f
+            bounds: new Rect(
+                x: 20,
+                y: 300,
+                width: 140,
+                height: 70
+            ),
+            color: new Color(
+                r: 1f,
+                g: 1f,
+                b: 1f,
+                a: 0.18f
+            ),
+            radius: 18f,
+            thickness: 8f,
+            glowX: 0.3f,
+            glowY: 0.3f,
+            pinch: 0.4f
         );
 
         app.Engine.SubmitPaintCommands(p2);
@@ -1400,7 +1526,7 @@ try
 
         var benchPaint = new PaintList();
         var samples = new List<double>(benchFrames);
-        var swBench = new System.Diagnostics.Stopwatch();
+        var swBench = new Stopwatch();
 
         // Without this the measurement is a vsync floor and nothing else: 500 rects and 8000 rects
         // both came out at 6.99 ms/frame, because the present blocks. Uncapped, the number is the
@@ -1409,29 +1535,39 @@ try
 
         var buildSamples = new List<double>(benchFrames);
         var submitSamples = new List<double>(benchFrames);
-        var swBuild = new System.Diagnostics.Stopwatch();
+        var swBuild = new Stopwatch();
         for (int frame = 0; frame < benchFrames; frame++)
         {
             swBench.Restart();
             swBuild.Restart();
             benchPaint.Clear();
             benchPaint.AddRect(
-                bounds: new Rect(x: 0, y: 0, width: w, height: h),
+                bounds: new Rect(
+                    x: 0,
+                    y: 0,
+                    width: w,
+                    height: h
+                ),
                 color: ThemeData.Dark.Background
             );
             for (int i = 0; i < rects; i++)
             {
                 // Deterministic spread; a little per-frame motion so nothing can be cached away.
                 float fx = (i * 37 % (int)(w - 40)) + (frame % 3);
-                float fy = (i * 71 % (int)(h - 40));
+                float fy = i * 71 % (int)(h - 40);
                 benchPaint.AddRect(
-                    bounds: new Rect(x: fx, y: fy, width: 24f, height: 18f),
+                    bounds: new Rect(
+                        x: fx,
+                        y: fy,
+                        width: 24f,
+                        height: 18f
+                    ),
                     color: new Color(
                         r: (i & 7) / 7f,
-                        g: (i >> 3 & 7) / 7f,
-                        b: (i >> 6 & 7) / 7f
+                        g: ((i >> 3) & 7) / 7f,
+                        b: ((i >> 6) & 7) / 7f
                     ),
-                    radius: (i % 5) * 2f
+                    radius: i % 5 * 2f
                 );
             }
 
@@ -1440,7 +1576,7 @@ try
             // Split the two native halves: SubmitPaintCommands is the ZgPaintCommand marshal plus
             // fillPaintList's translation into the internal command union (design doc P7);
             // FrameEnd is tessellation, vertex upload, draw and present.
-            var swSubmit = System.Diagnostics.Stopwatch.StartNew();
+            var swSubmit = Stopwatch.StartNew();
             app.Engine.SubmitPaintCommands(benchPaint);
             swSubmit.Stop();
             app.Engine.FrameEnd();

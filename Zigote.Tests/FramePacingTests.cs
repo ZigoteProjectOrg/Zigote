@@ -106,7 +106,11 @@ public class FramePacingTests
     {
         Assert.Equal(
             expected: 4d,
-            actual: App.BackgroundBudgetMs(intervalTicks: TicksFor(30), spentTicks: 0, reserveTicks: 0)
+            actual: App.BackgroundBudgetMs(
+                intervalTicks: TicksFor(30),
+                spentTicks: 0,
+                reserveTicks: 0
+            )
         );
         Assert.Equal(
             expected: 0d,
@@ -139,15 +143,19 @@ public class FramePacingTests
     [InlineData(0.5f, true, 0.1f)]
     [InlineData(0.7f, false, 0.36f)] // hidden, reappears at the end of the cycle
     [InlineData(1.06f + 0.2f, true, 0.4f)] // second cycle
-    public void CaretBlink_ReportsStateAndTimeToNextEdge(float sinceRestart, bool shown, float changeIn)
+    public void CaretBlink_ReportsStateAndTimeToNextEdge(float sinceRestart, bool shown,
+        float changeIn)
     {
         const float blinkBase = 12.5f;
         float time = blinkBase + sinceRestart;
 
-        Assert.Equal(expected: shown, actual: Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: blinkBase));
+        Assert.Equal(
+            expected: shown,
+            actual: UI.Widgets.CaretBlink.Shown(time: time, blinkBase: blinkBase)
+        );
         Assert.Equal(
             expected: changeIn,
-            actual: Zigote.UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: blinkBase),
+            actual: UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: blinkBase),
             tolerance: 0.001f
         );
     }
@@ -157,11 +165,11 @@ public class FramePacingTests
     {
         // Stepping exactly to each reported edge must flip the state every time.
         float time = 3f;
-        bool shown = Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
+        bool shown = UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
         for (int i = 0; i < 8; i++)
         {
-            time += Zigote.UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: 0f) + 0.001f;
-            bool next = Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
+            time += UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: 0f) + 0.001f;
+            bool next = UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
             Assert.NotEqual(expected: shown, actual: next);
             shown = next;
         }

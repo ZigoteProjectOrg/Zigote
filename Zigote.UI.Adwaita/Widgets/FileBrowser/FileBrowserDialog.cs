@@ -137,10 +137,10 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             Dismissible = true,
             WidthFraction = compact ? 1f : 0.62f,
             HeightFraction = compact ? 1f : 0.7f,
+            // Every close path (Cancel button, Esc, scrim click) funnels through Dismiss →
+            // OnClosed; a confirm completed the task first, making this a no-op.
+            OnClosed = () => picker.Tcs.TrySetResult([]),
         };
-        // Every close path (Cancel button, Esc, scrim click) funnels through Dismiss →
-        // OnClosed; a confirm completed the task first, making this a no-op.
-        host.OnClosed = () => picker.Tcs.TrySetResult([]);
         picker.Host = host;
         host.Show();
         return picker.Tcs.Task;
@@ -194,10 +194,12 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     protected override void OnMount()
     {
         var o = Options;
-        _model = new AdwFileBrowserModel { LockRoot = o.LockRoot };
-        _model.ShowHidden = o.ShowHidden;
-        _model.DirectoriesOnly = o.Kind == FileDialogKind.PickFolder;
-        _model.AllowMultiSelect = o.AllowMany && o.Kind == FileDialogKind.OpenFile;
+        _model = new AdwFileBrowserModel {
+            LockRoot = o.LockRoot,
+            ShowHidden = o.ShowHidden,
+            DirectoriesOnly = o.Kind == FileDialogKind.PickFolder,
+            AllowMultiSelect = o.AllowMany && o.Kind == FileDialogKind.OpenFile,
+        };
 
         SetUpFilters();
 
@@ -229,7 +231,9 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         _model.NavigateTo(ResolveStartDirectory());
 
         // Owner is the hosting window's App when the browser runs as a separate OS window.
-        (Owner ?? App.Active)?.RequestFocus(o.Kind == FileDialogKind.SaveFile ? _nameField.Editable : _list);
+        (Owner ?? App.Active)?.RequestFocus(
+            o.Kind == FileDialogKind.SaveFile ? _nameField.Editable : _list
+        );
     }
 
     private string ResolveStartDirectory()
@@ -362,15 +366,28 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                 new SizedBox(lightsInset),
                 new Tooltip(
                     message: "Back",
-                    child: new AdwButton(onPressed: _model.CanGoBack ? () => Navigate(_model.GoBack) : null) { IconName = Icons.ArrowBack, Style = AdwButtonStyle.Flat }
+                    child: new AdwButton(
+                        onPressed: _model.CanGoBack ? () => Navigate(_model.GoBack) : null
+                    ) {
+                        IconName = Icons.ArrowBack,
+                        Style = AdwButtonStyle.Flat,
+                    }
                 ),
                 new Tooltip(
                     message: "Forward",
-                    child: new AdwButton(onPressed: _model.CanGoForward ? () => Navigate(_model.GoForward) : null) { IconName = Icons.ArrowForward, Style = AdwButtonStyle.Flat }
+                    child: new AdwButton(
+                        onPressed: _model.CanGoForward ? () => Navigate(_model.GoForward) : null
+                    ) {
+                        IconName = Icons.ArrowForward,
+                        Style = AdwButtonStyle.Flat,
+                    }
                 ),
                 new Tooltip(
                     message: "Up one level",
-                    child: new AdwButton(onPressed: _model.CanGoUp ? GoUp : null) { IconName = Icons.ArrowUpward, Style = AdwButtonStyle.Flat }
+                    child: new AdwButton(onPressed: _model.CanGoUp ? GoUp : null) {
+                        IconName = Icons.ArrowUpward,
+                        Style = AdwButtonStyle.Flat,
+                    }
                 ),
                 new SizedBox(6f),
                 // Height-capped: a bare ScrollView measures to its max constraints and would
@@ -489,17 +506,24 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         var selected = _model.SelectedEntries();
         if (selected.Count != 1 || selected[0].IsDirectory) return null;
         var entry = selected[0];
-        return AdwFileBrowserPreview.CanPreview(entry.Name) ? new AdwFileBrowserPreview(entry) : null;
+        return AdwFileBrowserPreview.CanPreview(entry.Name)
+            ? new AdwFileBrowserPreview(entry)
+            : null;
     }
 
     private Widget BuildSidebar()
     {
         int current = _places.FindIndex(place => string.Equals(
-            a: Path.TrimEndingDirectorySeparator(place.Path),
-            b: Path.TrimEndingDirectorySeparator(_model.CurrentDirectory),
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ));
-        var items = _places.Select(place => new AdwSidebarItem(title: place.Label, iconName: place.Icon));
+                a: Path.TrimEndingDirectorySeparator(place.Path),
+                b: Path.TrimEndingDirectorySeparator(_model.CurrentDirectory),
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+        );
+        var items = _places.Select(place => new AdwSidebarItem(
+                title: place.Label,
+                iconName: place.Icon
+            )
+        );
         return new AdwSidebar(new AdwSidebarSection(title: null, items: [.. items])) {
             Selected = current,
             OnSelected = i => NavigateTo(_places[i].Path),
@@ -544,9 +568,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         // Accept) add up to ~600pt of un-wrapping Row. On a phone they become two stacked rows,
         // with the filter dropdown full-width above the buttons.
         var options = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
-        options.Children.Add(
-            new AdwCheckButton(value: _model.ShowHidden, onChanged: ToggleHidden)
-        );
+        options.Children.Add(new AdwCheckButton(value: _model.ShowHidden, onChanged: ToggleHidden));
         options.Children.Add(new SizedBox(6f));
         options.Children.Add(
             new Label(text: "Hidden", fontSize: theme.FontSizeCaption, color: theme.TextSecondary)
@@ -585,9 +607,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             commit.Children.Add(new SizedBox(10f));
         }
 
-        commit.Children.Add(
-            new AdwButton(label: "Cancel", onPressed: Cancel)
-        );
+        commit.Children.Add(new AdwButton(label: "Cancel", onPressed: Cancel));
         commit.Children.Add(new SizedBox(8f));
         commit.Children.Add(
             new AdwButton(label: AcceptLabel(), onPressed: Confirm) {
@@ -940,7 +960,10 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         var app = App.Active;
         if (app is null) return;
-        var field = new AdwEntry { Placeholder = "New name", Text = entry.Name };
+        var field = new AdwEntry {
+            Placeholder = "New name",
+            Text = entry.Name,
+        };
         Dialog? prompt = null;
         field.OnSubmitted = _ => Apply();
 
@@ -961,7 +984,9 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                             Children = {
                                 new AdwButton(label: "Cancel", onPressed: () => prompt?.Dismiss()),
                                 new SizedBox(8f),
-                                new AdwButton(label: "Rename", onPressed: Apply) { Style = AdwButtonStyle.Suggested },
+                                new AdwButton(label: "Rename", onPressed: Apply) {
+                                    Style = AdwButtonStyle.Suggested,
+                                },
                             },
                         },
                     },
@@ -1025,7 +1050,10 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         var app = App.Active;
         if (app is null) return;
-        var field = new AdwEntry { Placeholder = "Folder name", Text = "untitled folder" };
+        var field = new AdwEntry {
+            Placeholder = "Folder name",
+            Text = "untitled folder",
+        };
         Dialog? prompt = null;
         field.OnSubmitted = _ => Create();
 
@@ -1046,7 +1074,9 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                             Children = {
                                 new AdwButton(label: "Cancel", onPressed: () => prompt?.Dismiss()),
                                 new SizedBox(8f),
-                                new AdwButton(label: "Create", onPressed: Create) { Style = AdwButtonStyle.Suggested },
+                                new AdwButton(label: "Create", onPressed: Create) {
+                                    Style = AdwButtonStyle.Suggested,
+                                },
                             },
                         },
                     },
@@ -1113,7 +1143,10 @@ internal static class AdwFileBrowserFallbackInstaller
                       throw new FileDialogException(
                           "No active app to host the in-app file dialog."
                       );
-            return AdwFileBrowserDialog.ShowAsync(app: app, options: AdwFileBrowserOptions.From(request));
+            return AdwFileBrowserDialog.ShowAsync(
+                app: app,
+                options: AdwFileBrowserOptions.From(request)
+            );
         };
     }
 }

@@ -166,7 +166,13 @@ public class FrameHotPathAllocationTests
     {
         using var w = new EcsWorld();
         for (int i = 0; i < 1000; i++)
-            w.Set(e: w.CreateEntity(), c: new Pos { X = i, Y = i });
+            w.Set(
+                e: w.CreateEntity(),
+                c: new Pos {
+                    X = i,
+                    Y = i,
+                }
+            );
 
         // The delegate is created once here; per-frame cost is the cached-query dispatch alone.
         Action<Span<Pos>> body = static span =>

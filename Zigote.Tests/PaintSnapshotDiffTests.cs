@@ -476,8 +476,8 @@ public class PaintSnapshotDiffTests
             actual: Diff(prev: a, cur: b, rects: out var rects)
         );
         Assert.Contains(
-            rects,
-            r => Covers(
+            collection: rects,
+            filter: r => Covers(
                 outer: r,
                 inner: new Rect(
                     x: 0,
@@ -488,8 +488,8 @@ public class PaintSnapshotDiffTests
             )
         );
         Assert.Contains(
-            rects,
-            r => Covers(
+            collection: rects,
+            filter: r => Covers(
                 outer: r,
                 inner: new Rect(
                     x: 0,
@@ -515,6 +515,7 @@ public class PaintSnapshotDiffTests
             width: 300,
             height: 200
         );
+
         PaintList Frame(float scrollY) => List(p =>
             {
                 p.AddClipStart(clip);

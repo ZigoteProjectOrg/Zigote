@@ -30,13 +30,25 @@ public sealed record CachedResponse(
     public string? Header(string name)
     {
         foreach (var h in Headers)
-            if (string.Equals(h.Name, name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(
+                    a: h.Name,
+                    b: name,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 return h.Value;
+        }
+
         return null;
     }
 
     /// <summary>This entry as a response, flagged as a cache hit and owning nothing poolable.</summary>
-    public HttpResponse ToResponse() => HttpResponse.FromBytes(Status, Headers, Body, fromCache: true);
+    public HttpResponse ToResponse() => HttpResponse.FromBytes(
+        status: Status,
+        headers: Headers,
+        body: Body,
+        fromCache: true
+    );
 }
 
 /// <summary>

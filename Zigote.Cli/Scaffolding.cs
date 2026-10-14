@@ -105,8 +105,13 @@ public sealed class Scaffolder
         string path = Path.GetFullPath(Path.Combine(path1: _root, path2: relativePath));
         // Belt-and-braces containment: every relativePath today is CLI-authored and validated
         // upstream, but a future template mistake must fail here, not write outside the project.
-        if (!path.StartsWith(value: _root + Path.DirectorySeparatorChar, comparisonType: StringComparison.Ordinal))
-            throw new CliError($"refusing to write outside the project directory: '{relativePath}'");
+        if (!path.StartsWith(
+                value: _root + Path.DirectorySeparatorChar,
+                comparisonType: StringComparison.Ordinal
+            ))
+            throw new CliError(
+                $"refusing to write outside the project directory: '{relativePath}'"
+            );
 
         if (File.Exists(path) && !_force)
         {

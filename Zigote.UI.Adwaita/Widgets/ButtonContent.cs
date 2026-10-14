@@ -62,7 +62,9 @@ public sealed class AdwButtonContent : ComposedWidget
         if (IconName is not null)
         {
             row.Children.Add(
-                new IconGlyph(glyph: IconName, size: AdwMetrics.IconSize, color: _color) { Shadow = _iconShadow }
+                new IconGlyph(glyph: IconName, size: AdwMetrics.IconSize, color: _color) {
+                    Shadow = _iconShadow,
+                }
             );
         }
 

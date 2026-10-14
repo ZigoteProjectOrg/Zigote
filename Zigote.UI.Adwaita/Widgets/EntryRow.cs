@@ -85,8 +85,8 @@ public sealed class AdwEntryRow : ComposedWidget
             ShowBackground = false,
             Text = _text,
             Obscure = _obscure,
+            OnFocusChange = _ => SyncFloat(),
         };
-        _field.OnFocusChange = _ => SyncFloat();
 
         _caption = new Label(text: "", style: AdwTypography.Caption, color: p.DimLabel) {
             MaxLines = 1,
@@ -106,7 +106,9 @@ public sealed class AdwEntryRow : ComposedWidget
             // AnimatedSize eases the caption slot between 0 and its natural height, clipping while
             // in flight — the ~150ms title float.
             Children = {
-                new AnimatedSize(child: _captionBox, duration: 0.15f, curve: Curves.EaseOut) { Spec = AdwMotion.Control },
+                new AnimatedSize(child: _captionBox, duration: 0.15f, curve: Curves.EaseOut) {
+                    Spec = AdwMotion.Control,
+                },
                 _field,
             },
         };

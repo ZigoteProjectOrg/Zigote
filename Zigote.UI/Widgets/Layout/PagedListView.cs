@@ -44,10 +44,11 @@ public sealed class PagedListView<T> : ComposedWidget
         _fetchPage = fetchPage;
         _itemBuilder = itemBuilder;
         TriggerDistance = triggerDistance;
-        _list = new ListView(itemExtent: itemHeight);
-        _list.OnScrolled = (offset, max) =>
-        {
-            if (max - offset <= TriggerDistance) LoadNextPage();
+        _list = new ListView(itemExtent: itemHeight) {
+            OnScrolled = (offset, max) =>
+            {
+                if (max - offset <= TriggerDistance) LoadNextPage();
+            },
         };
     }
 
@@ -111,11 +112,12 @@ public sealed class PagedListView<T> : ComposedWidget
     {
         int footers = Footer() is null ? 0 : 1;
         _list.SetBuilder(
-            _items.Count + footers,
-            index => index < _items.Count
-                ? _itemBuilder(_items[index], index)
+            itemCount: _items.Count + footers,
+            itemBuilder: index => index < _items.Count
+                ? _itemBuilder(arg1: _items[index], arg2: index)
                 : Footer() ?? new SizedBox(),
-            keepScroll: true);
+            keepScroll: true
+        );
         return _list;
     }
 
@@ -123,11 +125,15 @@ public sealed class PagedListView<T> : ComposedWidget
     private Widget? Footer()
     {
         if (_error is { } error)
+        {
             return ErrorFooter is { } build
                 ? build(error)
                 : new GestureDetector(
-                    new Label($"Could not load — tap to retry"),
-                    onTap: Retry);
+                    child: new Label($"Could not load — tap to retry"),
+                    onTap: Retry
+                );
+        }
+
         if (_end) return null;
         return LoadingFooter?.Invoke() ?? new Skeleton();
     }
@@ -139,7 +145,7 @@ public sealed class PagedListView<T> : ComposedWidget
 
         try
         {
-            _pending = _fetchPage(_page, _cancellation.Token);
+            _pending = _fetchPage(arg1: _page, arg2: _cancellation.Token);
         }
         catch (Exception e)
         {
@@ -159,20 +165,14 @@ public sealed class PagedListView<T> : ComposedWidget
         _pending = null;
 
         if (finished.IsFaulted)
-        {
             _error = finished.Exception?.InnerException ?? finished.Exception;
-        }
         else if (finished.IsCanceled)
-        {
-            _end = true;   // cancelled with the widget; nothing more will arrive
-        }
+            _end = true; // cancelled with the widget; nothing more will arrive
         else
         {
             var page = finished.Result;
             if (page.Count == 0)
-            {
                 _end = true;
-            }
             else
             {
                 _items.AddRange(page);

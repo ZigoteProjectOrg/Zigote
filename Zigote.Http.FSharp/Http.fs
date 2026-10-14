@@ -58,11 +58,14 @@ module Http =
     let body (b: HttpBody) (spec: HttpSpec) = spec.WithBody b
 
     /// Sets a JSON body, serialized now with a source-generated contract.
-    let jsonBody (typeInfo: JsonTypeInfo<'T>) (value: 'T) (spec: HttpSpec) = spec.WithJson(value, typeInfo)
+    let jsonBody (typeInfo: JsonTypeInfo<'T>) (value: 'T) (spec: HttpSpec) =
+        spec.WithJson(value, typeInfo)
 
     /// Sets a multipart/form-data body from fields and files (see MultipartPart.Field / .File).
     let multipart (parts: MultipartPart list) (spec: HttpSpec) =
-        spec.WithBody(HttpBody.MultipartBody(Collections.Immutable.ImmutableArray.CreateRange parts))
+        spec.WithBody(
+            HttpBody.MultipartBody(Collections.Immutable.ImmutableArray.CreateRange parts)
+        )
 
     /// Reports transfer progress — download always, upload when the request has a body.
     let progress (sink: IProgress<HttpProgress>) (spec: HttpSpec) = spec.Progress sink
@@ -101,7 +104,11 @@ module Http =
         }
 
     /// Runs a spec and decodes a 2xx body as JSON.
-    let json (typeInfo: JsonTypeInfo<'T>) (spec: HttpSpec) (runner: HttpRunner) : Async<Result<'T, HttpError>> =
+    let json
+        (typeInfo: JsonTypeInfo<'T>)
+        (spec: HttpSpec)
+        (runner: HttpRunner)
+        : Async<Result<'T, HttpError>> =
         async {
             let! ct = Async.CancellationToken
             let! result = runner.JsonAsync(spec, typeInfo, ct).AsTask() |> Async.AwaitTask
@@ -136,7 +143,12 @@ module Http =
         }
 
     /// `json`, task-shaped.
-    let jsonTask (typeInfo: JsonTypeInfo<'T>) (spec: HttpSpec) (ct: Threading.CancellationToken) (runner: HttpRunner) =
+    let jsonTask
+        (typeInfo: JsonTypeInfo<'T>)
+        (spec: HttpSpec)
+        (ct: Threading.CancellationToken)
+        (runner: HttpRunner)
+        =
         task {
             let! result = runner.JsonAsync(spec, typeInfo, ct)
             return toResult result

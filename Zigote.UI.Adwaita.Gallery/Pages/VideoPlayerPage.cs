@@ -21,17 +21,25 @@ public sealed class VideoPlayerPage : ComposedWidget
         var player = Player();
         return new GalleryPage(
             title: "Video Player",
-            description: "A media viewer's player: controls over the picture that get out of the way.",
+            description:
+            "A media viewer's player: controls over the picture that get out of the way.",
             iconName: MaterialIcons.SmartDisplay
         ) {
             Children = {
                 FFmpeg.IsAvailable()
-                    ? new ClipRRect(radius: 12f, child: new VideoPlayerView(player) { AltText = "Sample video" })
-                    : new AdwStatusPage { Title = "ffmpeg Not Found", Description = "Install ffmpeg to play video." },
+                    ? new ClipRRect(
+                        radius: 12f,
+                        child: new VideoPlayerView(player) { AltText = "Sample video" }
+                    )
+                    : new AdwStatusPage {
+                        Title = "ffmpeg Not Found",
+                        Description = "Install ffmpeg to play video.",
+                    },
                 Demo.Group(
                     title: "Using It",
-                    description: "Click plays and pauses, double-click goes fullscreen, press and hold plays at 2×. " +
-                                 "Space, ← →, J L, ↑ ↓, M, F and P work once the picture has focus.",
+                    description:
+                    "Click plays and pauses, double-click goes fullscreen, press and hold plays at 2×. " +
+                    "Space, ← →, J L, ↑ ↓, M, F and P work once the picture has focus.",
                     new AdwButtonRow(title: "Open a Video…", onPressed: () => _ = OpenFile(player)),
                     new AdwButtonRow(
                         title: "Picture in Picture",
@@ -56,7 +64,10 @@ public sealed class VideoPlayerPage : ComposedWidget
         string? path = await FileDialog.OpenFileAsync(
             title: "Open a Video",
             filters: [
-                new FileDialogFilter(name: "Videos", extensions: ["mp4", "mkv", "webm", "mov", "avi", "m4v"]),
+                new FileDialogFilter(
+                    name: "Videos",
+                    extensions: ["mp4", "mkv", "webm", "mov", "avi", "m4v"]
+                ),
                 new FileDialogFilter(name: "All files", extensions: ["*"]),
             ]
         );

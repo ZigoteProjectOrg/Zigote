@@ -69,12 +69,13 @@ public class HotPathAllocationTests
     {
         object? sink = null;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < 100; i++) sink = new object();
-        });
+            {
+                for (int i = 0; i < 100; i++) sink = new object();
+            }
+        );
 
         Assert.NotNull(sink);
-        Assert.True(measured >= 100 * 24, $"measured {measured} B");
+        Assert.True(condition: measured >= 100 * 24, userMessage: $"measured {measured} B");
     }
 
     [Fact]
@@ -92,9 +93,10 @@ public class HotPathAllocationTests
 
         const int frames = 500;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        });
+            {
+                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+            }
+        );
         long allocated = measured;
 
         Assert.True(
@@ -128,20 +130,20 @@ public class HotPathAllocationTests
     public void TextMeasure_SpanLookup_MatchesStringPath_And_HitsAreZeroAlloc()
     {
         const string text = "some wrapped word";
-        var viaString = Zigote.UI.TextShaping.TextMeasure.Measure(text: text, fontSize: 14f);
-        var viaSpan = Zigote.UI.TextShaping.TextMeasure.Measure(text: text.AsSpan(), fontSize: 14f);
+        var viaString = UI.TextShaping.TextMeasure.Measure(text: text, fontSize: 14f);
+        var viaSpan = UI.TextShaping.TextMeasure.Measure(text: text.AsSpan(), fontSize: 14f);
         Assert.Equal(expected: viaString, actual: viaSpan);
 
         // Slices of a larger string (the RichText shape) hit the same cache entries.
         string paragraph = "xx " + text + " yy";
-        var viaSlice = Zigote.UI.TextShaping.TextMeasure.Measure(
+        var viaSlice = UI.TextShaping.TextMeasure.Measure(
             text: paragraph.AsSpan(start: 3, length: text.Length),
             fontSize: 14f
         );
         Assert.Equal(expected: viaString, actual: viaSlice);
 
         AllocGuard.AssertZeroAlloc(() =>
-            _ = Zigote.UI.TextShaping.TextMeasure.Width(
+            _ = UI.TextShaping.TextMeasure.Width(
                 text: paragraph.AsSpan(start: 3, length: text.Length),
                 fontSize: 14f
             )

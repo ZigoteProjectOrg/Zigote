@@ -179,9 +179,10 @@ public class UiPerformanceTests
 
             const int frames = 500;
             long measured = AllocGuard.Measure(() =>
-            {
-                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
-            });
+                {
+                    for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
+                }
+            );
             long allocated = measured;
 
             _output.WriteLine(

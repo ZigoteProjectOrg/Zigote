@@ -28,12 +28,13 @@ public abstract record HttpBody
     public abstract bool IsReplayable { get; }
 
     /// <summary>Bytes already in hand, with the content type they represent.</summary>
-    public static HttpBody Bytes(ReadOnlyMemory<byte> bytes, string contentType = "application/octet-stream") =>
-        new BytesBody(bytes, contentType);
+    public static HttpBody Bytes(ReadOnlyMemory<byte> bytes,
+        string contentType = "application/octet-stream") =>
+        new BytesBody(Content: bytes, ContentType: contentType);
 
     /// <summary>Text, UTF-8 encoded.</summary>
     public static HttpBody Text(string text, string contentType = "text/plain; charset=utf-8") =>
-        new BytesBody(Encoding.UTF8.GetBytes(text), contentType);
+        new BytesBody(Content: Encoding.UTF8.GetBytes(text), ContentType: contentType);
 
     /// <summary>
     ///     <paramref name="value" /> serialized now, with a source-generated
@@ -41,7 +42,10 @@ public abstract record HttpBody
     ///     <see cref="JsonSerializerOptions" /> is what keeps this assembly trim- and AOT-clean.
     /// </summary>
     public static HttpBody Json<T>(T value, JsonTypeInfo<T> typeInfo) =>
-        new BytesBody(JsonSerializer.SerializeToUtf8Bytes(value, typeInfo), "application/json; charset=utf-8");
+        new BytesBody(
+            Content: JsonSerializer.SerializeToUtf8Bytes(value: value, jsonTypeInfo: typeInfo),
+            ContentType: "application/json; charset=utf-8"
+        );
 
     /// <summary>An <c>application/x-www-form-urlencoded</c> body.</summary>
     public static HttpBody Form(ImmutableArray<QueryParam> fields) => new FormBody(fields);
@@ -52,14 +56,14 @@ public abstract record HttpBody
     ///     and one stream part makes the whole request one-shot.
     /// </summary>
     public static HttpBody Multipart(params ReadOnlySpan<MultipartPart> parts) =>
-        new MultipartBody([..parts]);
+        new MultipartBody([.. parts]);
 
     /// <summary>
     ///     A stream, read once as it is sent. Not replayable — a request carrying one is never
     ///     retried and never replayed after a 401, and the caller owns disposing it.
     /// </summary>
     public static HttpBody Stream(Stream stream, string contentType = "application/octet-stream") =>
-        new StreamBody(stream, contentType);
+        new StreamBody(Content: stream, ContentType: contentType);
 
     /// <summary>Empty body.</summary>
     public sealed record NoBody : HttpBody
@@ -98,8 +102,11 @@ public abstract record HttpBody
             get
             {
                 foreach (var part in Parts)
+                {
                     if (!part.Content.IsReplayable)
                         return false;
+                }
+
                 return true;
             }
         }
@@ -118,17 +125,25 @@ public sealed record MultipartPart(string Name, HttpBody Content, string? FileNa
 {
     /// <summary>A plain form field.</summary>
     public static MultipartPart Field(string name, string value) =>
-        new(name, HttpBody.Text(value));
+        new(Name: name, Content: HttpBody.Text(value));
 
     /// <summary>A file part from bytes in hand. Replayable, so the request stays retryable.</summary>
     public static MultipartPart File(
         string name, string fileName, ReadOnlyMemory<byte> bytes,
         string contentType = "application/octet-stream") =>
-        new(name, HttpBody.Bytes(bytes, contentType), fileName);
+        new(
+            Name: name,
+            Content: HttpBody.Bytes(bytes: bytes, contentType: contentType),
+            FileName: fileName
+        );
 
     /// <summary>A file part streamed from <paramref name="stream" />. One-shot: the request is never retried.</summary>
     public static MultipartPart File(
         string name, string fileName, Stream stream,
         string contentType = "application/octet-stream") =>
-        new(name, HttpBody.Stream(stream, contentType), fileName);
+        new(
+            Name: name,
+            Content: HttpBody.Stream(stream: stream, contentType: contentType),
+            FileName: fileName
+        );
 }

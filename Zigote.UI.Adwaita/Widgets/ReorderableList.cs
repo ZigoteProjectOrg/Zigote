@@ -41,7 +41,8 @@ public sealed class AdwReorderableList : Widget
     // target so the handle can actually be grabbed.
     private float Grip => _compact ? AdwTouchMetrics.MinTarget : PointerGripWidth;
 
-    private float RowH => _compact ? MathF.Max(x: RowHeight, y: AdwTouchMetrics.MinTarget) : RowHeight;
+    private float RowH =>
+        _compact ? MathF.Max(x: RowHeight, y: AdwTouchMetrics.MinTarget) : RowHeight;
 
     public override Size Measure(Constraints c)
     {

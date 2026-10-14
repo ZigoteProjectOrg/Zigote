@@ -66,7 +66,8 @@ internal sealed class ArtImage : ComposedWidget
     ///     whole picture inside it.
     /// </param>
     /// <param name="spinner">Off when something else already stands in for the picture while it loads.</param>
-    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true, bool cover = false, bool spinner = true)
+    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true, bool cover = false,
+        bool spinner = true)
     {
         _piece = piece;
         _maxDim = maxDim;
@@ -80,8 +81,15 @@ internal sealed class ArtImage : ComposedWidget
             OnFailed = error => Settle(state: ArtState.Failed, reason: Describe(error)),
         };
         // Tagged with this picture itself: whatever opens it flies it out of here by that tag.
-        _fade = new AnimatedOpacity(opacity: 0f, child: new AdwHero(tag: this, child: Picture()), duration: 0.4f);
-        _overlay = new AnimatedSwitcher(child: spinner ? Busy() : SizedBox.Shrink(), duration: 0.25f);
+        _fade = new AnimatedOpacity(
+            opacity: 0f,
+            child: new AdwHero(tag: this, child: Picture()),
+            duration: 0.4f
+        );
+        _overlay = new AnimatedSwitcher(
+            child: spinner ? Busy() : SizedBox.Shrink(),
+            duration: 0.25f
+        );
     }
 
     /// <summary>The corner a framed picture is clipped to.</summary>
@@ -154,7 +162,13 @@ internal sealed class ArtImage : ComposedWidget
             onButtonClicked: raised.OnButtonClicked
         );
         var copy = ArtActions.CopyButton(piece: _piece, toast: toast, theme: theme);
-        var save = ArtActions.SaveButton(piece: _piece, toast: toast, theme: theme, saving: _saving, done: QueueHover);
+        var save = ArtActions.SaveButton(
+            piece: _piece,
+            toast: toast,
+            theme: theme,
+            saving: _saving,
+            done: QueueHover
+        );
         _hot = [_card, copy, save];
         foreach (var button in _hot.AsSpan(1))
         {
@@ -167,7 +181,12 @@ internal sealed class ArtImage : ComposedWidget
             };
         }
 
-        _buttons = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min) { Children = { copy, save } };
+        _buttons = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min) {
+            Children = {
+                copy,
+                save,
+            },
+        };
         return new Stack {
             Children = {
                 _card,
@@ -184,9 +203,12 @@ internal sealed class ArtImage : ComposedWidget
     private void QueueHover() => App.Active?.Post(() =>
         {
             bool show = State.Peek() == ArtState.Ready &&
-                        (_saving.Peek() >= 0f || Array.Exists(array: _hot, match: static p => p.Hovered));
+                        (_saving.Peek() >= 0f || Array.Exists(
+                            array: _hot,
+                            match: static p => p.Hovered
+                        ));
             var next = show && _buttons is not null ? _buttons : _idle;
-            if (!ReferenceEquals(_actions.Child, next)) _actions.Child = next;
+            if (!ReferenceEquals(objA: _actions.Child, objB: next)) _actions.Child = next;
         }
     );
 
@@ -198,7 +220,8 @@ internal sealed class ArtImage : ComposedWidget
         // the HttpError back out.
         _image.LoadAsync(
             fetch: async ct =>
-                (await ArtSource.Http.BytesAsync(HttpRequest.Get(_piece.Url), ct).ConfigureAwait(false))
+                (await ArtSource.Http.BytesAsync(spec: HttpRequest.Get(_piece.Url), ct: ct)
+                    .ConfigureAwait(false))
                 .Unwrap(),
             maxDim: _maxDim
         );
@@ -231,7 +254,11 @@ internal sealed class ArtImage : ComposedWidget
         var picture = new Stack {
             // Unframed means the viewer, where the picture fills what it is given — scaled up too,
             // so a small original lands where its thumbnail did instead of shrinking on arrival.
-            Children = { _cover || !_chrome ? new Cover(image: _image, cover: _cover) : new Center { Child = _image } },
+            Children = {
+                _cover || !_chrome
+                    ? new Cover(image: _image, cover: _cover)
+                    : new Center { Child = _image },
+            },
         };
         if (_chrome)
         {
@@ -264,7 +291,7 @@ internal sealed class Cover(Image image, bool cover = true) : Widget
 
     public override Size Measure(Constraints c)
     {
-        var (w, h) = image.TextureSize;
+        (uint w, uint h) = image.TextureSize;
         if (w == 0 || h == 0 || !float.IsFinite(c.MaxWidth) || !float.IsFinite(c.MaxHeight))
         {
             // Nothing decoded yet, or no frame to cover: behave like the image itself.
@@ -281,7 +308,12 @@ internal sealed class Cover(Image image, bool cover = true) : Widget
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
         image.Layout(
             new Offset(
                 x: origin.X + ((_size.Width - _picture.Width) / 2f),

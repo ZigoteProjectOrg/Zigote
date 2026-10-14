@@ -24,9 +24,16 @@ public class AbiManifestTests
     private static string? FindManifest()
     {
         // Walk up from the test binary to the repo root, then into the engine's build output.
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory);
+             dir is not null;
+             dir = dir.Parent)
         {
-            string candidate = Path.Combine(dir.FullName, "Zigote.Engine", "zig-out", "ffi-manifest.json");
+            string candidate = Path.Combine(
+                path1: dir.FullName,
+                path2: "Zigote.Engine",
+                path3: "zig-out",
+                path4: "ffi-manifest.json"
+            );
             if (File.Exists(candidate)) return candidate;
         }
 
@@ -40,7 +47,11 @@ public class AbiManifestTests
         bool upper = true;
         foreach (char c in snake)
         {
-            if (c == '_') { upper = true; continue; }
+            if (c == '_')
+            {
+                upper = true;
+                continue;
+            }
 
             sb.Append(upper ? char.ToUpperInvariant(c) : c);
             upper = false;
@@ -55,7 +66,7 @@ public class AbiManifestTests
         string[] candidates = zigName == "ZgGlyphRunQuad"
             ? ["ZgGlyphRunQuad", zigName]
             : [zigName];
-        var asm = typeof(Zigote.Core.Native.ZgEvent).Assembly;
+        var asm = typeof(Core.Native.ZgEvent).Assembly;
         foreach (string name in candidates)
         {
             var t = asm.GetType("Zigote.Core.Native." + name);
@@ -69,8 +80,8 @@ public class AbiManifestTests
     public void EveryMirroredStruct_MatchesTheZigLayoutExactly()
     {
         Assert.SkipWhen(
-            ManifestPath is null,
-            "ffi-manifest.json not found — run `zig build ffi-manifest` in Zigote.Engine."
+            condition: ManifestPath is null,
+            reason: "ffi-manifest.json not found — run `zig build ffi-manifest` in Zigote.Engine."
         );
 
         using var doc = JsonDocument.Parse(File.ReadAllText(ManifestPath!));
@@ -90,7 +101,7 @@ public class AbiManifestTests
 
             checkedStructs++;
             int zigSize = t.GetProperty("size").GetInt32();
-            Assert.Equal(zigSize, Marshal.SizeOf(mirror));
+            Assert.Equal(expected: zigSize, actual: Marshal.SizeOf(mirror));
 
             foreach (var f in t.GetProperty("fields").EnumerateArray())
             {
@@ -98,11 +109,14 @@ public class AbiManifestTests
                 int zigOffset = f.GetProperty("offset").GetInt32();
 
                 // Padding fields exist to pin layout and are not mirrored.
-                if (zigField.StartsWith("pad", StringComparison.Ordinal)) continue;
+                if (zigField.StartsWith(
+                        value: "pad",
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
 
                 var member = mirror.GetField(
-                    ToPascal(zigField),
-                    BindingFlags.Public | BindingFlags.Instance
+                    name: ToPascal(zigField),
+                    bindingAttr: BindingFlags.Public | BindingFlags.Instance
                 );
 
                 // A C# mirror may deliberately alias a Zig field under another name (the paint
@@ -112,21 +126,31 @@ public class AbiManifestTests
                 {
                     bool someFieldAtOffset = mirror
                         .GetFields(BindingFlags.Public | BindingFlags.Instance)
-                        .Any(x => (int)Marshal.OffsetOf(mirror, x.Name) == zigOffset);
+                        .Any(x => (int)Marshal.OffsetOf(t: mirror, fieldName: x.Name) == zigOffset);
                     Assert.True(
-                        someFieldAtOffset,
+                        condition: someFieldAtOffset,
+                        userMessage:
                         $"{zigName}.{zigField} (offset {zigOffset}) has no C# field at that offset"
                     );
                     continue;
                 }
 
                 checkedFields++;
-                Assert.Equal(zigOffset, (int)Marshal.OffsetOf(mirror, member.Name));
+                Assert.Equal(
+                    expected: zigOffset,
+                    actual: (int)Marshal.OffsetOf(t: mirror, fieldName: member.Name)
+                );
             }
         }
 
         // Guard against the whole thing passing vacuously (a renamed namespace, an empty manifest).
-        Assert.True(checkedStructs >= 6, $"only {checkedStructs} structs were checked");
-        Assert.True(checkedFields >= 80, $"only {checkedFields} fields were checked");
+        Assert.True(
+            condition: checkedStructs >= 6,
+            userMessage: $"only {checkedStructs} structs were checked"
+        );
+        Assert.True(
+            condition: checkedFields >= 80,
+            userMessage: $"only {checkedFields} fields were checked"
+        );
     }
 }

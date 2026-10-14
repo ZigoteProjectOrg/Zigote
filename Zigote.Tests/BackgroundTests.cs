@@ -339,7 +339,14 @@ public class BackgroundTests
         using var background = Background.Manual(() => now);
         int ran = 0;
         for (int i = 0; i < 10; i++)
-            background.Post(ui: () => { ran++; now += ms; }, deliver: Deliver.WhenIdle);
+            background.Post(
+                ui: () =>
+                {
+                    ran++;
+                    now += ms;
+                },
+                deliver: Deliver.WhenIdle
+            );
 
         now += 7 * ms;
         Assert.Equal(expected: TimeSpan.FromMilliseconds(7), actual: background.OldestIdleWait);

@@ -12,7 +12,12 @@ namespace Zigote.Tests;
 public class AdwSpinButtonInputTests
 {
     private static void Key(AdwSpinButton spin, KeyCode key) =>
-        spin.OnKey(keyChar: '\0', scancode: (uint)key, down: true, mods: default);
+        spin.OnKey(
+            keyChar: '\0',
+            scancode: (uint)key,
+            down: true,
+            mods: default
+        );
 
     private static string? Shown(AdwSpinButton spin)
     {
@@ -25,7 +30,13 @@ public class AdwSpinButtonInputTests
     public void TypedNumberCommitsOnEnterAndReportsOnce()
     {
         var seen = new List<double>();
-        var spin = new AdwSpinButton(value: 440, min: 415, max: 466, step: 1, onChanged: seen.Add);
+        var spin = new AdwSpinButton(
+            value: 440,
+            min: 415,
+            max: 466,
+            step: 1,
+            onChanged: seen.Add
+        );
         spin.OnTextInput("445");
         Assert.Equal(expected: 440, actual: spin.Value); // nothing changes until commit
         Key(spin: spin, key: KeyCode.Enter);
@@ -62,9 +73,17 @@ public class AdwSpinButtonInputTests
     [Fact]
     public void DecimalsFollowTheStepAndAcceptACommaSeparator()
     {
-        var spin = new AdwSpinButton(value: 0, min: -5, max: 5, step: 0.1);
+        var spin = new AdwSpinButton(
+            value: 0,
+            min: -5,
+            max: 5,
+            step: 0.1
+        );
         spin.OnTextInput("-1,2567.-");
-        Assert.Equal(expected: "-1.2", actual: Shown(spin)); // one separator, one decimal, sign first only
+        Assert.Equal(
+            expected: "-1.2",
+            actual: Shown(spin)
+        ); // one separator, one decimal, sign first only
         Key(spin: spin, key: KeyCode.Enter);
         Assert.Equal(expected: -1.2, actual: spin.Value, precision: 9);
     }
@@ -73,7 +92,13 @@ public class AdwSpinButtonInputTests
     public void EmptyOrUnfinishedTextRevertsWithoutReporting()
     {
         int calls = 0;
-        var spin = new AdwSpinButton(value: 0, min: -5, max: 5, step: 0.1, onChanged: _ => calls++);
+        var spin = new AdwSpinButton(
+            value: 0,
+            min: -5,
+            max: 5,
+            step: 0.1,
+            onChanged: _ => calls++
+        );
         spin.OnTextInput("-");
         Key(spin: spin, key: KeyCode.Enter);
         spin.OnTextInput("7");

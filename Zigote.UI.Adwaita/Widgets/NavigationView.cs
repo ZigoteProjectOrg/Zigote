@@ -135,9 +135,8 @@ public sealed class AdwNavigationView : ComposedWidget
         _moving = null;
         // A popped page is gone for good: drop its wrapper so it can be collected.
         foreach (var page in _built.Keys)
-        {
-            if (!_pages.Contains(page)) _built.Remove(page);
-        }
+            if (!_pages.Contains(page))
+                _built.Remove(page);
 
         _version.Value++; // collapse the transition stage back to the plain top page
     }
@@ -265,11 +264,20 @@ public sealed class AdwNavigationView : ComposedWidget
 
         public override void Layout(Offset origin)
         {
-            Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
             float t = T;
             // Whole pixels: a fractional page offset re-rasterises every glyph on it each frame.
-            under.Layout(new Offset(x: MathF.Round(origin.X - (t * Parallax * _size.Width)), y: origin.Y));
-            moving.Layout(new Offset(x: MathF.Round(origin.X + ((1f - t) * _size.Width)), y: origin.Y));
+            under.Layout(
+                new Offset(x: MathF.Round(origin.X - (t * Parallax * _size.Width)), y: origin.Y)
+            );
+            moving.Layout(
+                new Offset(x: MathF.Round(origin.X + ((1f - t) * _size.Width)), y: origin.Y)
+            );
         }
 
         public override void Paint(PaintList paint)

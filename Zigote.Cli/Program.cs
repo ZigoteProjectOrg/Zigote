@@ -102,7 +102,10 @@ public static class Program
     private static int Create(CreateVerb verb) =>
         verb.First switch {
             "app" => CreateApp(options: verb, name: RequireName(verb: verb, template: "app")),
-            "plugin" => CreatePlugin(options: verb, name: RequireName(verb: verb, template: "plugin")),
+            "plugin" => CreatePlugin(
+                options: verb,
+                name: RequireName(verb: verb, template: "plugin")
+            ),
             // Two bare words is a typo'd template, not a name — naming the app after the first
             // one and silently dropping the second would hide the mistake.
             _ when verb.Second is not null => throw new CliError(
@@ -214,7 +217,9 @@ public static class Program
         files.Report();
         Console.WriteLine();
         Console.WriteLine($"  cd {name}/example && zigote run");
-        Console.WriteLine($"  dotnet pack {name}/{name}                        # ship it as a NuGet package");
+        Console.WriteLine(
+            $"  dotnet pack {name}/{name}                        # ship it as a NuGet package"
+        );
         return 0;
     }
 
@@ -295,7 +300,9 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine("  zigote run                                                 # deploy + hot reload");
+        Console.WriteLine(
+            "  zigote run                                                 # deploy + hot reload"
+        );
         Console.WriteLine(
             $"  dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device"
         );
@@ -338,11 +345,19 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine("  zigote device list                                           # simulators too");
-        Console.WriteLine("  zigote run --device \"iPhone 15\"                             # a booted simulator");
-        Console.WriteLine($"  zigote build ipa --team <TEAMID>                             # a signed device build");
+        Console.WriteLine(
+            "  zigote device list                                           # simulators too"
+        );
+        Console.WriteLine(
+            "  zigote run --device \"iPhone 15\"                             # a booted simulator"
+        );
+        Console.WriteLine(
+            $"  zigote build ipa --team <TEAMID>                             # a signed device build"
+        );
         Console.WriteLine();
-        Console.WriteLine("iOS needs macOS with Xcode. A device build links the engine INTO the app");
+        Console.WriteLine(
+            "iOS needs macOS with Xcode. A device build links the engine INTO the app"
+        );
         Console.WriteLine("binary (iOS rejects a loose dylib); the simulator keeps the dylib.");
         return 0;
     }

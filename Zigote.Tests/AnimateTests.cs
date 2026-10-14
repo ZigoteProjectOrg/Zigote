@@ -34,14 +34,17 @@ public class AnimateTests
         // Mid-rotation the child has to go through the native transform stack; at the end of the
         // timeline the rotation is zero again and the cheap translate path takes over.
         var a = Box().Animate().Rotate(begin: -0.25f, end: 0f);
-        var mid = Paint(a, Constraints.Tight(width: 20, height: 20));
-        Assert.Contains(mid.DebugCommands, c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush);
+        var mid = Paint(w: a, c: Constraints.Tight(width: 20, height: 20));
+        Assert.Contains(
+            collection: mid.DebugCommands,
+            filter: c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush
+        );
 
         a.Controller.Complete();
-        var end = Paint(a, Constraints.Tight(width: 20, height: 20));
+        var end = Paint(w: a, c: Constraints.Tight(width: 20, height: 20));
         Assert.DoesNotContain(
-            end.DebugCommands,
-            c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush
+            collection: end.DebugCommands,
+            filter: c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush
         );
     }
 

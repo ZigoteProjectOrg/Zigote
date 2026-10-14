@@ -25,7 +25,7 @@ public enum HttpVerb
     Delete,
 
     /// <summary>OPTIONS.</summary>
-    Options
+    Options,
 }
 
 /// <summary>Verb facts the pipeline needs. Pure lookups, no allocation.</summary>
@@ -38,14 +38,14 @@ public static class HttpVerbExtensions
     ///     knows whether the server dedupes it.
     /// </summary>
     public static bool IsIdempotent(this HttpVerb verb) =>
-        verb is HttpVerb.Get or HttpVerb.Head or HttpVerb.Put or HttpVerb.Delete or HttpVerb.Options;
+        verb is HttpVerb.Get or HttpVerb.Head or HttpVerb.Put or HttpVerb.Delete
+            or HttpVerb.Options;
 
     /// <summary>Whether a response to this verb is cacheable at all (RFC 9111 §3, our subset).</summary>
     public static bool IsCacheable(this HttpVerb verb) => verb is HttpVerb.Get or HttpVerb.Head;
 
     /// <summary>The BCL method object. Cached statics — never allocates.</summary>
-    public static HttpMethod ToMethod(this HttpVerb verb) => verb switch
-    {
+    public static HttpMethod ToMethod(this HttpVerb verb) => verb switch {
         HttpVerb.Get => HttpMethod.Get,
         HttpVerb.Head => HttpMethod.Head,
         HttpVerb.Post => HttpMethod.Post,
@@ -53,12 +53,11 @@ public static class HttpVerbExtensions
         HttpVerb.Patch => HttpMethod.Patch,
         HttpVerb.Delete => HttpMethod.Delete,
         HttpVerb.Options => HttpMethod.Options,
-        _ => throw new ArgumentOutOfRangeException(nameof(verb))
+        _ => throw new ArgumentOutOfRangeException(nameof(verb)),
     };
 
     /// <summary>The wire token, for cache keys and log lines.</summary>
-    public static string Token(this HttpVerb verb) => verb switch
-    {
+    public static string Token(this HttpVerb verb) => verb switch {
         HttpVerb.Get => "GET",
         HttpVerb.Head => "HEAD",
         HttpVerb.Post => "POST",
@@ -66,6 +65,6 @@ public static class HttpVerbExtensions
         HttpVerb.Patch => "PATCH",
         HttpVerb.Delete => "DELETE",
         HttpVerb.Options => "OPTIONS",
-        _ => throw new ArgumentOutOfRangeException(nameof(verb))
+        _ => throw new ArgumentOutOfRangeException(nameof(verb)),
     };
 }

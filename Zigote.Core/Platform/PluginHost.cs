@@ -98,9 +98,7 @@ public static class PluginHost
                 Plugins[existing] = plugin;
             }
             else
-            {
                 Plugins.Add(plugin);
-            }
 
             startNow = _started;
         }
@@ -213,10 +211,13 @@ public static class PluginHost
     private struct NativeHostApi
     {
         public uint Version;
-        public nint ChannelRegister;   // bool (*)(const char* name, int (*handler)(const char*, char*, size_t))
+
+        public nint
+            ChannelRegister; // bool (*)(const char* name, int (*handler)(const char*, char*, size_t))
+
         public nint ChannelUnregister; // void (*)(const char* name)
-        public nint ChannelSend;       // bool (*)(const char* name, const char* payload)
-        public nint ChannelHas;        // bool (*)(const char* name)
+        public nint ChannelSend; // bool (*)(const char* name, const char* payload)
+        public nint ChannelHas; // bool (*)(const char* name)
     }
 
     /// <summary>
@@ -246,8 +247,10 @@ public static class PluginHost
             );
             var api = new NativeHostApi {
                 Version = 1,
-                ChannelRegister = NativeLibrary.GetExport(handle: engine, name: "zigote_channel_register"),
-                ChannelUnregister = NativeLibrary.GetExport(handle: engine, name: "zigote_channel_unregister"),
+                ChannelRegister =
+                    NativeLibrary.GetExport(handle: engine, name: "zigote_channel_register"),
+                ChannelUnregister =
+                    NativeLibrary.GetExport(handle: engine, name: "zigote_channel_unregister"),
                 ChannelSend = NativeLibrary.GetExport(handle: engine, name: "zigote_channel_send"),
                 ChannelHas = NativeLibrary.GetExport(handle: engine, name: "zigote_channel_has"),
             };
@@ -258,7 +261,11 @@ public static class PluginHost
                 return false;
             }
 
-            NativeLibrary.TryGetExport(handle: library, name: "zigote_plugin_shutdown", address: out nint shutdown);
+            NativeLibrary.TryGetExport(
+                handle: library,
+                name: "zigote_plugin_shutdown",
+                address: out nint shutdown
+            );
             lock (Gate) NativePlugins.Add((library, shutdown));
             return true;
         }

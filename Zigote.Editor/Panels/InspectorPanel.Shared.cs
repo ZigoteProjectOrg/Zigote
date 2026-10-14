@@ -13,7 +13,6 @@ using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 // AdwFilePickerDialog: the in-app file browser. GTK's file chooser is a shell portal with no
 // libadwaita widget behind it, so this stays Material until one exists here.
-
 using Zigote.Editor.Widgets;
 
 namespace Zigote.Editor.Panels;
@@ -579,18 +578,42 @@ public sealed partial class InspectorPanel
         }
 
         public static PropRow Vec3(string label, NodeBind<Vec3> bind, ThemeData theme) =>
-            VecRow(label: label, current: bind.Value, set: bind.Set, axes: "XYZ", theme: theme);
+            VecRow(
+                label: label,
+                current: bind.Value,
+                set: bind.Set,
+                axes: "XYZ",
+                theme: theme
+            );
 
         public static PropRow Vec3Color(string label, NodeBind<Vec3> bind, ThemeData theme) =>
-            VecRow(label: label, current: bind.Value, set: bind.Set, axes: "RGB", theme: theme);
+            VecRow(
+                label: label,
+                current: bind.Value,
+                set: bind.Set,
+                axes: "RGB",
+                theme: theme
+            );
 
         public static PropRow Vec3Color(string label, Vec3 current, Action<Vec3> setter,
             ThemeData theme) =>
-            VecRow(label: label, current: current, set: setter, axes: "RGB", theme: theme);
+            VecRow(
+                label: label,
+                current: current,
+                set: setter,
+                axes: "RGB",
+                theme: theme
+            );
 
         public static PropRow Vec3(string label, Vec3 current, Action<Vec3> setter,
             ThemeData theme) =>
-            VecRow(label: label, current: current, set: setter, axes: "XYZ", theme: theme);
+            VecRow(
+                label: label,
+                current: current,
+                set: setter,
+                axes: "XYZ",
+                theme: theme
+            );
 
         // Axis tints — X/R red, Y/G green, Z/B blue, matching the viewport gizmo.
         private static readonly Color[] AxisColors = [
@@ -617,7 +640,10 @@ public sealed partial class InspectorPanel
             {
                 int axis = i;
                 var field = new AdwEntry {
-                    Text = value[i].ToString(format: "0.###", provider: CultureInfo.InvariantCulture),
+                    Text = value[i].ToString(
+                        format: "0.###",
+                        provider: CultureInfo.InvariantCulture
+                    ),
                     Compact = true,
                     OnChanged = s =>
                     {

@@ -274,9 +274,10 @@ public class RichTextAllocationTests
 
         const int frames = 500;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        });
+            {
+                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+            }
+        );
         long allocated = measured;
 
         Assert.True(
@@ -302,9 +303,10 @@ public class RichTextAllocationTests
 
         const int frames = 500;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        });
+            {
+                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+            }
+        );
         long allocated = measured;
 
         Assert.True(
@@ -330,10 +332,11 @@ public class RichTextAllocationTests
             root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
 
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < 500; i++)
-                root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
-        });
+            {
+                for (int i = 0; i < 500; i++)
+                    root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
+            }
+        );
         long allocated = measured;
         root.OnPointerUp(new Offset(x: 60f, y: 30f));
 

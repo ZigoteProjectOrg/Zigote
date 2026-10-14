@@ -492,7 +492,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>Whether the window is fullscreen now — the OS can leave fullscreen on its own.</summary>
-    public bool WindowIsFullscreen(uint windowId) => !_disposed && NativeEngine.WindowIsFullscreen(windowId);
+    public bool WindowIsFullscreen(uint windowId) =>
+        !_disposed && NativeEngine.WindowIsFullscreen(windowId);
 
     /// <summary>Keep the window above other applications' windows (picture-in-picture).</summary>
     public void WindowSetAlwaysOnTop(uint windowId, bool on)
@@ -615,7 +616,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     other OSes) this opens an ordinary window of the same size and
     ///     <see cref="NativeWindow.IsLayer" /> is false — a shell can be developed anywhere.
     /// </summary>
-    public NativeWindow CreateLayerWindow(string title, uint width, uint height, LayerOptions layer, ulong outputId = 0)
+    public NativeWindow CreateLayerWindow(string title, uint width, uint height, LayerOptions layer,
+        ulong outputId = 0)
     {
         EnsureReady();
         byte[] titleBytes = Utf8Z(title);
@@ -625,16 +627,16 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* tp = titleBytes)
         {
             result = NativeEngine.WindowCreateLayerOn(
-                width,
-                height,
-                tp,
-                (uint)layer.Layer,
-                (uint)layer.Anchor,
-                layer.ExclusiveZone,
-                (uint)layer.Keyboard,
-                outputId,
-                out window,
-                out isLayer
+                width: width,
+                height: height,
+                title: tp,
+                layer: (uint)layer.Layer,
+                anchor: (uint)layer.Anchor,
+                exclusiveZone: layer.ExclusiveZone,
+                keyboard: (uint)layer.Keyboard,
+                outputId: outputId,
+                outWindow: out window,
+                outIsLayer: out isLayer
             );
         }
 
@@ -662,11 +664,20 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>Press or release an evdev keycode (KEY_A = 30) on the virtual keyboard.</summary>
-    public void VirtualKeyboardKey(uint keycode, bool pressed) => NativeEngine.VkbdKey(keycode, pressed ? 1u : 0u);
+    public void VirtualKeyboardKey(uint keycode, bool pressed) => NativeEngine.VkbdKey(
+        keycode: keycode,
+        pressed: pressed ? 1u : 0u
+    );
 
     /// <summary>Set the virtual keyboard's modifier state (xkb masks: Shift 1, Ctrl 4, Alt 8, Super 64).</summary>
-    public void VirtualKeyboardModifiers(uint depressed, uint latched = 0, uint locked = 0, uint group = 0) =>
-        NativeEngine.VkbdModifiers(depressed, latched, locked, group);
+    public void VirtualKeyboardModifiers(uint depressed, uint latched = 0, uint locked = 0,
+        uint group = 0) =>
+        NativeEngine.VkbdModifiers(
+            depressed: depressed,
+            latched: latched,
+            locked: locked,
+            group: group
+        );
 
     // ── Session lock (ext-session-lock-v1) ──
 
@@ -687,9 +698,18 @@ public sealed unsafe class ZigoteEngine : IDisposable
         byte[] titleBytes = Utf8Z(title);
         ulong window;
         ZgResult result;
-        fixed (byte* tp = titleBytes) result = NativeEngine.WindowCreateLockSurface(outputId, tp, out window);
+        fixed (byte* tp = titleBytes)
+            result = NativeEngine.WindowCreateLockSurface(
+                outputId: outputId,
+                title: tp,
+                outWindow: out window
+            );
         if (result != ZgResult.Ok || window == 0) return null;
-        return new NativeWindow(engine: this, window: window, id: NativeEngine.WindowId(windowHandle: window)) { IsLayer = false };
+        return new NativeWindow(
+            engine: this,
+            window: window,
+            id: NativeEngine.WindowId(windowHandle: window)
+        ) { IsLayer = false };
     }
 
     public bool SessionUnlock() => NativeEngine.SessionUnlock() == ZgStatus.Ok;
@@ -712,11 +732,33 @@ public sealed unsafe class ZigoteEngine : IDisposable
         Span<byte> name = stackalloc byte[64];
         for (uint i = 0; i < n; i++)
         {
-            ulong id; uint len, w, h; float scale; ZgStatus st;
-            fixed (byte* np = name) st = NativeEngine.OutputGet(i, out id, np, 64, out len, out w, out h, out scale);
+            ulong id;
+            uint len, w, h;
+            float scale;
+            ZgStatus st;
+            fixed (byte* np = name)
+                st = NativeEngine.OutputGet(
+                    index: i,
+                    outId: out id,
+                    name: np,
+                    nameCap: 64,
+                    outNameLen: out len,
+                    outW: out w,
+                    outH: out h,
+                    outScale: out scale
+                );
             if (st != ZgStatus.Ok) break;
-            list.Add(new OutputInfo(id, System.Text.Encoding.UTF8.GetString(name[..(int)len]), w, h, scale));
+            list.Add(
+                new OutputInfo(
+                    Id: id,
+                    Name: Encoding.UTF8.GetString(name[..(int)len]),
+                    Width: w,
+                    Height: h,
+                    Scale: scale
+                )
+            );
         }
+
         return list;
     }
 
@@ -729,11 +771,31 @@ public sealed unsafe class ZigoteEngine : IDisposable
         Span<byte> name = stackalloc byte[64];
         for (uint i = 0; i < n; i++)
         {
-            ulong id; uint len, state, caps; ZgStatus st;
-            fixed (byte* np = name) st = NativeEngine.WorkspaceGet(i, out id, np, 64, out len, out state, out caps);
+            ulong id;
+            uint len, state, caps;
+            ZgStatus st;
+            fixed (byte* np =
+                       name)
+                st = NativeEngine.WorkspaceGet(
+                    index: i,
+                    outId: out id,
+                    name: np,
+                    nameCap: 64,
+                    outNameLen: out len,
+                    outState: out state,
+                    outCaps: out caps
+                );
             if (st != ZgStatus.Ok) break;
-            list.Add(new WorkspaceInfo(id, System.Text.Encoding.UTF8.GetString(name[..(int)len]), (WorkspaceState)state, (caps & 1) != 0));
+            list.Add(
+                new WorkspaceInfo(
+                    Id: id,
+                    Name: Encoding.UTF8.GetString(name[..(int)len]),
+                    State: (WorkspaceState)state,
+                    CanActivate: (caps & 1) != 0
+                )
+            );
         }
+
         return list;
     }
 
@@ -769,20 +831,34 @@ public sealed unsafe class ZigoteEngine : IDisposable
             ZgStatus st;
             fixed (byte* tp = title)
             fixed (byte* ap = appId)
-                st = NativeEngine.ToplevelGet(i, out id, out state, tp, 256, out tl, ap, 256, out al);
+                st = NativeEngine.ToplevelGet(
+                    index: i,
+                    outId: out id,
+                    outState: out state,
+                    title: tp,
+                    titleCap: 256,
+                    outTitleLen: out tl,
+                    appId: ap,
+                    appIdCap: 256,
+                    outAppIdLen: out al
+                );
             if (st != ZgStatus.Ok) break;
-            list.Add(new ToplevelInfo(
-                Id: id,
-                AppId: System.Text.Encoding.UTF8.GetString(appId[..(int)al]),
-                Title: System.Text.Encoding.UTF8.GetString(title[..(int)tl]),
-                State: (ToplevelState)state));
+            list.Add(
+                new ToplevelInfo(
+                    Id: id,
+                    AppId: Encoding.UTF8.GetString(appId[..(int)al]),
+                    Title: Encoding.UTF8.GetString(title[..(int)tl]),
+                    State: (ToplevelState)state
+                )
+            );
         }
+
         return list;
     }
 
     /// <summary>Ask the compositor to act on a toplevel.</summary>
     public bool ToplevelAction(ulong id, ToplevelAction action) =>
-        NativeEngine.ToplevelAction(id, (uint)action) == ZgStatus.Ok;
+        NativeEngine.ToplevelAction(id: id, action: (uint)action) == ZgStatus.Ok;
 
     /// <summary>
     ///     The native parent handle of a window, for embedding platform child views (webviews,
@@ -866,7 +942,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         {
             ref readonly var raw = ref _eventBuf[i];
             if (textBase == IntPtr.Zero && (EventKind)raw.Kind is EventKind.TextInput
-                    or EventKind.TextEditing or EventKind.DropText or EventKind.DropFile)
+                or EventKind.TextEditing or EventKind.DropText or EventKind.DropFile)
                 textBase = PollTextBase();
 
             // A secondary window's resize must not clobber the main window's cached size. A display
@@ -1034,13 +1110,21 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public bool SetClipboardData(string mimeType, ReadOnlySpan<byte> data)
     {
         Span<byte> mime = stackalloc byte[128];
-        if (data.IsEmpty || !Encoding.UTF8.TryGetBytes(chars: mimeType, bytes: mime[..^1], bytesWritten: out int n))
+        if (data.IsEmpty || !Encoding.UTF8.TryGetBytes(
+                chars: mimeType,
+                bytes: mime[..^1],
+                bytesWritten: out int n
+            ))
             return false;
         mime[n] = 0;
         fixed (byte* m = mime)
         fixed (byte* p = data)
         {
-            return NativeEngine.SetClipboardData(mimePtr: m, dataPtr: p, dataLen: (nuint)data.Length) ==
+            return NativeEngine.SetClipboardData(
+                       mimePtr: m,
+                       dataPtr: p,
+                       dataLen: (nuint)data.Length
+                   ) ==
                    ZgStatus.Ok;
         }
     }
@@ -1306,7 +1390,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///         maintains a surface. A full-frame <see cref="UpdateTextureRgba" /> drops the copy again.
     ///     </para>
     /// </summary>
-    public static bool UpdateTextureRgbaRows(ulong textureHandle, ReadOnlySpan<byte> rgba, uint width,
+    public static bool UpdateTextureRgbaRows(ulong textureHandle, ReadOnlySpan<byte> rgba,
+        uint width,
         uint height, uint y0, uint y1)
     {
         var engine = Instance;
@@ -1850,9 +1935,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// </summary>
     public uint AudioEqCreate(int bandCount) => _disposed
         ? 0u
-        : NativeEngine.AudioEqCreate(
-            bandCount: (uint)Math.Max(val1: 1, val2: bandCount)
-        );
+        : NativeEngine.AudioEqCreate(bandCount: (uint)Math.Max(val1: 1, val2: bandCount));
 
     /// <summary>
     ///     Configure one band. Shelves take Q (converted to the RBJ slope inside the engine), matching
@@ -2570,7 +2653,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         byte[] buf = Encoding.UTF8.GetBytes(path);
         fixed (byte* p = buf)
-            return NativeEngine.CaptureSceneBmp(pathPtr: p, pathLen: (nuint)buf.Length) == ZgResult.Ok;
+            return NativeEngine.CaptureSceneBmp(pathPtr: p, pathLen: (nuint)buf.Length) ==
+                   ZgResult.Ok;
     }
 
     /// <summary>
@@ -2581,7 +2665,11 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public ulong CaptureUiTexture(uint width, uint height, float scale = 1f)
     {
         EnsureReady();
-        return NativeEngine.CaptureUiTexture(width: ClampDim(width), height: ClampDim(height), scale: scale);
+        return NativeEngine.CaptureUiTexture(
+            width: ClampDim(width),
+            height: ClampDim(height),
+            scale: scale
+        );
     }
 
     public bool CaptureUiBmp(string path, uint width, uint height, float scale = 1f)
@@ -2661,10 +2749,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         if (stream.IsEmpty) return ZgStatus.Ok;
 
-        fixed (byte* p = stream)
-        {
-            return NativeEngine.SceneApply(stream: p, len: (nuint)stream.Length);
-        }
+        fixed (byte* p =
+                   stream) return NativeEngine.SceneApply(stream: p, len: (nuint)stream.Length);
     }
 
     // ── Render texture API ────────────────────────────────────────────────────
@@ -2769,7 +2855,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     the frame, and the present call. Wall durations on the calling thread — none is GPU
     ///     execution time. Not updated by frames that render the 3D scene.
     /// </summary>
-    public static void GetFrameTimings(out double acquireMs, out double encodeMs, out double presentMs)
+    public static void GetFrameTimings(out double acquireMs, out double encodeMs,
+        out double presentMs)
     {
         acquireMs = encodeMs = presentMs = 0;
         var engine = Instance;

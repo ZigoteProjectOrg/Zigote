@@ -36,6 +36,7 @@
         <ProjectReference Include="../../FilePicker/FilePicker/FilePicker.csproj"/>
         <ProjectReference Include="../../Geolocation/Geolocation/Geolocation.csproj"/>
         <ProjectReference Include="../../Haptics/Haptics/Haptics.csproj"/>
+        <ProjectReference Include="../../MediaSession/MediaSession/MediaSession.csproj"/>
         <ProjectReference Include="../../Notifications/Notifications/Notifications.csproj"/>
         <ProjectReference Include="../../PathProvider/PathProvider/PathProvider.csproj"/>
         <ProjectReference Include="../../Permissions/Permissions/Permissions.csproj"/>

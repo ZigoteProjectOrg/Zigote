@@ -50,7 +50,8 @@ public class WrapLayoutTests
     [Fact]
     public void CenterAlignment_CentresShortChildrenWithinTheirOwnRun()
     {
-        var wrap = new Wrap(spacing: 0, runSpacing: 0) { CrossAlignment = CrossAxisAlignment.Center };
+        var wrap =
+            new Wrap(spacing: 0, runSpacing: 0) { CrossAlignment = CrossAxisAlignment.Center };
         wrap.Children.Add(new SizedBox(width: 50f, height: 40f));
         wrap.Children.Add(new SizedBox(width: 50f, height: 20f)); // run 0: centred against 40
         wrap.Children.Add(new SizedBox(width: 50f, height: 10f)); // run 1: alone, so no shift

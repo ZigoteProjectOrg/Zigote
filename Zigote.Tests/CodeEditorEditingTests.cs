@@ -25,10 +25,20 @@ public class CodeEditorEditingTests
     }
 
     private static void Key(AdwCodeEditor e, uint scancode, Modifiers mods = Modifiers.None) =>
-        e.OnKey(keyChar: '\0', scancode: scancode, down: true, mods: mods);
+        e.OnKey(
+            keyChar: '\0',
+            scancode: scancode,
+            down: true,
+            mods: mods
+        );
 
     private static void Chord(AdwCodeEditor e, char key, Modifiers mods = Modifiers.Cmd) =>
-        e.OnKey(keyChar: key, scancode: 0, down: true, mods: mods);
+        e.OnKey(
+            keyChar: key,
+            scancode: 0,
+            down: true,
+            mods: mods
+        );
 
     private static void Type(AdwCodeEditor e, string text)
     {
@@ -42,7 +52,10 @@ public class CodeEditorEditingTests
         Chord(e: e, key: 'd'); // selects the word under the caret
         Chord(e: e, key: 'd');
         Chord(e: e, key: 'd');
-        Chord(e: e, key: 'd'); // wraps back onto the first: no fourth cursor, "foobar" is not a word match
+        Chord(
+            e: e,
+            key: 'd'
+        ); // wraps back onto the first: no fourth cursor, "foobar" is not a word match
         Type(e: e, text: "x");
         Assert.Equal(expected: "x foobar x\nx", actual: e.Text);
 
@@ -184,7 +197,10 @@ public class CodeEditorEditingTests
         var e = Editor("Bar bar\nbaz bar");
         Chord(e: e, key: 'f');
         Type(e: e, text: "bar"); // smart case: matches "Bar" too
-        Assert.Equal(expected: "Bar bar\nbaz bar", actual: e.Text); // typed into the bar, not the text
+        Assert.Equal(
+            expected: "Bar bar\nbaz bar",
+            actual: e.Text
+        ); // typed into the bar, not the text
         Key(e: e, scancode: Return);
         Key(e: e, scancode: Escape);
         Type(e: e, text: "X"); // the second match is selected
@@ -198,14 +214,50 @@ public class CodeEditorEditingTests
     }
 
     [Theory]
-    [InlineData("foo bar", 7, -1, 4)]
-    [InlineData("foo bar", 4, -1, 0)] // skips the space, then the word
-    [InlineData("foo.bar", 7, -1, 4)]
-    [InlineData("foo.bar", 4, -1, 3)] // punctuation is its own stop
-    [InlineData("foo  bar", 0, +1, 3)]
-    [InlineData("foo  bar", 3, +1, 8)]
-    [InlineData("éx y", 0, +1, 3)] // never lands inside a grapheme
-    public void WordBoundary_StopsWhereIdesDo(string text, int index, int direction, int expected) =>
+    [InlineData(
+        "foo bar",
+        7,
+        -1,
+        4
+    )]
+    [InlineData(
+        "foo bar",
+        4,
+        -1,
+        0
+    )] // skips the space, then the word
+    [InlineData(
+        "foo.bar",
+        7,
+        -1,
+        4
+    )]
+    [InlineData(
+        "foo.bar",
+        4,
+        -1,
+        3
+    )] // punctuation is its own stop
+    [InlineData(
+        "foo  bar",
+        0,
+        +1,
+        3
+    )]
+    [InlineData(
+        "foo  bar",
+        3,
+        +1,
+        8
+    )]
+    [InlineData(
+        "éx y",
+        0,
+        +1,
+        3
+    )] // never lands inside a grapheme
+    public void
+        WordBoundary_StopsWhereIdesDo(string text, int index, int direction, int expected) =>
         Assert.Equal(
             expected: expected,
             actual: TextNavigation.WordBoundary(text: text, index: index, direction: direction)

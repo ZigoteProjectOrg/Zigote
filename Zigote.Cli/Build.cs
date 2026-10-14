@@ -54,12 +54,14 @@ public static class Build
         GenerateAndroidIcons(
             head: head,
             source: IconSource(options),
-            name: Path.GetFileNameWithoutExtension(head).Replace(".Android", "")
+            name: Path.GetFileNameWithoutExtension(head).Replace(oldValue: ".Android", newValue: "")
         );
 
         var arguments = new List<string> {
-            "publish", head,
-            "--configuration", options.Debug ? "Debug" : "Release",
+            "publish",
+            head,
+            "--configuration",
+            options.Debug ? "Debug" : "Release",
             $"--property:ZigTargetRid={rid}",
             $"--property:AndroidPackageFormat={format}",
             // One version, three consumers. The code has to be an increasing integer that Play
@@ -77,7 +79,8 @@ public static class Build
                     "a release apk has to be signed, and no keystore was given.\n" +
                     "  Create one:  keytool -genkeypair -v -keystore release.keystore -alias upload \\\n" +
                     "                 -keyalg RSA -keysize 2048 -validity 10000\n" +
-                    "  Then:        zigote build " + format + " --keystore release.keystore --keystore-pass <pw> --key-alias upload\n" +
+                    "  Then:        zigote build " + format +
+                    " --keystore release.keystore --keystore-pass <pw> --key-alias upload\n" +
                     "  Or build an unsigned debug artifact with --debug."
                 );
             }
@@ -91,7 +94,9 @@ public static class Build
             arguments.Add(Path.GetFullPath(output));
         }
 
-        Console.WriteLine($"  {Path.GetFileNameWithoutExtension(head)}  {version}  →  {format} ({rid})");
+        Console.WriteLine(
+            $"  {Path.GetFileNameWithoutExtension(head)}  {version}  →  {format} ({rid})"
+        );
         return Shell.Dotnet(arguments);
     }
 
@@ -134,9 +139,9 @@ public static class Build
 
         string resources = Path.Combine(path1: Path.GetDirectoryName(head)!, path2: "Resources");
         foreach ((string folder, int size) in Densities)
-        {
-            icon.Resized(size).Save(Path.Combine(path1: resources, path2: folder, path3: "ic_launcher.png"));
-        }
+            icon.Resized(size).Save(
+                Path.Combine(path1: resources, path2: folder, path3: "ic_launcher.png")
+            );
 
         DeclareIconInManifest(head);
         Console.WriteLine(
@@ -162,7 +167,7 @@ public static class Build
         );
         if (!File.Exists(manifest)) return;
         string xml = File.ReadAllText(manifest);
-        if (xml.Contains("android:icon=", StringComparison.Ordinal)) return;
+        if (xml.Contains(value: "android:icon=", comparisonType: StringComparison.Ordinal)) return;
         File.WriteAllText(
             path: manifest,
             contents: xml.Replace(
@@ -218,13 +223,17 @@ public static class Build
         string version = AppVersion(options.Directory);
         string rid = options.Rid ?? DefaultRid(kind);
         var arguments = new List<string> {
-            "publish", project,
-            "--configuration", options.Debug ? "Debug" : "Release",
-            "--runtime", rid,
+            "publish",
+            project,
+            "--configuration",
+            options.Debug ? "Debug" : "Release",
+            "--runtime",
+            rid,
             $"--property:ZigTargetRid={rid}",
             // Self-contained: a user double-clicking this must not need a .NET install, which is the
             // difference between "an app" and "a thing that works on the machine that built it".
-            "--self-contained", "true",
+            "--self-contained",
+            "true",
             $"--property:Version={version}",
         };
         arguments.AddRange(AotArguments(options: options, rid: rid));
@@ -336,7 +345,8 @@ public static class Build
         // 256 at the AppDir root is what appimagetool reads; the hicolor copy is what a desktop
         // environment finds after the user installs the image.
         icon.Resized(256).Save(Path.Combine(path1: appDir, path2: $"{desktopId}.png"));
-        icon.Resized(256).Save(Path.Combine(
+        icon.Resized(256).Save(
+            Path.Combine(
                 path1: appDir,
                 path2: "usr/share/icons/hicolor/256x256/apps",
                 path3: $"{desktopId}.png"
@@ -392,7 +402,11 @@ public static class Build
 
     private static long DirectorySize(string directory) =>
         Directory
-            .EnumerateFiles(path: directory, searchPattern: "*", searchOption: SearchOption.AllDirectories)
+            .EnumerateFiles(
+                path: directory,
+                searchPattern: "*",
+                searchOption: SearchOption.AllDirectories
+            )
             .Sum(f => new FileInfo(f).Length);
 
     /// <summary>
@@ -415,8 +429,13 @@ public static class Build
             .FirstOrDefault();
         if (runtimeConfig is not null)
         {
-            candidates.Add(Path.GetFileName(runtimeConfig)
-                .Replace(oldValue: ".runtimeconfig.json", newValue: "", comparisonType: StringComparison.Ordinal)
+            candidates.Add(
+                Path.GetFileName(runtimeConfig)
+                    .Replace(
+                        oldValue: ".runtimeconfig.json",
+                        newValue: "",
+                        comparisonType: StringComparison.Ordinal
+                    )
             );
         }
 
@@ -425,9 +444,10 @@ public static class Build
             input: File.ReadAllText(project),
             pattern: @"<AssemblyName>\s*([^<\s]+)\s*</AssemblyName>"
         );
-        candidates.Add(assemblyName.Success
-            ? assemblyName.Groups[1].Value
-            : Path.GetFileNameWithoutExtension(project)
+        candidates.Add(
+            assemblyName.Success
+                ? assemblyName.Groups[1].Value
+                : Path.GetFileNameWithoutExtension(project)
         );
 
         foreach (string candidate in candidates)
@@ -447,7 +467,9 @@ public static class Build
     ///     embeds from $ARCH and knows only the uname words.
     /// </summary>
     private static string AppImageArch(string rid) =>
-        rid.EndsWith(value: "-arm64", comparisonType: StringComparison.Ordinal) ? "aarch64" : "x86_64";
+        rid.EndsWith(value: "-arm64", comparisonType: StringComparison.Ordinal)
+            ? "aarch64"
+            : "x86_64";
 
     /// <summary>appimagetool from --appimagetool, $ZIGOTE_APPIMAGETOOL, or PATH.</summary>
     private static string? AppImageTool(BuildVerb options)
@@ -461,8 +483,11 @@ public static class Build
                 return Path.GetFullPath(candidate);
         }
 
-        foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
-        foreach (string exe in (ReadOnlySpan<string>) ["appimagetool", "appimagetool-x86_64.AppImage"])
+        foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(
+                     Path.PathSeparator
+                 ))
+        foreach (string exe in (ReadOnlySpan<string>)
+                 ["appimagetool", "appimagetool-x86_64.AppImage"])
         {
             if (directory.Length == 0) continue;
             string candidate = Path.Combine(path1: directory, path2: exe);
@@ -480,17 +505,36 @@ public static class Build
     private static void CopyTree(string source, string target)
     {
         Directory.CreateDirectory(target);
-        foreach (string directory in Directory.EnumerateDirectories(path: source, searchPattern: "*", searchOption: SearchOption.AllDirectories))
-            Directory.CreateDirectory(directory.Replace(oldValue: source, newValue: target, comparisonType: StringComparison.Ordinal));
-        foreach (string file in Directory.EnumerateFiles(path: source, searchPattern: "*", searchOption: SearchOption.AllDirectories))
+        foreach (string directory in Directory.EnumerateDirectories(
+                     path: source,
+                     searchPattern: "*",
+                     searchOption: SearchOption.AllDirectories
+                 ))
+            Directory.CreateDirectory(
+                directory.Replace(
+                    oldValue: source,
+                    newValue: target,
+                    comparisonType: StringComparison.Ordinal
+                )
+            );
+        foreach (string file in Directory.EnumerateFiles(
+                     path: source,
+                     searchPattern: "*",
+                     searchOption: SearchOption.AllDirectories
+                 ))
         {
-            string destination = file.Replace(oldValue: source, newValue: target, comparisonType: StringComparison.Ordinal);
+            string destination = file.Replace(
+                oldValue: source,
+                newValue: target,
+                comparisonType: StringComparison.Ordinal
+            );
             File.Copy(sourceFileName: file, destFileName: destination, overwrite: true);
             // Copy keeps content, not the executable bit — and the app binary without it is an
             // AppImage that unpacks correctly and refuses to start.
             if (!OperatingSystem.IsLinux()) continue;
             var mode = File.GetUnixFileMode(file);
-            if (mode.HasFlag(UnixFileMode.UserExecute)) File.SetUnixFileMode(path: destination, mode: mode);
+            if (mode.HasFlag(UnixFileMode.UserExecute))
+                File.SetUnixFileMode(path: destination, mode: mode);
         }
     }
 
@@ -531,9 +575,10 @@ public static class Build
         // through that is not "give up and write the publish line by hand".
         foreach (string property in options.Properties)
         {
-            arguments.Add(property.StartsWith(value: "--property:", comparisonType: StringComparison.Ordinal)
-                ? property
-                : $"--property:{property}"
+            arguments.Add(
+                property.StartsWith(value: "--property:", comparisonType: StringComparison.Ordinal)
+                    ? property
+                    : $"--property:{property}"
             );
         }
 
@@ -581,11 +626,12 @@ public static class Build
     /// <summary>The RID of the machine running this — the only one NativeAOT can target.</summary>
     internal static string HostRid()
     {
-        string architecture = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch {
-            System.Runtime.InteropServices.Architecture.Arm64 => "arm64",
-            System.Runtime.InteropServices.Architecture.X64 => "x64",
-            var other => other.ToString().ToLowerInvariant(),
-        };
+        string architecture =
+            System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch {
+                System.Runtime.InteropServices.Architecture.Arm64 => "arm64",
+                System.Runtime.InteropServices.Architecture.X64 => "x64",
+                var other => other.ToString().ToLowerInvariant(),
+            };
         string os = OperatingSystem.IsWindows() ? "win"
             : OperatingSystem.IsMacOS() ? "osx"
             : "linux";
@@ -622,9 +668,12 @@ public static class Build
         );
         string version = AppVersion(options.Directory);
         var arguments = new List<string> {
-            "publish", head,
-            "--configuration", options.Debug ? "Debug" : "Release",
-            "--runtime", options.Rid ?? "ios-arm64",
+            "publish",
+            head,
+            "--configuration",
+            options.Debug ? "Debug" : "Release",
+            "--runtime",
+            options.Rid ?? "ios-arm64",
             $"--property:ZigTargetRid={options.Rid ?? "ios-arm64"}",
             $"--property:ApplicationDisplayVersion={version}",
             $"--property:ApplicationVersion={VersionCode(version)}",
@@ -634,7 +683,8 @@ public static class Build
         // codesign, naming a provisioning profile rather than the thing that is missing.
         if (!options.Debug)
         {
-            string? team = options.Team ?? Environment.GetEnvironmentVariable("ZIGOTE_APPLE_TEAM_ID");
+            string? team = options.Team ??
+                           Environment.GetEnvironmentVariable("ZIGOTE_APPLE_TEAM_ID");
             if (team is null)
             {
                 throw new CliError(
@@ -660,7 +710,10 @@ public static class Build
     internal static string AppVersion(string root)
     {
         string project = Projects.App(root);
-        var match = Regex.Match(input: File.ReadAllText(project), pattern: @"<Version>\s*([^<\s]+)\s*</Version>");
+        var match = Regex.Match(
+            input: File.ReadAllText(project),
+            pattern: @"<Version>\s*([^<\s]+)\s*</Version>"
+        );
         return match.Success ? match.Groups[1].Value : "1.0.0";
     }
 
@@ -674,7 +727,7 @@ public static class Build
         int[] parts = version
             .Split('-')[0]
             .Split('.')
-            .Select(p => int.TryParse(p, out int value) ? value : 0)
+            .Select(p => int.TryParse(s: p, result: out int value) ? value : 0)
             .ToArray();
         int major = parts.Length > 0 ? parts[0] : 0;
         int minor = parts.Length > 1 ? parts[1] : 0;
@@ -687,7 +740,6 @@ public static class Build
             );
         }
 
-        return major * 10_000 + minor * 100 + patch;
+        return (major * 10_000) + (minor * 100) + patch;
     }
-
 }

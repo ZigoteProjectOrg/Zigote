@@ -201,9 +201,10 @@ public class VfxRuntimeTests
 
         const int steps = 600;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < steps; i++) sim.Tick(Dt);
-        });
+            {
+                for (int i = 0; i < steps; i++) sim.Tick(Dt);
+            }
+        );
         long allocated = measured;
 
         Assert.True(

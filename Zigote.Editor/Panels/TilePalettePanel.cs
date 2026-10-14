@@ -457,7 +457,10 @@ public sealed class TilePalettePanel : Widget
 
     public override void OnPointerMove(Offset point)
     {
-        int hover = Array.FindIndex(array: _toolRects, match: r => r.Contains(px: point.X, py: point.Y));
+        int hover = Array.FindIndex(
+            array: _toolRects,
+            match: r => r.Contains(px: point.X, py: point.Y)
+        );
         if (hover == _hoverTool) return;
         _hoverTool = hover;
         MarkNeedsPaint();

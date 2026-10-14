@@ -74,9 +74,10 @@ public class CachedTextTests
 
         const int frames = 1000;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
-        });
+            {
+                for (int i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
+            }
+        );
         long allocated = measured;
 
         Assert.True(

@@ -46,7 +46,7 @@ public class StaggeredGrid : MultiChildWidget
     public int Columns
     {
         get;
-        set => field = Math.Max(1, value);
+        set => field = Math.Max(val1: 1, val2: value);
     } = 2;
 
     /// <summary>Gap between columns.</summary>
@@ -57,7 +57,7 @@ public class StaggeredGrid : MultiChildWidget
 
     /// <summary>Width one column gets under these constraints — useful for sizing images ahead of layout.</summary>
     public float ColumnWidth(float availableWidth)
-        => MathF.Max(0f, (availableWidth - (Spacing * (Columns - 1))) / Columns);
+        => MathF.Max(x: 0f, y: (availableWidth - (Spacing * (Columns - 1))) / Columns);
 
     public override Size Measure(Constraints c)
     {
@@ -65,7 +65,7 @@ public class StaggeredGrid : MultiChildWidget
         // count is stable.
         if (_offsets.Length < Children.Count) _offsets = new Offset[Children.Count];
         if (_columnHeights.Length < Columns) _columnHeights = new float[Columns];
-        Array.Clear(_columnHeights, 0, Columns);
+        Array.Clear(array: _columnHeights, index: 0, length: Columns);
 
         // Unbounded width has no columns to speak of; fall back to something laid out rather than
         // infinitely wide, the way a scroll view's cross axis behaves.
@@ -75,19 +75,23 @@ public class StaggeredGrid : MultiChildWidget
             minWidth: columnWidth,
             maxWidth: columnWidth,
             minHeight: 0,
-            maxHeight: float.PositiveInfinity);
+            maxHeight: float.PositiveInfinity
+        );
 
         for (int i = 0; i < Children.Count; i++)
         {
             var size = Children[i].Measure(childConstraints);
             int column = ShortestColumn();
             float y = _columnHeights[column];
-            _offsets[i] = new Offset(x: column * (columnWidth + Spacing), y: y > 0 ? y + RunSpacing : 0f);
+            _offsets[i] = new Offset(
+                x: column * (columnWidth + Spacing),
+                y: y > 0 ? y + RunSpacing : 0f
+            );
             _columnHeights[column] = _offsets[i].Y + size.Height;
         }
 
         float tallest = 0f;
-        for (int i = 0; i < Columns; i++) tallest = MathF.Max(tallest, _columnHeights[i]);
+        for (int i = 0; i < Columns; i++) tallest = MathF.Max(x: tallest, y: _columnHeights[i]);
         _size = c.Constrain(new Size(width: available, height: tallest));
         return _size;
     }
@@ -97,20 +101,30 @@ public class StaggeredGrid : MultiChildWidget
     {
         int shortest = 0;
         for (int i = 1; i < Columns; i++)
+        {
             if (_columnHeights[i] < _columnHeights[shortest])
                 shortest = i;
+        }
+
         return shortest;
     }
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
 
         // The same guard Wrap carries: the child list can grow between Measure and Layout, so lay
         // out the measured prefix and ask for another pass rather than indexing past the table.
-        int count = Math.Min(Children.Count, _offsets.Length);
+        int count = Math.Min(val1: Children.Count, val2: _offsets.Length);
         for (int i = 0; i < count; i++)
-            Children[i].Layout(new Offset(x: origin.X + _offsets[i].X, y: origin.Y + _offsets[i].Y));
+            Children[i].Layout(
+                new Offset(x: origin.X + _offsets[i].X, y: origin.Y + _offsets[i].Y)
+            );
 
         if (count < Children.Count) MarkNeedsLayout();
     }
@@ -124,8 +138,11 @@ public class StaggeredGrid : MultiChildWidget
     {
         if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         for (int i = Children.Count - 1; i >= 0; i--)
+        {
             if (Children[i].HitTest(point) is { } hit)
                 return hit;
+        }
+
         return null;
     }
 }

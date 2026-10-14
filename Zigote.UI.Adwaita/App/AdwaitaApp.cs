@@ -151,10 +151,17 @@ public class AdwaitaApp : ZigoteApp
     ///     <c>IsLayer</c> is false), so a shell can be developed on GNOME. Returns null before
     ///     <see cref="ZigoteApp.Run" /> has started.
     /// </summary>
-    public App? OpenLayer(Widget content, LayerOptions layer, uint width = 0, uint height = 0, string? title = null, ulong outputId = 0)
+    public App? OpenLayer(Widget content, LayerOptions layer, uint width = 0, uint height = 0,
+        string? title = null, ulong outputId = 0)
     {
         if (App is not { } app) return null;
-        var win = app.CreateLayer(title: title ?? Title, layer: layer, width: width, height: height, outputId: outputId);
+        var win = app.CreateLayer(
+            title: title ?? Title,
+            layer: layer,
+            width: width,
+            height: height,
+            outputId: outputId
+        );
         var scope = new ThemeProvider(Theme) { Child = content };
         win.CsdCornerRadius = 0f;
         win.Theme = Theme;
@@ -207,7 +214,8 @@ public class AdwaitaApp : ZigoteApp
         SystemPrefersDark = sdl == SystemTheme.Dark ||
                             (sdl == SystemTheme.Unknown && GnomeDesktop.PrefersDark);
         SystemAccent = GnomeDesktop.Accent;
-        if (GnomeDesktop.EnableAnimations is { } animate) AnimationController.ReduceMotion = !animate;
+        if (GnomeDesktop.EnableAnimations is { } animate)
+            AnimationController.ReduceMotion = !animate;
         if (!_explicitTheme) Theme = AdwTheme.Create(accent: SystemAccent, dark: SystemPrefersDark);
         SystemStyleChanged?.Invoke();
     }

@@ -613,17 +613,18 @@ public class Render2DTests
 
         const int frames = 500;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++)
             {
-                Frame(
-                    renderer: renderer,
-                    scene: scene,
-                    overlayVp: overlayVp,
-                    shared: shared
-                );
+                for (int i = 0; i < frames; i++)
+                {
+                    Frame(
+                        renderer: renderer,
+                        scene: scene,
+                        overlayVp: overlayVp,
+                        shared: shared
+                    );
+                }
             }
-        });
+        );
         long allocated = measured;
 
         Assert.True(

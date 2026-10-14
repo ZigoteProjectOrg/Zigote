@@ -112,7 +112,10 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override bool HandlesDirectionalKeys => true;
 
     // Invariant, like the parser: a comma-decimal locale must not print what Commit can't read.
-    private string ValueText => _value.ToString(format: "0.######", provider: CultureInfo.InvariantCulture);
+    private string ValueText => _value.ToString(
+        format: "0.######",
+        provider: CultureInfo.InvariantCulture
+    );
 
     /// <summary>Decimals the value can carry: those of <see cref="Step" />, Min and Max.</summary>
     private int Decimals
@@ -175,7 +178,8 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         config.Label = SemanticsLabel;
         config.Value = DisplayText;
         if (PendingOutOfRange)
-            config.Hint = $"Out of range, {Min.ToString(CultureInfo.InvariantCulture)} to {Max.ToString(CultureInfo.InvariantCulture)}";
+            config.Hint =
+                $"Out of range, {Min.ToString(CultureInfo.InvariantCulture)} to {Max.ToString(CultureInfo.InvariantCulture)}";
         config.Actions =
             SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
         config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)

@@ -103,7 +103,11 @@ public sealed class AdwMenuButton : ComposedWidget
             Style = AdwButtonStyle.Flat,
             Circular = true,
         };
-        button.OnPressed = () => Show(anchor: button.Bounds, sections: Sections, minWidth: MenuWidth);
+        button.OnPressed = () => Show(
+            anchor: button.Bounds,
+            sections: Sections,
+            minWidth: MenuWidth
+        );
         return button;
     }
 
@@ -156,7 +160,11 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
     private float[] _entryY = [];
 
     public AdwMenuPopover(App app, List<List<AdwMenuItem>> sections, Rect anchor, float minWidth)
-        : base(app: app, anchor: anchor, arrow: true) // GtkMenuButton popovers point at their button
+        : base(
+            app: app,
+            anchor: anchor,
+            arrow: true
+        ) // GtkMenuButton popovers point at their button
     {
         _minWidth = minWidth;
         foreach (var section in sections)

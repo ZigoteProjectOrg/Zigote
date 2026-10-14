@@ -25,32 +25,34 @@ internal static class Views
         var basket = Basket();
 
         return new View(ctx =>
-        {
-            var palette = AdwPalette.For(ThemeProvider.Of(ctx));
-            var page = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch, spacing: 24f) {
-                Children = {
-                    Appearance(isDark: isDark, setDark: setDark),
-                    counter,
-                    clock,
-                    basket,
-                }
-            };
+            {
+                var palette = AdwPalette.For(ThemeProvider.Of(ctx));
+                var page =
+                    new Column(crossAxisAlignment: CrossAxisAlignment.Stretch, spacing: 24f) {
+                        Children = {
+                            Appearance(isDark: isDark, setDark: setDark),
+                            counter,
+                            clock,
+                            basket,
+                        },
+                    };
 
-            return new ColoredBox(
-                color: palette.WindowBg,
-                child: new AdwToolbarView(
-                    new AdwClamp(
-                        child: new Padding(
-                            EdgeInsets.Symmetric(horizontal: 16f, vertical: 24f),
-                            page
-                        ),
-                        maximumSize: 560f
-                    )
-                ) {
-                    TopBars = { new AdwHeaderBar { Title = "Functional" } },
-                }
-            );
-        });
+                return new ColoredBox(
+                    color: palette.WindowBg,
+                    child: new AdwToolbarView(
+                        new AdwClamp(
+                            child: new Padding(
+                                padding: EdgeInsets.Symmetric(horizontal: 16f, vertical: 24f),
+                                child: page
+                            ),
+                            maximumSize: 560f
+                        )
+                    ) {
+                        TopBars = { new AdwHeaderBar { Title = "Functional" } },
+                    }
+                );
+            }
+        );
     }
 
     /// <summary>
@@ -75,22 +77,23 @@ internal static class Views
     {
         var count = new Signal<int>(0);
         return new View(_ => new AdwPreferencesGroup(
-            title: "State",
-            description: "A signal in the closure; the row re-renders from it."
-        ) {
-            Rows = {
-                new AdwActionRow(title: "Count", subtitle: $"{count.Value}") {
-                    Suffixes = {
-                        new AdwButton(label: "−1", onPressed: () => count.Value--) {
-                            Style = AdwButtonStyle.Flat,
-                        },
-                        new AdwButton(label: "+1", onPressed: () => count.Value++) {
-                            Style = AdwButtonStyle.Flat,
+                title: "State",
+                description: "A signal in the closure; the row re-renders from it."
+            ) {
+                Rows = {
+                    new AdwActionRow(title: "Count", subtitle: $"{count.Value}") {
+                        Suffixes = {
+                            new AdwButton(label: "−1", onPressed: () => count.Value--) {
+                                Style = AdwButtonStyle.Flat,
+                            },
+                            new AdwButton(label: "+1", onPressed: () => count.Value++) {
+                                Style = AdwButtonStyle.Flat,
+                            },
                         },
                     },
                 },
-            },
-        });
+            }
+        );
     }
 
     /// <summary>Mount-scoped resource: starts on attach, stops on detach, writes off-thread.</summary>
@@ -98,11 +101,12 @@ internal static class Views
     {
         var now = new Signal<DateTime>(DateTime.Now);
         return new View(_ => new AdwPreferencesGroup(
-            title: "Lifecycle",
-            description: "A timer owned by the mount period, ticking on a background thread."
+                title: "Lifecycle",
+                description: "A timer owned by the mount period, ticking on a background thread."
+            ) {
+                Rows = { new AdwActionRow(title: "Now", subtitle: $"{now.Value:HH:mm:ss}") },
+            }
         ) {
-            Rows = { new AdwActionRow(title: "Now", subtitle: $"{now.Value:HH:mm:ss}") },
-        }) {
             OnMounted = () => new Timer(
                 callback: _ => now.Value = DateTime.Now,
                 state: null,
@@ -118,27 +122,34 @@ internal static class Views
         string[] all = ["Apple", "Pear", "Plum", "Fig", "Quince"];
         var basket = new Signal<int>(2);
         return new View(_ =>
-        {
-            var group = new AdwPreferencesGroup(
-                title: "Shape",
-                description: "The row list itself comes from a signal."
-            ) {
-                HeaderSuffix = new Row(mainAxisSize: MainAxisSize.Min, spacing: 6f) {
-                    Children = {
-                        new AdwButton(
-                            label: "Drop",
-                            onPressed: () => basket.Value = Math.Max(1, basket.Value - 1)
-                        ) { Style = AdwButtonStyle.Flat },
-                        new AdwButton(
-                            label: "Add",
-                            onPressed: () => basket.Value = Math.Min(all.Length, basket.Value + 1)
-                        ) { Style = AdwButtonStyle.Suggested },
+            {
+                var group = new AdwPreferencesGroup(
+                    title: "Shape",
+                    description: "The row list itself comes from a signal."
+                ) {
+                    HeaderSuffix = new Row(mainAxisSize: MainAxisSize.Min, spacing: 6f) {
+                        Children = {
+                            new AdwButton(
+                                label: "Drop",
+                                onPressed: () => basket.Value = Math.Max(
+                                    val1: 1,
+                                    val2: basket.Value - 1
+                                )
+                            ) { Style = AdwButtonStyle.Flat },
+                            new AdwButton(
+                                label: "Add",
+                                onPressed: () => basket.Value = Math.Min(
+                                    val1: all.Length,
+                                    val2: basket.Value + 1
+                                )
+                            ) { Style = AdwButtonStyle.Suggested },
+                        },
                     },
-                },
-            };
-            foreach (var fruit in all[..basket.Value])
-                group.Rows.Add(new AdwActionRow(title: fruit));
-            return group;
-        });
+                };
+                foreach (string fruit in all[..basket.Value])
+                    group.Rows.Add(new AdwActionRow(title: fruit));
+                return group;
+            }
+        );
     }
 }

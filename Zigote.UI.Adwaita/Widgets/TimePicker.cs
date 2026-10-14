@@ -29,7 +29,11 @@ public sealed class AdwTimePicker : Widget
     private const int Hour = 0, Minute = 1, Meridiem = 2;
 
     private static readonly string[] TwoDigits =
-        Enumerable.Range(start: 0, count: 60).Select(i => i.ToString(format: "00", provider: CultureInfo.InvariantCulture)).ToArray();
+        Enumerable.Range(start: 0, count: 60).Select(i => i.ToString(
+                format: "00",
+                provider: CultureInfo.InvariantCulture
+            )
+        ).ToArray();
 
     private int _focusSegment;
     private (int Segment, int Dir) _hover = (-1, 0);
@@ -106,7 +110,12 @@ public sealed class AdwTimePicker : Widget
     };
 
     private Rect ValueRect(int segment) =>
-        new(x: SegmentX(segment), y: Bounds.Y + ArrowH + Gap, width: ValueW, height: ValueH);
+        new(
+            x: SegmentX(segment),
+            y: Bounds.Y + ArrowH + Gap,
+            width: ValueW,
+            height: ValueH
+        );
 
     private Rect ArrowRect(int segment, int dir) => new(
         x: SegmentX(segment),
@@ -142,7 +151,12 @@ public sealed class AdwTimePicker : Widget
     public override void Layout(Offset origin)
     {
         var size = Natural;
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: size.Width, height: size.Height);
+        Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: size.Width,
+            height: size.Height
+        );
     }
 
     // ── Paint ─────────────────────────────────────────────────────────────────
@@ -152,20 +166,55 @@ public sealed class AdwTimePicker : Widget
         var p = AdwPalette.For(_theme);
         int hour = _value.Hour;
         string hourText = Use24Hour ? TwoDigits[hour] : TwoDigits[hour % 12 == 0 ? 12 : hour % 12];
-        PaintSegment(paint: paint, p: p, segment: Hour, text: hourText, size: NumberSize);
-        PaintSegment(paint: paint, p: p, segment: Minute, text: TwoDigits[_value.Minute], size: NumberSize);
+        PaintSegment(
+            paint: paint,
+            p: p,
+            segment: Hour,
+            text: hourText,
+            size: NumberSize
+        );
+        PaintSegment(
+            paint: paint,
+            p: p,
+            segment: Minute,
+            text: TwoDigits[_value.Minute],
+            size: NumberSize
+        );
         if (!Use24Hour)
-            PaintSegment(paint: paint, p: p, segment: Meridiem, text: Designator(hour >= 12), size: AdwTypography.Title4.Size);
+            PaintSegment(
+                paint: paint,
+                p: p,
+                segment: Meridiem,
+                text: Designator(hour >= 12),
+                size: AdwTypography.Title4.Size
+            );
 
-        var colon = new Rect(x: Bounds.X + ValueW, y: ValueRect(Hour).Y, width: ColonW, height: ValueH);
-        CenterText(paint: paint, text: ":", box: colon, color: p.WindowFg, size: NumberSize);
+        var colon = new Rect(
+            x: Bounds.X + ValueW,
+            y: ValueRect(Hour).Y,
+            width: ColonW,
+            height: ValueH
+        );
+        CenterText(
+            paint: paint,
+            text: ":",
+            box: colon,
+            color: p.WindowFg,
+            size: NumberSize
+        );
     }
 
     private void PaintSegment(PaintList paint, AdwColors p, int segment, string text, float size)
     {
         var box = ValueRect(segment);
         paint.AddRect(bounds: box, color: p.ButtonFill, radius: AdwMetrics.ControlRadius);
-        CenterText(paint: paint, text: text, box: box, color: p.WindowFg, size: size);
+        CenterText(
+            paint: paint,
+            text: text,
+            box: box,
+            color: p.WindowFg,
+            size: size
+        );
         if (Focused && segment == _focusSegment)
             paint.AddFocusRing(bounds: box, radius: AdwMetrics.ControlRadius, theme: _theme);
 
@@ -173,9 +222,18 @@ public sealed class AdwTimePicker : Widget
         {
             var r = ArrowRect(segment: segment, dir: dir);
             if (_pressed == (segment, dir) || _hover == (segment, dir))
-                paint.AddRect(bounds: r, color: _pressed == (segment, dir) ? p.ActiveFill : p.HoverFill, radius: AdwMetrics.ControlRadius);
-            Icons.Draw(paint: paint, glyph: dir > 0 ? MaterialIcons.ExpandLess : MaterialIcons.ExpandMore, box: r,
-                color: p.WindowFg, size: 20f);
+                paint.AddRect(
+                    bounds: r,
+                    color: _pressed == (segment, dir) ? p.ActiveFill : p.HoverFill,
+                    radius: AdwMetrics.ControlRadius
+                );
+            Icons.Draw(
+                paint: paint,
+                glyph: dir > 0 ? MaterialIcons.ExpandLess : MaterialIcons.ExpandMore,
+                box: r,
+                color: p.WindowFg,
+                size: 20f
+            );
         }
     }
 
@@ -183,8 +241,14 @@ public sealed class AdwTimePicker : Widget
     {
         float w = TextMeasure.Width(text: text, fontSize: size, weight: FontWeight.Bold);
         float baseline = box.Y + ((box.Height - size) / 2f) + (size * 0.8f);
-        paint.AddText(text: text, baselineX: box.X + ((box.Width - w) / 2f), baselineY: baseline, color: color,
-            fontSize: size, fontWeight: FontWeight.Bold);
+        paint.AddText(
+            text: text,
+            baselineX: box.X + ((box.Width - w) / 2f),
+            baselineY: baseline,
+            color: color,
+            fontSize: size,
+            fontWeight: FontWeight.Bold
+        );
     }
 
     // ── Editing ───────────────────────────────────────────────────────────────
@@ -196,11 +260,13 @@ public sealed class AdwTimePicker : Widget
         switch (segment)
         {
             case Hour:
-                h = ((h + dir) % 24 + 24) % 24;
+                h = (((h + dir) % 24) + 24) % 24;
                 break;
             case Minute:
                 // Snap onto the step grid first, so 07 with a step of 5 goes to 10, not 12.
-                int snapped = dir > 0 ? m / MinuteStep * MinuteStep + MinuteStep : (m + MinuteStep - 1) / MinuteStep * MinuteStep - MinuteStep;
+                int snapped = dir > 0
+                    ? (m / MinuteStep * MinuteStep) + MinuteStep
+                    : ((m + MinuteStep - 1) / MinuteStep * MinuteStep) - MinuteStep;
                 m = ((snapped % 60) + 60) % 60;
                 break;
             default:
@@ -255,7 +321,8 @@ public sealed class AdwTimePicker : Widget
             if (_focusSegment == Meridiem || char.ToUpperInvariant(ch) is 'A' or 'P')
             {
                 bool pm = char.ToUpperInvariant(ch) == 'P';
-                if (char.ToUpperInvariant(ch) is 'A' or 'P' && !Use24Hour && (_value.Hour >= 12) != pm)
+                if (char.ToUpperInvariant(ch) is 'A' or 'P' && !Use24Hour &&
+                    (_value.Hour >= 12) != pm)
                     Step(segment: Meridiem, dir: 1);
                 continue;
             }
@@ -295,7 +362,8 @@ public sealed class AdwTimePicker : Widget
         else MarkNeedsPaint();
     }
 
-    public override MouseCursor? GetCursor(Offset point) => PartAt(point).Segment >= 0 ? MouseCursor.Pointer : null;
+    public override MouseCursor? GetCursor(Offset point) =>
+        PartAt(point).Segment >= 0 ? MouseCursor.Pointer : null;
 
     public override void OnPointerMove(Offset point)
     {
@@ -352,7 +420,10 @@ public sealed class AdwTimePicker : Widget
 
         _wheel += dy;
         if (MathF.Abs(_wheel) < 1f) return;
-        Step(segment: _wheelSegment >= 0 ? _wheelSegment : _focusSegment, dir: _wheel > 0f ? 1 : -1);
+        Step(
+            segment: _wheelSegment >= 0 ? _wheelSegment : _focusSegment,
+            dir: _wheel > 0f ? 1 : -1
+        );
         _wheel = 0f;
     }
 
@@ -361,10 +432,20 @@ public sealed class AdwTimePicker : Widget
         config.Role = SemanticsRole.Group;
         config.Label = SemanticsLabel ?? "Time";
         config.Value = _value.ToString(format: "t", provider: CultureInfo.CurrentCulture);
-        config.Actions = SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
-        config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(flag: SemanticsFlags.Focused, on: Focused);
+        config.Actions =
+            SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(
+            flag: SemanticsFlags.Focused,
+            on: Focused
+        );
     }
 
     public override int DebugStateHash() =>
-        HashCode.Combine(value1: _value, value2: _focusSegment, value3: _hover, value4: _pressed, value5: Use24Hour);
+        HashCode.Combine(
+            value1: _value,
+            value2: _focusSegment,
+            value3: _hover,
+            value4: _pressed,
+            value5: Use24Hour
+        );
 }

@@ -27,8 +27,8 @@ public class DeviceCliTests
 
         // The daemon lines, the header, and the serial with no state at all are not devices.
         var only = Assert.Single(devices);
-        Assert.Equal("emulator-5554", only.Serial);
-        Assert.Equal("sdk_gphone64_x86_64", only.Model);
+        Assert.Equal(expected: "emulator-5554", actual: only.Serial);
+        Assert.Equal(expected: "sdk_gphone64_x86_64", actual: only.Model);
         Assert.True(only.Ready);
     }
 
@@ -41,13 +41,16 @@ public class DeviceCliTests
 
         var only = Assert.Single(devices);
         Assert.False(only.Ready); // named in the error rather than silently absent
-        Assert.Equal("unauthorized", only.State);
+        Assert.Equal(expected: "unauthorized", actual: only.State);
     }
 
     [Theory]
     [InlineData("arm64-v8a", "android-arm64")]
     [InlineData("x86_64\n", "android-x64")] // getprop's trailing newline
-    public void Rid_MapsDeviceAbi(string abi, string expected) => Assert.Equal(expected, Device.Rid(abi));
+    public void Rid_MapsDeviceAbi(string abi, string expected) => Assert.Equal(
+        expected: expected,
+        actual: Device.Rid(abi)
+    );
 
     [Fact]
     public void Rid_RefusesAnAbiTheEngineHasNoLibFor() =>
@@ -74,11 +77,17 @@ public class RunTargetTests
 
     [Fact]
     public void OneDevice_IsChosenSilently() =>
-        Assert.Equal("emulator-5554", Run.Resolve(spec: null, ready: Ready("emulator-5554"))?.Serial);
+        Assert.Equal(
+            expected: "emulator-5554",
+            actual: Run.Resolve(spec: null, ready: Ready("emulator-5554"))?.Serial
+        );
 
     [Fact]
     public void ANameMatchesModelOrSerialLoosely() =>
-        Assert.Equal("pixel8", Run.Resolve(spec: "PIXEL", ready: Ready("pixel8", "emulator-5554"))?.Serial);
+        Assert.Equal(
+            expected: "pixel8",
+            actual: Run.Resolve(spec: "PIXEL", ready: Ready("pixel8", "emulator-5554"))?.Serial
+        );
 
     [Fact]
     public void AnUnmatchedNameIsAnError_NotASilentFallbackToDesktop() =>

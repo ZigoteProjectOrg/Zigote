@@ -7,11 +7,11 @@ namespace AdwaitaGallery.Pages;
 ///     Liquid Glass — the material study. Four scenes built from <see cref="LiquidPane" />: a
 ///     toolbar floating over an article, with a material lab under it that dials every property
 ///     of the glass live; an app window whose header bar and view switcher are Adwaita in
-///     structure and glass in material; then a control centre and a lock screen over photographs.
+///     structure and glass in material; then a control centre and a lock screen over local wallpapers.
 ///     The design system's split in one page — Adwaita decides where things go, glass is what the
 ///     floating layer is made of.
 ///     <para>
-///         Everything glass here is a real lens over the real picture. Each scene's panes sit in
+///         Every glass surface is a lens over the content beneath it. Each scene's panes sit in
 ///         one <see cref="LiquidGroup" />, so a screenful of glass costs one backdrop copy and one
 ///         render-pass break rather than one per pane — and this page is still an honest showing
 ///         of what that costs. The flat fills <i>inside</i> the panes (the toggle dots, the app
@@ -30,8 +30,7 @@ public sealed partial class LiquidGlassPage : ComposedWidget
     private const float PhoneH = 640f;
     private const float PhoneRadius = 30f;
 
-    // The scenes pin the glass family dark (see Phone), so their ink is fixed too — asking the
-    // gallery theme would answer for the page around the phone, not the wallpaper inside it.
+    // Phone scenes keep white foreground ink independently of the surrounding gallery theme.
     private static readonly Color SceneInk = LiquidPane.OnGlass(ThemeData.Dark);
     private static readonly Color SceneInkMuted = LiquidPane.OnGlassMuted(ThemeData.Dark);
 
@@ -63,9 +62,9 @@ public sealed partial class LiquidGlassPage : ComposedWidget
         return new GalleryPage(
             title: "Liquid Glass",
             description:
-            "Glass is the material of the floating layer: chrome over content, never content "
-            + "itself. Four scenes, every surface a live lens over what is behind it.",
-            iconName: MaterialIcons.WaterDrop
+            "Light, depth and motion. Explore a refractive material for controls "
+            + "that float above your content.",
+            iconName: ""
         ) {
             Children = {
                 Demo.Titled(
@@ -87,9 +86,13 @@ public sealed partial class LiquidGlassPage : ComposedWidget
                 Demo.Titled(
                     title: "Control centre",
                     description:
-                    "Toggles, a player, faders and utilities — each tile its own pane, all of them "
-                    + $"one capture. Backdrop art by {ArtSource.Showcase[1].Artist} (nekos.best).",
-                    child: Phone(art: ArtSource.Showcase[1], scene: ControlCentre())
+                    "A shared glass surface for connectivity, music and everyday controls.",
+                    child: Phone(
+                        wallpaper: 2,
+                        scene: ControlCentre(),
+                        height: 500f,
+                        dimming: 0.32f
+                    )
                 ),
                 Demo.Titled(
                     title: "Lock screen",
@@ -104,9 +107,8 @@ public sealed partial class LiquidGlassPage : ComposedWidget
 
     // ── Shared furniture ──────────────────────────────────────────────────────
 
-    /// <summary>A fixed phone canvas: the photo cover-cropped to fill it, the scene on
-    ///     top.</summary>
-    private Widget Phone(ArtPiece art, Widget scene)
+    /// <summary>A clipped wallpaper canvas with dimming beneath the shared glass layer.</summary>
+    private Widget Phone(int wallpaper, Widget scene, float height = PhoneH, float dimming = 0.16f)
     {
         return new Center {
             Child = new DecoratedBox {
@@ -117,20 +119,13 @@ public sealed partial class LiquidGlassPage : ComposedWidget
                     radius: PhoneRadius,
                     child: new SizedBox(
                         width: PhoneW,
-                        height: PhoneH,
-                        // The scene is a media context, so it pins the glass family: over a
-                        // photograph the pane must be the dark family's milky lift with white
-                        // ink whatever the gallery theme is — the light theme's heavier scrim
-                        // is tuned for chrome over flat surfaces, and over a picture it reads
-                        // as a grey slab. iOS does the same on the lock screen.
-                        // One group per scene: a screenful of panes, one backdrop capture.
+                        height: height,
+                        // White ink and the dark material family stay together. Wallpaper and
+                        // dimming paint before the group so every pane captures the same scene.
                         child: new Stack {
                             Children = {
-                                Backdrop(
-                                    art: art,
-                                    radius: PhoneRadius,
-                                    maxDecode: (int)(PhoneH * 1.2f)
-                                ),
+                                Wallpaper(wallpaper),
+                                new MediaDimming(() => dimming),
                                 new ThemeProvider(
                                     data: ThemeData.Dark,
                                     child: new LiquidGroup(scene)
@@ -152,7 +147,7 @@ public sealed partial class LiquidGlassPage : ComposedWidget
     {
         return new AdwAsyncImage(
             loader: async ct =>
-                (await ArtSource.Http.BytesAsync(HttpRequest.Get(art.Url), ct)
+                (await ArtSource.Http.BytesAsync(spec: HttpRequest.Get(art.Url), ct: ct)
                     .ConfigureAwait(false))
                 .OrElse(null!)
         ) {
@@ -190,7 +185,7 @@ public sealed partial class LiquidGlassPage : ComposedWidget
     }
 
     /// <summary>
-    ///     A round clear pane as a button, with the gel response wired in. Given a
+    ///     A round regular pane as a button, with the gel response wired in. Given a
     ///     <paramref name="latch" /> it stays pressed — the <see cref="Latched" /> look — and the
     ///     next press clears it again. The pane is rebuilt on the flip rather than retinted in
     ///     place so the glyph's colour flips with it; the gel simply starts at rest on the new
@@ -198,10 +193,16 @@ public sealed partial class LiquidGlassPage : ComposedWidget
     /// </summary>
     private Widget GlassCircle(string icon, string label, float size = 52f, string? latch = null)
     {
-        Signal<bool>? signal = latch is null ? null : Latch(latch);
+        var signal = latch is null ? null : Latch(latch);
         if (signal is null)
-            return LiquidPane.Interactive(pane: Circle(on: false), onPressed: () => { },
-                semantics: label);
+        {
+            return LiquidPane.Interactive(
+                pane: Circle(on: false),
+                onPressed: () => { },
+                semantics: label
+            );
+        }
+
         return new Watch(() => Latched(
                 pane: Circle(on: signal.Value),
                 on: signal.Value,
@@ -212,7 +213,9 @@ public sealed partial class LiquidGlassPage : ComposedWidget
 
         LiquidPane Circle(bool on)
         {
-            return LiquidPane.Clear(
+            return LiquidPane.Regular(
+                radius: AdwMetrics.Pill,
+                elevation: 3f,
                 child: SizedBox.Square(
                     size: size,
                     child: new Center {
@@ -241,7 +244,12 @@ public sealed partial class LiquidGlassPage : ComposedWidget
                     child: new Label(
                         text: text,
                         style: style,
-                        color: Color.Rgba(r: 0, g: 0, b: 8, a: 0.40f)
+                        color: Color.Rgba(
+                            r: 0,
+                            g: 0,
+                            b: 8,
+                            a: 0.40f
+                        )
                     ) { Align = TextAlign.Center }
                 ),
                 new Label(text: text, style: style, color: color) { Align = TextAlign.Center },

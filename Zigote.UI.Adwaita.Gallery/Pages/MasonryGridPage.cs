@@ -6,7 +6,8 @@ namespace AdwaitaGallery.Pages;
 /// </summary>
 public sealed class MasonryGridPage : ComposedWidget
 {
-    private static readonly float[] Ratios = [1f, 0.7f, 1.4f, 0.9f, 1.2f, 0.75f, 1f, 1.6f, 0.8f, 1.1f, 0.65f, 1.3f];
+    private static readonly float[] Ratios =
+        [1f, 0.7f, 1.4f, 0.9f, 1.2f, 0.75f, 1f, 1.6f, 0.8f, 1.1f, 0.65f, 1.3f];
 
     private readonly Signal<float> _minColumn = new(160f);
 
@@ -49,7 +50,13 @@ public sealed class MasonryGridPage : ComposedWidget
                                     child: new DecoratedBox {
                                         Fill = AdwAccentColors.Bg(accents[i % accents.Length]),
                                         Radius = AdwMetrics.CardRadius,
-                                        Child = new Center(new Label(text: $"{i + 1}", style: AdwTypography.Title2, color: Color.White)),
+                                        Child = new Center(
+                                            new Label(
+                                                text: $"{i + 1}",
+                                                style: AdwTypography.Title2,
+                                                color: Color.White
+                                            )
+                                        ),
                                     }
                                 )
                             );

@@ -44,7 +44,9 @@ public sealed class Skeleton : Widget
         Height = height;
         Radius = radius;
         // 1.4 s per sweep, linear: a shimmer that eases looks like it is stuttering.
-        _anim = new AnimationController(durationSeconds: 1.4f, vsync: this) { Curve = Curves.Linear };
+        _anim = new AnimationController(durationSeconds: 1.4f, vsync: this) {
+            Curve = Curves.Linear,
+        };
         _anim.OnTick += MarkNeedsPaint;
         _anim.Repeat();
     }
@@ -103,16 +105,19 @@ public sealed class Skeleton : Widget
         var column = new Column(
             crossAxisAlignment: CrossAxisAlignment.Start,
             mainAxisSize: MainAxisSize.Min,
-            spacing: spacing);
-        for (int i = 0; i < Math.Max(1, lines); i++)
+            spacing: spacing
+        );
+        for (int i = 0; i < Math.Max(val1: 1, val2: lines); i++)
         {
             bool last = i == lines - 1 && lines > 1;
             Widget line = new Skeleton(height: lineHeight, radius: lineHeight / 2f);
             // The short last line needs a width, and the width is a fraction of whatever the
             // column ends up being — that is what FractionallySizedBox is for.
-            column.Children.Add(last
-                ? new FractionallySizedBox(widthFactor: lastLineFraction, child: line)
-                : line);
+            column.Children.Add(
+                last
+                    ? new FractionallySizedBox(widthFactor: lastLineFraction, child: line)
+                    : line
+            );
         }
 
         return column;
@@ -125,7 +130,13 @@ public sealed class Skeleton : Widget
     protected override void OnMount() => _anim.AttachTicker(this);
 
     public override int DebugStateHash()
-        => HashCode.Combine(Width, Height, Radius, Animated, _anim.Progress);
+        => HashCode.Combine(
+            value1: Width,
+            value2: Height,
+            value3: Radius,
+            value4: Animated,
+            value5: _anim.Progress
+        );
 
     public override Size Measure(Constraints c)
     {
@@ -136,7 +147,12 @@ public sealed class Skeleton : Widget
     }
 
     public override void Layout(Offset origin)
-        => Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        => Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
 
     public override void Paint(PaintList paint)
     {
@@ -150,16 +166,23 @@ public sealed class Skeleton : Widget
         paint.AddClipStart(bounds: Bounds, radius: Radius);
         for (int i = 0; i < SweepSlices; i++)
         {
-            if (Slice(Bounds, _anim.Value, i) is not var (x, width, alpha)) continue;
+            if (Slice(bounds: Bounds, phase: _anim.Value, index: i) is not var (x, width, alpha))
+                continue;
             paint.AddRect(
-                bounds: new Rect(x: x, y: Bounds.Y, width: width, height: Bounds.Height),
-                color: highlight.WithAlpha(alpha * highlight.A));
+                bounds: new Rect(
+                    x: x,
+                    y: Bounds.Y,
+                    width: width,
+                    height: Bounds.Height
+                ),
+                color: highlight.WithAlpha(alpha * highlight.A)
+            );
         }
 
         paint.AddClipEnd();
     }
 
-    public override Widget? HitTest(Offset point) => null;   // a placeholder is not a target
+    public override Widget? HitTest(Offset point) => null; // a placeholder is not a target
 
     /// <summary>
     ///     One slice of the highlight band at a given phase, clipped to the block, or null when
@@ -169,14 +192,14 @@ public sealed class Skeleton : Widget
     /// </summary>
     internal static (float X, float Width, float Alpha)? Slice(Rect bounds, float phase, int index)
     {
-        float band = MathF.Max(24f, bounds.Width * 0.4f);
+        float band = MathF.Max(x: 24f, y: bounds.Width * 0.4f);
         float centre = bounds.X - band + (phase * (bounds.Width + (2f * band)));
         float slice = band / SweepSlices;
 
-        float offset = (index + 0.5f) / SweepSlices;      // 0..1 across the band
+        float offset = (index + 0.5f) / SweepSlices; // 0..1 across the band
         float x = centre - (band / 2f) + (offset * band);
-        float left = MathF.Max(x, bounds.X);
-        float right = MathF.Min(x + slice, bounds.X + bounds.Width);
+        float left = MathF.Max(x: x, y: bounds.X);
+        float right = MathF.Min(x: x + slice, y: bounds.X + bounds.Width);
         if (right <= left) return null;
 
         return (left, right - left, 1f - MathF.Abs((offset * 2f) - 1f));

@@ -45,7 +45,7 @@ public class SvgAssetTests
         // transparent half below is the half that actually pins the convention.
         Assert.Equal(expected: [255, 0, 0, 255], actual: rgba[..4]);
         // Right half: nothing was drawn.
-        int lastPixel = (20 * 10 - 1) * 4;
+        int lastPixel = ((20 * 10) - 1) * 4;
         Assert.Equal(expected: 0, actual: rgba[lastPixel + 3]);
     }
 
@@ -70,8 +70,6 @@ public class SvgAssetTests
     }
 
     [Fact]
-    public void Bad_bytes_are_rejected_rather_than_returning_an_empty_document()
-    {
+    public void Bad_bytes_are_rejected_rather_than_returning_an_empty_document() =>
         Assert.Throws<InvalidDataException>(() => SvgAsset.FromString("<html>not an svg</html>"));
-    }
 }

@@ -41,9 +41,7 @@ public static class Preview
         );
         start.Environment["ZIGOTE_PREVIEW"] = target;
 
-        Console.WriteLine(
-            $"  previewing {target}{(noWatch ? "" : "  (edit and save to reload)")}"
-        );
+        Console.WriteLine($"  previewing {target}{(noWatch ? "" : "  (edit and save to reload)")}");
         return Wait(start);
     }
 

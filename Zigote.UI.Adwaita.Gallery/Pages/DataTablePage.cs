@@ -11,8 +11,10 @@ namespace AdwaitaGallery.Pages;
 public sealed class DataTablePage : ComposedWidget
 {
     private static readonly string[] Customers = [
-        "Ada", "Brian", "Chiara", "Dmitri", "Emeka", "Farah", "Goran", "Hana", "Ines", "Jules", "Kenji", "Lena",
-        "Mateo", "Nadia", "Omar", "Priya", "Quinn", "Rosa", "Sven", "Tamar", "Uma", "Viktor", "Wen", "Yusuf",
+        "Ada", "Brian", "Chiara", "Dmitri", "Emeka", "Farah", "Goran", "Hana", "Ines", "Jules",
+        "Kenji", "Lena",
+        "Mateo", "Nadia", "Omar", "Priya", "Quinn", "Rosa", "Sven", "Tamar", "Uma", "Viktor", "Wen",
+        "Yusuf",
     ];
 
     private static readonly string[] States = ["Paid", "Shipped", "Pending", "Refunded"];
@@ -29,13 +31,19 @@ public sealed class DataTablePage : ComposedWidget
         var host = GalleryHost.Find(context);
 
         _processes = new AdwColumnView<ProcessRow>(
-            ProcessRow.Snapshot(),
-            new AdwColumn<ProcessRow>(title: "Name", text: r => r.Name.Length > 0 ? r.Name : "(unnamed)") {
+            items: ProcessRow.Snapshot(),
+            new AdwColumn<ProcessRow>(
+                title: "Name",
+                text: r => r.Name.Length > 0 ? r.Name : "(unnamed)"
+            ) {
                 Expand = true,
                 MinWidth = 160f,
                 Icon = _ => MaterialIcons.Memory,
             }.SortBy(r => r.Name),
-            new AdwColumn<ProcessRow>(title: "PID", text: r => r.Id.ToString(CultureInfo.InvariantCulture)) {
+            new AdwColumn<ProcessRow>(
+                title: "PID",
+                text: r => r.Id.ToString(CultureInfo.InvariantCulture)
+            ) {
                 Width = 80f,
                 Align = AdwColumnAlign.End,
                 Dim = true,
@@ -44,7 +52,10 @@ public sealed class DataTablePage : ComposedWidget
                 Width = 110f,
                 Align = AdwColumnAlign.End,
             }.SortBy(r => r.Memory),
-            new AdwColumn<ProcessRow>(title: "Threads", text: r => r.Threads < 0 ? "—" : r.Threads.ToString(CultureInfo.InvariantCulture)) {
+            new AdwColumn<ProcessRow>(
+                title: "Threads",
+                text: r => r.Threads < 0 ? "—" : r.Threads.ToString(CultureInfo.InvariantCulture)
+            ) {
                 Width = 90f,
                 Align = AdwColumnAlign.End,
                 Dim = true,
@@ -57,15 +68,32 @@ public sealed class DataTablePage : ComposedWidget
         _processInfo.Value = $"{_processes.Items.Count} processes";
 
         var orders = new AdwColumnView<Order>(
-            Orders.Value,
-            new AdwColumn<Order>(title: "Order", text: o => o.Number) { Width = 90f, Dim = true }.SortBy(o => o.Id),
-            new AdwColumn<Order>(title: "Customer", text: o => o.Customer) { Expand = true, MinWidth = 80f }.SortBy(o => o.Customer),
-            new AdwColumn<Order>(title: "Status", text: o => o.Status) { Width = 96f }.SortBy(o => o.Status),
-            new AdwColumn<Order>(title: "Date", text: o => o.Date.ToString(format: "yyyy-MM-dd", provider: CultureInfo.InvariantCulture)) {
+            items: Orders.Value,
+            new AdwColumn<Order>(title: "Order", text: o => o.Number) {
+                Width = 90f,
+                Dim = true,
+            }.SortBy(o => o.Id),
+            new AdwColumn<Order>(title: "Customer", text: o => o.Customer) {
+                Expand = true,
+                MinWidth = 80f,
+            }.SortBy(o => o.Customer),
+            new AdwColumn<Order>(title: "Status", text: o => o.Status) { Width = 96f }.SortBy(o =>
+                o.Status
+            ),
+            new AdwColumn<Order>(
+                title: "Date",
+                text: o => o.Date.ToString(
+                    format: "yyyy-MM-dd",
+                    provider: CultureInfo.InvariantCulture
+                )
+            ) {
                 Width = 112f,
                 Dim = true,
             }.SortBy(o => o.Date),
-            new AdwColumn<Order>(title: "Total", text: o => o.Total.ToString(format: "C", provider: CultureInfo.CurrentCulture)) {
+            new AdwColumn<Order>(
+                title: "Total",
+                text: o => o.Total.ToString(format: "C", provider: CultureInfo.CurrentCulture)
+            ) {
                 Width = 88f,
                 Align = AdwColumnAlign.End,
             }.SortBy(o => o.Total)
@@ -87,7 +115,8 @@ public sealed class DataTablePage : ComposedWidget
 
         return new GalleryPage(
             title: "Data Table",
-            description: "Columns you can sort and resize over rows that are painted only when you can see them.",
+            description:
+            "Columns you can sort and resize over rows that are painted only when you can see them.",
             iconName: MaterialIcons.TableChart
         ) {
             Children = {
@@ -97,9 +126,12 @@ public sealed class DataTablePage : ComposedWidget
                     "A snapshot of this machine. Click a title to sort, again to reverse; drag its edge to resize. " +
                     "Double-click a row.",
                     child: Demo.Stage(
-                        new Column(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                        child: new Column(
+                            spacing: Spacing.Md,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch
+                        ) {
                             Children = {
-                                Framed(_processes, height: 320f),
+                                Framed(table: _processes, height: 320f),
                                 Demo.Bar(
                                     new AdwButton(label: "Refresh", onPressed: Refresh),
                                     new Watch(() => Demo.Value(_processInfo.Value))
@@ -115,10 +147,16 @@ public sealed class DataTablePage : ComposedWidget
                     "Dense rows with separators and multiple selection: ⌘/Ctrl-click, Shift-click, Shift-arrows, " +
                     "⌘/Ctrl+A. A table this size sorts on a worker thread, so a click on a title never stalls a frame.",
                     child: Demo.Stage(
-                        new Column(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                        child: new Column(
+                            spacing: Spacing.Md,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch
+                        ) {
                             Children = {
-                                Framed(orders, height: 360f),
-                                new Watch(() => new Align(alignment: Alignment.Center, child: Demo.Value(_orderSelection.Value)) {
+                                Framed(table: orders, height: 360f),
+                                new Watch(() => new Align(
+                                        alignment: Alignment.Center,
+                                        child: Demo.Value(_orderSelection.Value)
+                                    ) {
                                         HeightFactor = 1f,
                                     }
                                 ),
@@ -138,7 +176,8 @@ public sealed class DataTablePage : ComposedWidget
         bool ascending = _processes.SortAscending;
         _processes.Items = ProcessRow.Snapshot();
         _processes.SortBy(column: column, ascending: ascending);
-        _processInfo.Value = $"{_processes.Items.Count} processes · refreshed {DateTime.Now:HH:mm:ss}";
+        _processInfo.Value =
+            $"{_processes.Items.Count} processes · refreshed {DateTime.Now:HH:mm:ss}";
     }
 
     /// <summary>
@@ -178,8 +217,14 @@ public sealed class DataTablePage : ComposedWidget
                 {
                     try
                     {
-                        rows.Add(new ProcessRow(Name: p.ProcessName, Id: p.Id, Memory: Try(() => p.WorkingSet64),
-                            Threads: (int)Try(() => p.Threads.Count)));
+                        rows.Add(
+                            new ProcessRow(
+                                Name: p.ProcessName,
+                                Id: p.Id,
+                                Memory: Try(() => p.WorkingSet64),
+                                Threads: (int)Try(() => p.Threads.Count)
+                            )
+                        );
                     }
                     catch (InvalidOperationException)
                     {
@@ -198,14 +243,21 @@ public sealed class DataTablePage : ComposedWidget
                 return read();
             }
             catch (Exception e) when (e is InvalidOperationException or NotSupportedException
-                                          or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+                                          or System.ComponentModel.Win32Exception
+                                          or UnauthorizedAccessException)
             {
                 return -1;
             }
         }
     }
 
-    private sealed record Order(int Id, string Number, string Customer, string Status, DateOnly Date, decimal Total)
+    private sealed record Order(
+        int Id,
+        string Number,
+        string Customer,
+        string Status,
+        DateOnly Date,
+        decimal Total)
     {
         /// <summary>Deterministic, so the same rows come back every run.</summary>
         public static List<Order> Generate(int count)
@@ -215,14 +267,19 @@ public sealed class DataTablePage : ComposedWidget
             var list = new List<Order>(count);
             for (int i = 0; i < count; i++)
             {
-                list.Add(new Order(
-                    Id: i + 1,
-                    Number: $"#{100000 + i}",
-                    Customer: Customers[random.Next(Customers.Length)],
-                    Status: States[random.Next(States.Length)],
-                    Date: start.AddDays(random.Next(650)),
-                    Total: Math.Round((decimal)(random.NextDouble() * 900 + 5), 2)
-                ));
+                list.Add(
+                    new Order(
+                        Id: i + 1,
+                        Number: $"#{100000 + i}",
+                        Customer: Customers[random.Next(Customers.Length)],
+                        Status: States[random.Next(States.Length)],
+                        Date: start.AddDays(random.Next(650)),
+                        Total: Math.Round(
+                            d: (decimal)((random.NextDouble() * 900) + 5),
+                            decimals: 2
+                        )
+                    )
+                );
             }
 
             return list;

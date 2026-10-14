@@ -17,9 +17,10 @@ public static class AllocGuard
         for (int i = 0; i < warmup; i++) iteration();
 
         long allocated = Measure(() =>
-        {
-            for (int i = 0; i < iterations; i++) iteration();
-        });
+            {
+                for (int i = 0; i < iterations; i++) iteration();
+            }
+        );
 
         Assert.True(
             condition: allocated == 0,

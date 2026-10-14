@@ -18,7 +18,11 @@ namespace Zigote.Tests;
 public class SkeletonTests
 {
     private static readonly Constraints Room = new(
-        minWidth: 0f, maxWidth: 200f, minHeight: 0f, maxHeight: 200f);
+        minWidth: 0f,
+        maxWidth: 200f,
+        minHeight: 0f,
+        maxHeight: 200f
+    );
 
     private static PaintList Render(Skeleton skeleton)
     {
@@ -44,35 +48,49 @@ public class SkeletonTests
     }
 
     [Theory]
-    [InlineData(0f)]    // band fully off the left edge
-    [InlineData(1f)]    // fully off the right edge
+    [InlineData(0f)] // band fully off the left edge
+    [InlineData(1f)] // fully off the right edge
     public void SweepIsOffTheBlockAtBothEndsOfTheLoop(float phase)
     {
-        var bounds = new Rect(x: 0f, y: 0f, width: 100f, height: 14f);
+        var bounds = new Rect(
+            x: 0f,
+            y: 0f,
+            width: 100f,
+            height: 14f
+        );
         Assert.All(
-            Enumerable.Range(0, 16),
-            i => Assert.Null(Skeleton.Slice(bounds, phase, i)));
+            collection: Enumerable.Range(start: 0, count: 16),
+            action: i => Assert.Null(Skeleton.Slice(bounds: bounds, phase: phase, index: i))
+        );
     }
 
     [Fact]
     public void SweepStaysInsideTheBlock_AndPeaksInTheMiddleOfTheBand()
     {
-        var bounds = new Rect(x: 10f, y: 0f, width: 100f, height: 14f);
-        var slices = Enumerable.Range(0, 16)
-            .Select(i => Skeleton.Slice(bounds, 0.5f, i))
+        var bounds = new Rect(
+            x: 10f,
+            y: 0f,
+            width: 100f,
+            height: 14f
+        );
+        var slices = Enumerable.Range(start: 0, count: 16)
+            .Select(i => Skeleton.Slice(bounds: bounds, phase: 0.5f, index: i))
             .OfType<(float X, float Width, float Alpha)>()
             .ToList();
 
         Assert.NotEmpty(slices);
-        Assert.All(slices, s =>
-        {
-            Assert.InRange(s.X, bounds.X, bounds.X + bounds.Width);
-            Assert.InRange(s.X + s.Width, bounds.X, bounds.X + bounds.Width);
-            Assert.InRange(s.Alpha, 0f, 1f);
-        });
+        Assert.All(
+            collection: slices,
+            action: s =>
+            {
+                Assert.InRange(actual: s.X, low: bounds.X, high: bounds.X + bounds.Width);
+                Assert.InRange(actual: s.X + s.Width, low: bounds.X, high: bounds.X + bounds.Width);
+                Assert.InRange(actual: s.Alpha, low: 0f, high: 1f);
+            }
+        );
         // Brightest slice sits in the middle of the band, not at either edge.
         int brightest = slices.IndexOf(slices.MaxBy(s => s.Alpha));
-        Assert.InRange(brightest, 1, slices.Count - 2);
+        Assert.InRange(actual: brightest, low: 1, high: slices.Count - 2);
     }
 
     [Fact]
@@ -92,7 +110,13 @@ public class SkeletonTests
         Assert.Equal(expected: PaintCommandKind.Rect, actual: command.Kind);
 
         var sweep = Render(new Skeleton(width: 100f));
-        Assert.Contains(sweep.DebugCommands, c => c.Kind == PaintCommandKind.ClipStart);
-        Assert.Contains(sweep.DebugCommands, c => c.Kind == PaintCommandKind.ClipEnd);
+        Assert.Contains(
+            collection: sweep.DebugCommands,
+            filter: c => c.Kind == PaintCommandKind.ClipStart
+        );
+        Assert.Contains(
+            collection: sweep.DebugCommands,
+            filter: c => c.Kind == PaintCommandKind.ClipEnd
+        );
     }
 }

@@ -83,7 +83,7 @@ public sealed class MenusPage : ComposedWidget
 
     private Widget Menu(GalleryHost host)
     {
-        return new AdwMenuButton() {
+        return new AdwMenuButton {
             MenuWidth = 240f,
             Sections = [
                 [

@@ -327,9 +327,10 @@ public class SpriteAnimationTests
 
         const int ticks = 500;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < ticks; i++) Frame(animator);
-        });
+            {
+                for (int i = 0; i < ticks; i++) Frame(animator);
+            }
+        );
         long allocated = measured;
 
         Assert.True(

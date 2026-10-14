@@ -25,7 +25,8 @@ public partial class App
     {
         // One at a time: a dragged accent picker reassigns the theme every frame, and the first
         // frame's picture fading out over the live ones is all the smoothing that needs.
-        if (_themeFading || ThemeCrossfade <= 0f || AnimationController.ReduceMotion || InTreeWalk ||
+        if (_themeFading || ThemeCrossfade <= 0f || AnimationController.ReduceMotion ||
+            InTreeWalk ||
             Engine is null || _paint is not { Count: > 0 })
             return;
 
@@ -35,7 +36,14 @@ public partial class App
         ulong texture = CaptureUiTexture(width: out uint w, height: out uint h);
         if (texture == 0) return;
         _themeFading = true;
-        PushOverlay(new ThemeFade(app: this, texture: texture, width: w, height: h));
+        PushOverlay(
+            new ThemeFade(
+                app: this,
+                texture: texture,
+                width: w,
+                height: h
+            )
+        );
     }
 
     private sealed class ThemeFade : Widget
@@ -53,7 +61,9 @@ public partial class App
             _texture = texture;
             _width = width;
             _height = height;
-            _anim = new AnimationController(durationSeconds: ThemeCrossfade, vsync: this) { Curve = Curves.EaseOut };
+            _anim = new AnimationController(durationSeconds: ThemeCrossfade, vsync: this) {
+                Curve = Curves.EaseOut,
+            };
             _anim.OnTick += MarkNeedsPaint;
             _anim.OnCompleted += () =>
             {
@@ -76,7 +86,12 @@ public partial class App
         }
 
         public override void Layout(Offset origin) =>
-            Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
 
         public override void Paint(PaintList paint)
         {

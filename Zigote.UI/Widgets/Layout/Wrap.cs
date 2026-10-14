@@ -88,7 +88,12 @@ public class Wrap : MultiChildWidget
             // Wrap to a new run when this child would overflow the current one.
             if (mainCursor > 0f && mainCursor + childMain > maxMain)
             {
-                AlignRun(start: runStart, end: i, runCross: runCross, horizontal: horizontal);
+                AlignRun(
+                    start: runStart,
+                    end: i,
+                    runCross: runCross,
+                    horizontal: horizontal
+                );
                 runStart = i;
                 crossCursor += runCross + RunSpacing;
                 mainCursor = 0f;
@@ -106,7 +111,12 @@ public class Wrap : MultiChildWidget
             lineMainExtent = MathF.Max(x: lineMainExtent, y: mainCursor - Spacing);
         }
 
-        AlignRun(start: runStart, end: Children.Count, runCross: runCross, horizontal: horizontal);
+        AlignRun(
+            start: runStart,
+            end: Children.Count,
+            runCross: runCross,
+            horizontal: horizontal
+        );
         float totalCross = crossCursor + runCross;
         _size = c.Constrain(
             horizontal

@@ -13,9 +13,14 @@ internal static class PerformanceProbe
 {
     public static void Run(string[] args)
     {
-        var report = new PerformanceReport("headless");
-        report.Metadata["scope"] = "Managed production paths; headless text fallback; no GPU or presentation. Timing includes instrumentation overhead.";
-        report.Metadata["sampling"] = "Nearest-rank quantiles, raw chronological samples, no forced GC; run three fresh processes.";
+        var report = new PerformanceReport("headless") {
+            Metadata = {
+                ["scope"] =
+                    "Managed production paths; headless text fallback; no GPU or presentation. Timing includes instrumentation overhead.",
+                ["sampling"] =
+                    "Nearest-rank quantiles, raw chronological samples, no forced GC; run three fresh processes.",
+            },
+        };
         Profiler.Enabled = false;
         BackgroundCases(report);
         PaintCases(report);
@@ -26,32 +31,74 @@ internal static class PerformanceProbe
     private static void BackgroundCases(PerformanceReport report)
     {
         using var background = Background.Manual();
-        report.Measure("background.empty_1000_calls", 200, 1000, () =>
-        {
-            for (int i = 0; i < 1000; i++) background.RunFrame(TimeSpan.Zero);
-        });
-        foreach (int count in new[] { 1000, 10000 })
+        report.Measure(
+            name: "background.empty_1000_calls",
+            warmup: 200,
+            samples: 1000,
+            action: () =>
+            {
+                for (int i = 0; i < 1000; i++) background.RunFrame(TimeSpan.Zero);
+            }
+        );
+        foreach (int count in new[] {
+                     1000,
+                     10000,
+                 })
         {
             int completed = 0;
             Action callback = () => completed++;
-            report.Measure($"background.enqueue.{count}", 10, 100,
-                () => { for (int i = 0; i < count; i++) background.Post(callback, Deliver.WhenIdle); },
-                () => { background.RunFrame(TimeSpan.FromSeconds(10)); completed = 0; });
+            report.Measure(
+                name: $"background.enqueue.{count}",
+                warmup: 10,
+                samples: 100,
+                action: () =>
+                {
+                    for (int i = 0; i < count; i++)
+                        background.Post(ui: callback, deliver: Deliver.WhenIdle);
+                },
+                setup: () =>
+                {
+                    background.RunFrame(TimeSpan.FromSeconds(10));
+                    completed = 0;
+                }
+            );
             background.RunFrame(TimeSpan.FromSeconds(10));
-            PerformanceReport.Require(completed == count, "Enqueued callbacks were lost.");
-            report.Measure($"background.drain.{count}", 10, 100,
-                () => background.RunFrame(TimeSpan.FromSeconds(10)),
-                () => { completed = 0; for (int i = 0; i < count; i++) background.Post(callback, Deliver.WhenIdle); });
-            PerformanceReport.Require(completed == count && background.FrameIdle, "Drain did not finish.");
+            PerformanceReport.Require(
+                condition: completed == count,
+                message: "Enqueued callbacks were lost."
+            );
+            report.Measure(
+                name: $"background.drain.{count}",
+                warmup: 10,
+                samples: 100,
+                action: () => background.RunFrame(TimeSpan.FromSeconds(10)),
+                setup: () =>
+                {
+                    completed = 0;
+                    for (int i = 0; i < count; i++)
+                        background.Post(ui: callback, deliver: Deliver.WhenIdle);
+                }
+            );
+            PerformanceReport.Require(
+                condition: completed == count && background.FrameIdle,
+                message: "Drain did not finish."
+            );
         }
 
         const int burst = 400;
         int delivered = 0;
-        for (int i = 0; i < burst; i++) background.Post(() =>
+        for (int i = 0; i < burst; i++)
         {
-            PerformanceReport.BusyFor(.1);
-            delivered++;
-        }, Deliver.WhenIdle);
+            background.Post(
+                ui: () =>
+                {
+                    PerformanceReport.BusyFor(.1);
+                    delivered++;
+                },
+                deliver: Deliver.WhenIdle
+            );
+        }
+
         var drainTimes = new List<double>();
         var units = new List<double>();
         while (!background.FrameIdle)
@@ -61,74 +108,171 @@ internal static class PerformanceProbe
             background.RunFrame(TimeSpan.FromMilliseconds(.5));
             drainTimes.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
             units.Add(delivered - before);
-            PerformanceReport.Require(drainTimes.Count <= burst, "Budgeted drain made no progress.");
+            PerformanceReport.Require(
+                condition: drainTimes.Count <= burst,
+                message: "Budgeted drain made no progress."
+            );
         }
-        PerformanceReport.Require(delivered == burst, "Budgeted callbacks were lost.");
-        report.Add("background.burst_400_100us.budget_0.5", "ms", drainTimes.ToArray());
-        report.Add("background.burst_400_100us.units", "callbacks", units.ToArray());
+
+        PerformanceReport.Require(
+            condition: delivered == burst,
+            message: "Budgeted callbacks were lost."
+        );
+        report.Add(
+            name: "background.burst_400_100us.budget_0.5",
+            unit: "ms",
+            samples: drainTimes.ToArray()
+        );
+        report.Add(
+            name: "background.burst_400_100us.units",
+            unit: "callbacks",
+            samples: units.ToArray()
+        );
         report.Metadata["burst_drain_calls"] = drainTimes.Count.ToString();
 
         // Current policy guarantees one idle callback AND one slice unit despite a zero budget.
         using var overrun = Background.Manual();
         int steps = 0, idle = 0;
-        overrun.Slice("expensive", 1000, _ => { PerformanceReport.BusyFor(2); steps++; }, firstFrame: TimeSpan.Zero);
-        report.Measure("background.zero_budget.two_2ms_units", 5, 40,
-            () => overrun.RunFrame(TimeSpan.Zero),
-            () => overrun.Post(() => { PerformanceReport.BusyFor(2); idle++; }, Deliver.WhenIdle));
-        PerformanceReport.Require(idle == 45 && steps == 46, "Zero-budget progress contract changed.");
+        overrun.Slice(
+            key: "expensive",
+            count: 1000,
+            step: _ =>
+            {
+                PerformanceReport.BusyFor(2);
+                steps++;
+            },
+            firstFrame: TimeSpan.Zero
+        );
+        report.Measure(
+            name: "background.zero_budget.two_2ms_units",
+            warmup: 5,
+            samples: 40,
+            action: () => overrun.RunFrame(TimeSpan.Zero),
+            setup: () => overrun.Post(
+                ui: () =>
+                {
+                    PerformanceReport.BusyFor(2);
+                    idle++;
+                },
+                deliver: Deliver.WhenIdle
+            )
+        );
+        PerformanceReport.Require(
+            condition: idle == 45 && steps == 46,
+            message: "Zero-budget progress contract changed."
+        );
     }
 
     private static void PaintCases(PerformanceReport report)
     {
-        foreach (int count in new[] { 1000, 10000 })
+        foreach (int count in new[] {
+                     1000,
+                     10000,
+                 })
         {
             var paint = new PaintList();
             var snapshot = new PaintSnapshot();
             bool alternate = false;
+
             void Build(bool changed)
             {
                 paint.Clear();
-                for (int i = 0; i < count; i++) paint.AddRect(
-                    new Rect((i % 100) * 12, (i / 100) * 12, 10, 10),
-                    changed && i == count / 2 ? Color.White : Color.Black);
+                for (int i = 0; i < count; i++)
+                {
+                    paint.AddRect(
+                        bounds: new Rect(
+                            x: i % 100 * 12,
+                            y: i / 100 * 12,
+                            width: 10,
+                            height: 10
+                        ),
+                        color: changed && i == count / 2 ? Color.White : Color.Black
+                    );
+                }
             }
+
             Build(false);
             snapshot.Capture(paint);
-            report.Measure($"paint.record.{count}", 200, 512, () => Build(false));
+            report.Measure(
+                name: $"paint.record.{count}",
+                warmup: 200,
+                samples: 512,
+                action: () => Build(false)
+            );
             PaintDiffResult result = default;
+
             void Diff()
             {
                 Span<Rect> rects = stackalloc Rect[PaintSnapshot.MaxChangedRects];
-                result = snapshot.Diff(paint, rects, out _);
+                result = snapshot.Diff(current: paint, changed: rects, changedCount: out _);
                 snapshot.Capture(paint);
             }
-            report.Measure($"paint.diff_identical_capture.{count}", 200, 512, Diff);
-            PerformanceReport.Require(result == PaintDiffResult.Identical, "Identical paint differs.");
-            report.Measure($"paint.diff_one_change_capture.{count}", 200, 512, Diff,
-                () => { alternate = !alternate; Build(alternate); });
-            PerformanceReport.Require(result == PaintDiffResult.Bounded, "One changed rect was not bounded.");
+
+            report.Measure(
+                name: $"paint.diff_identical_capture.{count}",
+                warmup: 200,
+                samples: 512,
+                action: Diff
+            );
+            PerformanceReport.Require(
+                condition: result == PaintDiffResult.Identical,
+                message: "Identical paint differs."
+            );
+            report.Measure(
+                name: $"paint.diff_one_change_capture.{count}",
+                warmup: 200,
+                samples: 512,
+                action: Diff,
+                setup: () =>
+                {
+                    alternate = !alternate;
+                    Build(alternate);
+                }
+            );
+            PerformanceReport.Require(
+                condition: result == PaintDiffResult.Bounded,
+                message: "One changed rect was not bounded."
+            );
         }
     }
 
     internal static ListView BuildList(int count, string prefix)
     {
         var list = new ListView(itemExtent: 120);
-        list.SetBuilder(count, i => new Padding(EdgeInsets.All(8), new Row([
-            new ColoredBox(Color.Rgb(40 + i % 60, 44, 52), new SizedBox(160, 100)),
-            new Padding(EdgeInsets.All(12), new Column([
-                new Label($"{prefix} item {i}"), new Label($"Subtitle for {prefix} row {i}")
-            ]))
-        ])));
+        list.SetBuilder(
+            itemCount: count,
+            itemBuilder: i => new Padding(
+                padding: EdgeInsets.All(8),
+                child: new Row(
+                    [
+                        new ColoredBox(
+                            color: Color.Rgb(r: 40 + (i % 60), g: 44, b: 52),
+                            child: new SizedBox(width: 160, height: 100)
+                        ),
+                        new Padding(
+                            padding: EdgeInsets.All(12),
+                            child: new Column(
+                                [
+                                    new Label($"{prefix} item {i}"),
+                                    new Label($"Subtitle for {prefix} row {i}"),
+                                ]
+                            )
+                        ),
+                    ]
+                )
+            )
+        );
         return list;
     }
 
     private static void ListCases(PerformanceReport report)
     {
-        var list = BuildList(10000, "warm");
+        var list = BuildList(count: 10000, prefix: "warm");
         var paint = new PaintList();
         var snapshot = new PaintSnapshot();
-        var constraints = Constraints.Tight(1200, 900);
+        var constraints = Constraints.Tight(width: 1200, height: 900);
         PaintDiffResult diff = default;
+
         void Frame()
         {
             list.Measure(constraints);
@@ -136,19 +280,42 @@ internal static class PerformanceProbe
             paint.Clear();
             list.Paint(paint);
             Span<Rect> rects = stackalloc Rect[PaintSnapshot.MaxChangedRects];
-            diff = snapshot.Diff(paint, rects, out _);
+            diff = snapshot.Diff(current: paint, changed: rects, changedCount: out _);
             snapshot.Capture(paint);
         }
-        report.Measure("list.static_10000", 300, 1000, Frame);
-        PerformanceReport.Require(paint.Count > 0 && diff == PaintDiffResult.Identical, "Static tree was not painted.");
+
+        report.Measure(
+            name: "list.static_10000",
+            warmup: 300,
+            samples: 1000,
+            action: Frame
+        );
+        PerformanceReport.Require(
+            condition: paint.Count > 0 && diff == PaintDiffResult.Identical,
+            message: "Static tree was not painted."
+        );
         int frame = 0;
-        report.Measure("list.warm_scroll_10000", 300, 1000, Frame,
-            () => list.OffsetY = (frame++ % 64) * 12);
+        report.Measure(
+            name: "list.warm_scroll_10000",
+            warmup: 300,
+            samples: 1000,
+            action: Frame,
+            setup: () => list.OffsetY = frame++ % 64 * 12
+        );
         float startOffset = list.OffsetY;
-        report.Measure("list.new_rows_10000", 0, 1000, Frame,
-            () => list.OffsetY = startOffset += 120);
-        PerformanceReport.Require(list.OffsetY > 100000 && paint.Count > 0, "Scroll benchmark stopped moving.");
+        report.Measure(
+            name: "list.new_rows_10000",
+            warmup: 0,
+            samples: 1000,
+            action: Frame,
+            setup: () => list.OffsetY = startOffset += 120
+        );
+        PerformanceReport.Require(
+            condition: list.OffsetY > 100000 && paint.Count > 0,
+            message: "Scroll benchmark stopped moving."
+        );
         report.Metadata["list_final_paint_commands"] = paint.Count.ToString();
-        report.Metadata["list_new_rows"] = "Unique row labels during measured pass after machinery warmup; headless text sizing. Offset setter excluded from measured frame.";
+        report.Metadata["list_new_rows"] =
+            "Unique row labels during measured pass after machinery warmup; headless text sizing. Offset setter excluded from measured frame.";
     }
 }

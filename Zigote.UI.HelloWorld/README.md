@@ -17,7 +17,8 @@ new AdwButton("Increment", () => _count.Value++)
 ```
 
 - **`AdwaitaApp`** boots the engine, opens the window, installs the theme; `Run()` drives the frame loop.
-- **`AdwToolbarView` / `AdwHeaderBar` / `AdwButton`** are the Adwaita shell: content under a header bar that hosts the window controls.
+- **`AdwToolbarView` / `AdwHeaderBar` / `AdwButton`** are the Adwaita shell: content under a header bar that hosts the
+  window controls.
 - **`Signal<T>`** is the state. **`Watch`** is the bridge to the widget tree: it runs its builder under dependency
   tracking and rebuilds only the subtree that read the signal — so the button re-runs one `Text`, not the page.
 - The state lives in the signal, so the page just composes. There is no stateless/stateful split: a widget's fields are

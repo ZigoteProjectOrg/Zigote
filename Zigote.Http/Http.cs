@@ -20,23 +20,28 @@ namespace Zigote.Http;
 public static class HttpRequest
 {
     /// <summary>A GET for <paramref name="template" />, which may contain <c>{placeholders}</c>.</summary>
-    public static HttpSpec Get(string template) => HttpSpec.For(HttpVerb.Get, template);
+    public static HttpSpec Get(string template) =>
+        HttpSpec.For(verb: HttpVerb.Get, template: template);
 
     /// <summary>A HEAD.</summary>
-    public static HttpSpec Head(string template) => HttpSpec.For(HttpVerb.Head, template);
+    public static HttpSpec Head(string template) =>
+        HttpSpec.For(verb: HttpVerb.Head, template: template);
 
     /// <summary>A POST.</summary>
-    public static HttpSpec Post(string template) => HttpSpec.For(HttpVerb.Post, template);
+    public static HttpSpec Post(string template) =>
+        HttpSpec.For(verb: HttpVerb.Post, template: template);
 
     /// <summary>A PUT.</summary>
-    public static HttpSpec Put(string template) => HttpSpec.For(HttpVerb.Put, template);
+    public static HttpSpec Put(string template) =>
+        HttpSpec.For(verb: HttpVerb.Put, template: template);
 
     /// <summary>A PATCH.</summary>
-    public static HttpSpec Patch(string template) => HttpSpec.For(HttpVerb.Patch, template);
+    public static HttpSpec Patch(string template) =>
+        HttpSpec.For(verb: HttpVerb.Patch, template: template);
 
     /// <summary>A DELETE.</summary>
-    public static HttpSpec Delete(string template) => HttpSpec.For(HttpVerb.Delete, template);
-
+    public static HttpSpec Delete(string template) =>
+        HttpSpec.For(verb: HttpVerb.Delete, template: template);
 }
 
 /// <summary>
@@ -56,7 +61,7 @@ public static class HttpFrame
     public static bool TryTake(HttpHandle handle, out HttpOutcome outcome)
     {
         var queue = Queue;
-        if (queue is not null) return queue.TryTake(handle, out outcome);
+        if (queue is not null) return queue.TryTake(handle: handle, outcome: out outcome);
         outcome = default;
         return false;
     }
@@ -77,45 +82,54 @@ public static class HttpSpecExtensions
 {
     /// <summary>Binds a <c>{placeholder}</c> in the route template. The value is percent-encoded at render time.</summary>
     public static HttpSpec Route(this HttpSpec spec, string name, string value) =>
-        spec with { Path = spec.Path.Bind(name, value) };
+        spec with { Path = spec.Path.Bind(name: name, value: value) };
 
     /// <summary>Binds a <c>{placeholder}</c> from anything formattable, invariantly.</summary>
-    public static HttpSpec Route<T>(this HttpSpec spec, string name, T value) where T : IFormattable =>
-        spec.Route(name, value.ToString(null, CultureInfo.InvariantCulture));
+    public static HttpSpec Route<T>(this HttpSpec spec, string name, T value)
+        where T : IFormattable =>
+        spec.Route(
+            name: name,
+            value: value.ToString(format: null, formatProvider: CultureInfo.InvariantCulture)
+        );
 
     /// <summary>Appends a query-string pair.</summary>
     public static HttpSpec WithQuery(this HttpSpec spec, string name, string value) =>
-        spec with { Query = Safe(spec.Query).Add(new QueryParam(name, value)) };
+        spec with { Query = Safe(spec.Query).Add(new QueryParam(Name: name, Value: value)) };
 
     /// <summary>Appends a query-string pair from anything formattable, invariantly.</summary>
-    public static HttpSpec WithQuery<T>(this HttpSpec spec, string name, T value) where T : IFormattable =>
-        spec.WithQuery(name, value.ToString(null, CultureInfo.InvariantCulture));
+    public static HttpSpec WithQuery<T>(this HttpSpec spec, string name, T value)
+        where T : IFormattable =>
+        spec.WithQuery(
+            name: name,
+            value: value.ToString(format: null, formatProvider: CultureInfo.InvariantCulture)
+        );
 
     /// <summary>Appends a query-string pair only when <paramref name="value" /> is not null. For optional filters.</summary>
     public static HttpSpec WithQueryIf(this HttpSpec spec, string name, string? value) =>
-        value is null ? spec : spec.WithQuery(name, value);
+        value is null ? spec : spec.WithQuery(name: name, value: value);
 
     /// <summary>Adds a request header.</summary>
     public static HttpSpec WithHeader(this HttpSpec spec, string name, string value) =>
-        spec with { Headers = Safe(spec.Headers).Add(new HeaderPair(name, value)) };
+        spec with { Headers = Safe(spec.Headers).Add(new HeaderPair(Name: name, Value: value)) };
 
     /// <summary>Sets the body.</summary>
     public static HttpSpec WithBody(this HttpSpec spec, HttpBody body) => spec with { Body = body };
 
     /// <summary>Sets a JSON body, serialized now with a source-generated contract.</summary>
     public static HttpSpec WithJson<T>(this HttpSpec spec, T value, JsonTypeInfo<T> typeInfo) =>
-        spec with { Body = HttpBody.Json(value, typeInfo) };
+        spec with { Body = HttpBody.Json(value: value, typeInfo: typeInfo) };
 
     /// <summary>Sets a form body.</summary>
     public static HttpSpec WithForm(this HttpSpec spec, params ReadOnlySpan<QueryParam> fields) =>
-        spec with { Body = HttpBody.Form([..fields]) };
+        spec with { Body = HttpBody.Form([.. fields]) };
 
     /// <summary>
     ///     Sets a <c>multipart/form-data</c> body. Build parts with
     ///     <see cref="MultipartPart.Field" /> and <see cref="MultipartPart.File(string, string, ReadOnlyMemory{byte}, string)" />;
     ///     a request whose parts are all replayable stays retryable, one stream part makes it one-shot.
     /// </summary>
-    public static HttpSpec WithMultipart(this HttpSpec spec, params ReadOnlySpan<MultipartPart> parts) =>
+    public static HttpSpec WithMultipart(this HttpSpec spec,
+        params ReadOnlySpan<MultipartPart> parts) =>
         spec with { Body = HttpBody.Multipart(parts) };
 
     /// <summary>Sets the budget for the whole call — retries and revalidation included.</summary>
@@ -153,7 +167,8 @@ public static class HttpSpecExtensions
         spec with { Policy = spec.Policy with { Progress = progress } };
 
     /// <summary>Replaces the whole policy.</summary>
-    public static HttpSpec WithPolicy(this HttpSpec spec, RequestPolicy policy) => spec with { Policy = policy };
+    public static HttpSpec WithPolicy(this HttpSpec spec, RequestPolicy policy) =>
+        spec with { Policy = policy };
 
     private static ImmutableArray<T> Safe<T>(ImmutableArray<T> array) =>
         array.IsDefault ? ImmutableArray<T>.Empty : array;

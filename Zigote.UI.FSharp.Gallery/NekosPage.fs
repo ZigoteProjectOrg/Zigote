@@ -31,9 +31,6 @@ open Zigote.Http
 open Zigote.Http.Cache
 open Zigote.Http.FSharp
 
-/// `Http` on its own would bind to the `Zigote.Http` *namespace* from inside `Zigote.*`, exactly as
-/// it would in C#. The alias is the whole workaround, and it keeps the pipeline reading the way the
-/// F# surface is meant to read.
 module Req = Zigote.Http.FSharp.Http
 
 // ── model ────────────────────────────────────────────────────────────────────
@@ -69,7 +66,14 @@ type LogRow =
     }
 
 let private categories = [| "neko"; "waifu"; "husbando"; "kitsune" |]
-let private cacheModes = [| CacheMode.Default; CacheMode.Revalidate; CacheMode.Bypass; CacheMode.CacheOnly |]
+
+let private cacheModes =
+    [|
+        CacheMode.Default
+        CacheMode.Revalidate
+        CacheMode.Bypass
+        CacheMode.CacheOnly
+    |]
 
 let private pane = signal Grid
 let private category = signal 0
@@ -162,7 +166,8 @@ let private interceptor: Middleware =
 
                     record row
                     return result
-                })))
+                }
+            )))
 
 // ── the runner ───────────────────────────────────────────────────────────────
 //
@@ -252,9 +257,11 @@ let private runProbe (label: string) (spec: HttpSpec) =
         let described =
             match result with
             | Ok bytes -> $"{label}: {bytes.Length} B — that was supposed to fail"
-            | Error(:? HttpError.Status as s) -> $"{label}: Status {int s.Code} ({s.Body.Length} B of body)"
+            | Error(:? HttpError.Status as s) ->
+                $"{label}: Status {int s.Code} ({s.Body.Length} B of body)"
             | Error(:? HttpError.Transport as t) -> $"{label}: Transport {t.Fault}"
-            | Error(:? HttpError.Timeout as t) -> $"{label}: Timeout at {t.Stage}, budget {t.Budget.TotalMilliseconds:F0} ms"
+            | Error(:? HttpError.Timeout as t) ->
+                $"{label}: Timeout at {t.Stage}, budget {t.Budget.TotalMilliseconds:F0} ms"
             | Error(:? HttpError.Policy as p) -> $"{label}: Policy {p.Fault}"
             | Error e -> $"{label}: {e.Message}"
 
@@ -283,7 +290,11 @@ let private visible =
 let private hitRate =
     computed (fun () ->
         let total = netCalls.Value + cacheHits.Value
-        if total = 0 then 0.0 else float cacheHits.Value / float total * 100.0)
+
+        if total = 0 then
+            0.0
+        else
+            float cacheHits.Value / float total * 100.0)
 
 // ── tiles ────────────────────────────────────────────────────────────────────
 
@@ -430,7 +441,11 @@ let private grid () =
                     "Nothing to show — fetch a category, or relax the filter."
             )
         else
-            AdwResponsiveGrid([ for item in live -> tile item ], MinColumnWidth = 200f, Gutter = 12f))
+            AdwResponsiveGrid(
+                [ for item in live -> tile item ],
+                MinColumnWidth = 200f,
+                Gutter = 12f
+            ))
 
 let private logPane () =
     let cell width (text: string) (style: TextStyle) =
@@ -489,7 +504,9 @@ let private logPane () =
                                             cell
                                                 62f
                                                 (if row.Cached then "cache" else "network")
-                                                (TextStyle(color = (if row.Cached then hit else dim)))
+                                                (TextStyle(
+                                                    color = (if row.Cached then hit else dim)
+                                                ))
                                             cell 62f $"%.0f{row.Ms} ms" muted
                                             cell
                                                 70f
@@ -542,11 +559,7 @@ let private cachePane () =
                                     Style = ButtonStyle.Outlined
                                 )
                             )
-                            Button(
-                                "Re-fetch (same request)",
-                                load,
-                                Style = ButtonStyle.Outlined
-                            )
+                            Button("Re-fetch (same request)", load, Style = ButtonStyle.Outlined)
                         ]
                 )
             ]
@@ -564,7 +577,10 @@ let private cachePane () =
                                 Button(
                                     "404",
                                     (fun () ->
-                                        runProbe "404" (Req.get "no-such-endpoint" |> Req.cache CacheMode.Bypass)),
+                                        runProbe
+                                            "404"
+                                            (Req.get "no-such-endpoint"
+                                             |> Req.cache CacheMode.Bypass)),
                                     Style = ButtonStyle.Outlined
                                 )
                             )

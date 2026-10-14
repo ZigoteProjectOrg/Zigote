@@ -61,6 +61,7 @@ public sealed class ImageGridPage : ComposedWidget
     // measurement windows.
     private static readonly bool Bench =
         Environment.GetEnvironmentVariable("ZIGOTE_IMAGEGRID_BENCH") == "1";
+
     private Ticker? _bench;
     private float _benchT;
     private int _benchPhase;
@@ -98,7 +99,9 @@ public sealed class ImageGridPage : ComposedWidget
     protected override void OnUnmount() => _bench = null;
 
     private static void BenchMark(string phase) =>
-        Console.Error.WriteLine($"BENCH phase={phase} t={DateTimeOffset.Now.ToUnixTimeMilliseconds()}");
+        Console.Error.WriteLine(
+            $"BENCH phase={phase} t={DateTimeOffset.Now.ToUnixTimeMilliseconds()}"
+        );
 
     private void BenchTick(float dt)
     {
@@ -112,6 +115,7 @@ public sealed class ImageGridPage : ComposedWidget
             // (App.Frame's conservative MarkAll) — the idle phase must not carry that cost.
             if (phase == 2) _bench?.Stop();
         }
+
         // ~600 px/s: a reader working down a feed, slow enough that tiles get to load.
         if (phase == 1) _grid.OnScroll(dx: 0f, dy: -0.25f);
     }
@@ -178,7 +182,7 @@ public sealed class ImageGridPage : ComposedWidget
         var result = await ArtSource.FetchPageAsync(page).ConfigureAwait(false);
         App.Active?.Post(() =>
             {
-                if (result.TryGet(out var pieces, out var error))
+                if (result.TryGet(value: out var pieces, error: out var error))
                 {
                     Append(page: page, pieces: pieces);
                     return;

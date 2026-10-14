@@ -16,57 +16,85 @@ public class HttpPipelineTests
 {
     private static HttpRunner Runner(Send transport, IHttpCacheStore? cache = null,
         IHttpAuthProvider? auth = null, TimeProvider? time = null) =>
-        new(new HttpRunnerOptions
-        {
-            BaseAddress = new Uri("https://example.test/"),
-            Transport = transport,
-            Cache = cache,
-            Auth = auth,
-            Time = time ?? TimeProvider.System
-        });
+        new(
+            new HttpRunnerOptions {
+                BaseAddress = new Uri("https://example.test/"),
+                Transport = transport,
+                Cache = cache,
+                Auth = auth,
+                Time = time ?? TimeProvider.System,
+            }
+        );
 
     private static ValueTask<HttpResult<HttpResponse>> Reply(
         HttpStatusCode status, string body, params (string, string)[] headers)
     {
         var built = ImmutableArray.CreateBuilder<HeaderPair>(headers.Length);
-        foreach ((string name, string value) in headers) built.Add(new HeaderPair(name, value));
-        return ValueTask.FromResult(HttpResult<HttpResponse>.Ok(
-            HttpResponse.FromBytes(status, built.ToImmutable(), Encoding.UTF8.GetBytes(body))));
+        foreach ((string name, string value) in headers)
+            built.Add(new HeaderPair(Name: name, Value: value));
+        return ValueTask.FromResult(
+            HttpResult<HttpResponse>.Ok(
+                HttpResponse.FromBytes(
+                    status: status,
+                    headers: built.ToImmutable(),
+                    body: Encoding.UTF8.GetBytes(body)
+                )
+            )
+        );
     }
 
-    private static ValueTask<HttpResult<HttpResponse>> Fail(TransportFault fault = TransportFault.Connect) =>
-        ValueTask.FromResult(HttpResult<HttpResponse>.Fail(
-            new HttpError.Transport(fault, new IOException("stub"))));
+    private static ValueTask<HttpResult<HttpResponse>> Fail(
+        TransportFault fault = TransportFault.Connect) =>
+        ValueTask.FromResult(
+            HttpResult<HttpResponse>.Fail(
+                new HttpError.Transport(Fault: fault, Inner: new IOException("stub"))
+            )
+        );
 
     private static readonly RetryPolicy Fast =
-        new(3, TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(2), 0);
+        new(
+            MaxAttempts: 3,
+            BaseDelay: TimeSpan.FromMilliseconds(1),
+            MaxDelay: TimeSpan.FromMilliseconds(2),
+            Jitter: 0
+        );
 
     [Fact]
     public void Route_renders_and_escapes_bindings()
     {
         var spec = HttpRequest.Get("assets/{id}/blob")
-            .Route("id", "a b/c")
-            .WithQuery("q", "x&y");
+            .Route(name: "id", value: "a b/c")
+            .WithQuery(name: "q", value: "x&y");
 
         Assert.Equal(
             expected: "https://example.test/assets/a%20b%2Fc/blob?q=x%26y",
-            actual: spec.ResolveUri(new Uri("https://example.test/")).AbsoluteUri);
+            actual: spec.ResolveUri(new Uri("https://example.test/")).AbsoluteUri
+        );
     }
 
     [Fact]
     public void Unbound_placeholder_is_an_error_not_a_literal()
     {
         var spec = HttpRequest.Get("assets/{id}");
-        Assert.Throws<InvalidOperationException>(() => { _ = spec.ResolveUri(new Uri("https://example.test/")); });
+        Assert.Throws<InvalidOperationException>(() =>
+            {
+                _ = spec.ResolveUri(new Uri("https://example.test/"));
+            }
+        );
     }
 
     [Fact]
     public async Task Retries_a_transient_failure_on_an_idempotent_verb()
     {
         int calls = 0;
-        using var runner = Runner((_, _) => ++calls < 3 ? Fail() : Reply(HttpStatusCode.OK, "ok"));
+        using var runner = Runner((_, _) =>
+            ++calls < 3 ? Fail() : Reply(status: HttpStatusCode.OK, body: "ok")
+        );
 
-        var result = await runner.TextAsync(HttpRequest.Get("thing").Retry(Fast), TestContext.Current.CancellationToken);
+        var result = await runner.TextAsync(
+            spec: HttpRequest.Get("thing").Retry(Fast),
+            ct: TestContext.Current.CancellationToken
+        );
 
         Assert.True(result.IsOk);
         Assert.Equal(expected: 3, actual: calls);
@@ -77,12 +105,16 @@ public class HttpPipelineTests
     {
         int calls = 0;
         using var runner = Runner((_, _) =>
-        {
-            calls++;
-            return Fail();
-        });
+            {
+                calls++;
+                return Fail();
+            }
+        );
 
-        var result = await runner.TextAsync(HttpRequest.Post("thing").Retry(Fast), TestContext.Current.CancellationToken);
+        var result = await runner.TextAsync(
+            spec: HttpRequest.Post("thing").Retry(Fast),
+            ct: TestContext.Current.CancellationToken
+        );
 
         Assert.False(result.IsOk);
         Assert.Equal(expected: 1, actual: calls);
@@ -93,16 +125,19 @@ public class HttpPipelineTests
     {
         int calls = 0;
         using var runner = Runner((_, _) =>
-        {
-            calls++;
-            return Fail();
-        });
+            {
+                calls++;
+                return Fail();
+            }
+        );
 
         var spec = HttpRequest.Put("thing")
             .WithBody(HttpBody.Stream(new MemoryStream([1, 2, 3])))
             .Retry(Fast);
 
-        Assert.False((await runner.TextAsync(spec, TestContext.Current.CancellationToken)).IsOk);
+        Assert.False(
+            (await runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken)).IsOk
+        );
         Assert.Equal(expected: 1, actual: calls);
     }
 
@@ -113,22 +148,34 @@ public class HttpPipelineTests
         var spec = HttpRequest.Get("thing").NoRetry();
 
         for (int i = 0; i < 5; i++)
-            Assert.IsType<HttpError.Transport>((await runner.TextAsync(spec, TestContext.Current.CancellationToken)).Error);
+            Assert.IsType<HttpError.Transport>(
+                (await runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken))
+                .Error
+            );
 
-        var blocked = await runner.TextAsync(spec, TestContext.Current.CancellationToken);
-        Assert.Equal(expected: new HttpError.Policy(PolicyFault.CircuitOpen), actual: blocked.Error);
+        var blocked = await runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(
+            expected: new HttpError.Policy(PolicyFault.CircuitOpen),
+            actual: blocked.Error
+        );
     }
 
     [Fact]
     public async Task The_deadline_covers_the_whole_call_and_is_named_as_a_timeout()
     {
         using var runner = Runner(async (_, ct) =>
-        {
-            await Task.Delay(TimeSpan.FromSeconds(10), ct);
-            return HttpResult<HttpResponse>.Ok(HttpResponse.FromBytes(HttpStatusCode.OK, [], []));
-        });
+            {
+                await Task.Delay(delay: TimeSpan.FromSeconds(10), cancellationToken: ct);
+                return HttpResult<HttpResponse>.Ok(
+                    HttpResponse.FromBytes(status: HttpStatusCode.OK, headers: [], body: [])
+                );
+            }
+        );
 
-        var result = await runner.TextAsync(HttpRequest.Get("slow").Deadline(TimeSpan.FromMilliseconds(50)), TestContext.Current.CancellationToken);
+        var result = await runner.TextAsync(
+            spec: HttpRequest.Get("slow").Deadline(TimeSpan.FromMilliseconds(50)),
+            ct: TestContext.Current.CancellationToken
+        );
 
         var timeout = Assert.IsType<HttpError.Timeout>(result.Error);
         Assert.Equal(expected: TimeoutStage.Total, actual: timeout.Stage);
@@ -140,22 +187,34 @@ public class HttpPipelineTests
         int calls = 0;
         var gate = new TaskCompletionSource();
         using var runner = Runner(async (_, _) =>
-        {
-            Interlocked.Increment(ref calls);
-            await gate.Task;
-            return HttpResult<HttpResponse>.Ok(
-                HttpResponse.FromBytes(HttpStatusCode.OK, [], Encoding.UTF8.GetBytes("shared")));
-        });
+            {
+                Interlocked.Increment(ref calls);
+                await gate.Task;
+                return HttpResult<HttpResponse>.Ok(
+                    HttpResponse.FromBytes(
+                        status: HttpStatusCode.OK,
+                        headers: [],
+                        body: Encoding.UTF8.GetBytes("shared")
+                    )
+                );
+            }
+        );
 
         var spec = HttpRequest.Get("thing");
         var waiters = new Task<HttpResult<string>>[5];
-        for (int i = 0; i < waiters.Length; i++) waiters[i] = runner.TextAsync(spec, TestContext.Current.CancellationToken).AsTask();
+        for (int i = 0; i < waiters.Length; i++)
+            waiters[i] = runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken)
+                .AsTask();
 
         while (Volatile.Read(ref calls) == 0) await Task.Yield();
-        await Task.Delay(20, TestContext.Current.CancellationToken); // let the followers attach to the flight
+        await Task.Delay(
+            millisecondsDelay: 20,
+            cancellationToken: TestContext.Current.CancellationToken
+        ); // let the followers attach to the flight
         gate.SetResult();
 
-        foreach (var waiter in await Task.WhenAll(waiters)) Assert.Equal(expected: "shared", actual: waiter.Value);
+        foreach (var waiter in await Task.WhenAll(waiters))
+            Assert.Equal(expected: "shared", actual: waiter.Value);
         Assert.Equal(expected: 1, actual: calls);
     }
 
@@ -164,14 +223,33 @@ public class HttpPipelineTests
     {
         int calls = 0;
         var store = new MemoryCacheStore();
-        using var runner = Runner((_, _) =>
-        {
-            calls++;
-            return Reply(HttpStatusCode.OK, "cached", ("Cache-Control", "max-age=60"));
-        }, store);
+        using var runner = Runner(
+            transport: (_, _) =>
+            {
+                calls++;
+                return Reply(
+                    status: HttpStatusCode.OK,
+                    body: "cached",
+                    ("Cache-Control", "max-age=60")
+                );
+            },
+            cache: store
+        );
 
-        Assert.Equal(expected: "cached", actual: (await runner.TextAsync(HttpRequest.Get("thing"), TestContext.Current.CancellationToken)).Value);
-        Assert.Equal(expected: "cached", actual: (await runner.TextAsync(HttpRequest.Get("thing"), TestContext.Current.CancellationToken)).Value);
+        Assert.Equal(
+            expected: "cached",
+            actual: (await runner.TextAsync(
+                spec: HttpRequest.Get("thing"),
+                ct: TestContext.Current.CancellationToken
+            )).Value
+        );
+        Assert.Equal(
+            expected: "cached",
+            actual: (await runner.TextAsync(
+                spec: HttpRequest.Get("thing"),
+                ct: TestContext.Current.CancellationToken
+            )).Value
+        );
         Assert.Equal(expected: 1, actual: calls);
     }
 
@@ -180,21 +258,51 @@ public class HttpPipelineTests
     {
         int calls = 0;
         var store = new MemoryCacheStore();
-        using var runner = Runner((spec, _) =>
-        {
-            calls++;
-            bool conditional = spec.Headers.Any(h => h.Name == "If-None-Match");
-            return conditional
-                ? Reply(HttpStatusCode.NotModified, "", ("Cache-Control", "max-age=60"))
-                : Reply(HttpStatusCode.OK, "body", ("ETag", "\"v1\""), ("Cache-Control", "max-age=0"));
-        }, store);
+        using var runner = Runner(
+            transport: (spec, _) =>
+            {
+                calls++;
+                bool conditional = spec.Headers.Any(h => h.Name == "If-None-Match");
+                return conditional
+                    ? Reply(
+                        status: HttpStatusCode.NotModified,
+                        body: "",
+                        ("Cache-Control", "max-age=60")
+                    )
+                    : Reply(
+                        status: HttpStatusCode.OK,
+                        body: "body",
+                        ("ETag", "\"v1\""),
+                        ("Cache-Control", "max-age=0")
+                    );
+            },
+            cache: store
+        );
 
-        Assert.Equal(expected: "body", actual: (await runner.TextAsync(HttpRequest.Get("thing"), TestContext.Current.CancellationToken)).Value);
-        Assert.Equal(expected: "body", actual: (await runner.TextAsync(HttpRequest.Get("thing"), TestContext.Current.CancellationToken)).Value);
+        Assert.Equal(
+            expected: "body",
+            actual: (await runner.TextAsync(
+                spec: HttpRequest.Get("thing"),
+                ct: TestContext.Current.CancellationToken
+            )).Value
+        );
+        Assert.Equal(
+            expected: "body",
+            actual: (await runner.TextAsync(
+                spec: HttpRequest.Get("thing"),
+                ct: TestContext.Current.CancellationToken
+            )).Value
+        );
         Assert.Equal(expected: 2, actual: calls);
 
         // The 304 carried max-age=60, so the third call is a hit rather than a third revalidation.
-        Assert.Equal(expected: "body", actual: (await runner.TextAsync(HttpRequest.Get("thing"), TestContext.Current.CancellationToken)).Value);
+        Assert.Equal(
+            expected: "body",
+            actual: (await runner.TextAsync(
+                spec: HttpRequest.Get("thing"),
+                ct: TestContext.Current.CancellationToken
+            )).Value
+        );
         Assert.Equal(expected: 2, actual: calls);
     }
 
@@ -202,13 +310,19 @@ public class HttpPipelineTests
     public async Task Cache_only_reports_a_miss_rather_than_going_to_the_network()
     {
         int calls = 0;
-        using var runner = Runner((_, _) =>
-        {
-            calls++;
-            return Reply(HttpStatusCode.OK, "ok");
-        }, new MemoryCacheStore());
+        using var runner = Runner(
+            transport: (_, _) =>
+            {
+                calls++;
+                return Reply(status: HttpStatusCode.OK, body: "ok");
+            },
+            cache: new MemoryCacheStore()
+        );
 
-        var result = await runner.TextAsync(HttpRequest.Get("thing").Cache(CacheMode.CacheOnly), TestContext.Current.CancellationToken);
+        var result = await runner.TextAsync(
+            spec: HttpRequest.Get("thing").Cache(CacheMode.CacheOnly),
+            ct: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(expected: new HttpError.Policy(PolicyFault.CacheMiss), actual: result.Error);
         Assert.Equal(expected: 0, actual: calls);
@@ -219,15 +333,22 @@ public class HttpPipelineTests
     {
         int calls = 0;
         var store = new MemoryCacheStore();
-        using var runner = Runner((_, _) =>
-        {
-            calls++;
-            return Reply(HttpStatusCode.OK, "ok", ("Cache-Control", "max-age=60"));
-        }, store);
+        using var runner = Runner(
+            transport: (_, _) =>
+            {
+                calls++;
+                return Reply(
+                    status: HttpStatusCode.OK,
+                    body: "ok",
+                    ("Cache-Control", "max-age=60")
+                );
+            },
+            cache: store
+        );
 
-        var spec = HttpRequest.Get("thing").WithHeader("Authorization", "Bearer t");
-        await runner.TextAsync(spec, TestContext.Current.CancellationToken);
-        await runner.TextAsync(spec, TestContext.Current.CancellationToken);
+        var spec = HttpRequest.Get("thing").WithHeader(name: "Authorization", value: "Bearer t");
+        await runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken);
+        await runner.TextAsync(spec: spec, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(expected: 2, actual: calls);
         Assert.Equal(expected: 0, actual: store.Count);
@@ -238,40 +359,72 @@ public class HttpPipelineTests
     {
         int fetches = 0;
         var auth = new TokenAuthProvider(_ =>
-            ValueTask.FromResult<string?>($"token{Interlocked.Increment(ref fetches)}"));
+            ValueTask.FromResult<string?>($"token{Interlocked.Increment(ref fetches)}")
+        );
 
         var gate = new TaskCompletionSource();
-        using var runner = Runner(async (spec, _) =>
-        {
-            string? token = spec.Headers.FirstOrDefault(h => h.Name == "Authorization").Value;
-            if (token == "Bearer token1")
+        using var runner = Runner(
+            transport: async (spec, _) =>
             {
-                await gate.Task; // hold every first-token request until they have all arrived
-                return HttpResult<HttpResponse>.Ok(HttpResponse.FromBytes(HttpStatusCode.Unauthorized, [], []));
-            }
+                string? token = spec.Headers.FirstOrDefault(h => h.Name == "Authorization").Value;
+                if (token == "Bearer token1")
+                {
+                    await gate.Task; // hold every first-token request until they have all arrived
+                    return HttpResult<HttpResponse>.Ok(
+                        HttpResponse.FromBytes(
+                            status: HttpStatusCode.Unauthorized,
+                            headers: [],
+                            body: []
+                        )
+                    );
+                }
 
-            return HttpResult<HttpResponse>.Ok(
-                HttpResponse.FromBytes(HttpStatusCode.OK, [], Encoding.UTF8.GetBytes("ok")));
-        }, auth: auth);
+                return HttpResult<HttpResponse>.Ok(
+                    HttpResponse.FromBytes(
+                        status: HttpStatusCode.OK,
+                        headers: [],
+                        body: Encoding.UTF8.GetBytes("ok")
+                    )
+                );
+            },
+            auth: auth
+        );
 
         // Distinct paths: dedup would otherwise collapse these into one request and prove nothing.
         var calls = new Task<HttpResult<string>>[4];
         for (int i = 0; i < calls.Length; i++)
-            calls[i] = runner.TextAsync(HttpRequest.Get($"thing{i}"), TestContext.Current.CancellationToken).AsTask();
+            calls[i] = runner.TextAsync(
+                spec: HttpRequest.Get($"thing{i}"),
+                ct: TestContext.Current.CancellationToken
+            ).AsTask();
 
-        await Task.Delay(20, TestContext.Current.CancellationToken);
+        await Task.Delay(
+            millisecondsDelay: 20,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         gate.SetResult();
 
-        foreach (var call in await Task.WhenAll(calls)) Assert.Equal(expected: "ok", actual: call.Value);
-        Assert.Equal(expected: 2, actual: fetches); // the first token, and one refresh shared by all four
+        foreach (var call in await Task.WhenAll(calls))
+            Assert.Equal(expected: "ok", actual: call.Value);
+        Assert.Equal(
+            expected: 2,
+            actual: fetches
+        ); // the first token, and one refresh shared by all four
     }
 
     [Fact]
     public async Task A_non_2xx_becomes_a_status_error_carrying_the_body()
     {
-        using var runner = Runner((_, _) => Reply(HttpStatusCode.NotFound, "no such asset"));
+        using var runner = Runner((_, _) => Reply(
+                status: HttpStatusCode.NotFound,
+                body: "no such asset"
+            )
+        );
 
-        var result = await runner.TextAsync(HttpRequest.Get("thing").NoRetry(), TestContext.Current.CancellationToken);
+        var result = await runner.TextAsync(
+            spec: HttpRequest.Get("thing").NoRetry(),
+            ct: TestContext.Current.CancellationToken
+        );
 
         var status = Assert.IsType<HttpError.Status>(result.Error);
         Assert.Equal(expected: HttpStatusCode.NotFound, actual: status.Code);

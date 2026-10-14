@@ -65,7 +65,9 @@ public sealed class FrameHttpQueue : IDisposable
     private const int StateDone = 2;
 
     private readonly int[] _free;
+
     private readonly HttpRunner _runner;
+
     // A ManualResetEventSlim signalled from the frame thread, drained by a dedicated thread.
     // Not a SemaphoreSlim: releasing one with an async waiter attached queues a thread-pool work
     // item on the releasing thread, and that is a per-submit allocation on the frame path.
@@ -96,7 +98,10 @@ public sealed class FrameHttpQueue : IDisposable
         }
 
         _freeTop = capacity;
-        _pump = new Thread(Pump) { IsBackground = true, Name = "Zigote.Http frame pump" };
+        _pump = new Thread(Pump) {
+            IsBackground = true,
+            Name = "Zigote.Http frame pump",
+        };
         _pump.Start();
     }
 
@@ -150,13 +155,16 @@ public sealed class FrameHttpQueue : IDisposable
         slot.Status = 0;
         slot.Length = 0;
         slot.Cancellation = null;
-        Volatile.Write(ref slot.State, StatePending);
+        Volatile.Write(location: ref slot.State, value: StatePending);
 
         _submitted[_writeIndex] = index;
         // Release write: the pump must not see the new write index before the slot it points at.
-        Volatile.Write(ref _writeIndex, _writeIndex + 1 == _submitted.Length ? 0 : _writeIndex + 1);
+        Volatile.Write(
+            location: ref _writeIndex,
+            value: _writeIndex + 1 == _submitted.Length ? 0 : _writeIndex + 1
+        );
         _signal.Set();
-        return new HttpHandle(index, generation);
+        return new HttpHandle(Index: index, Generation: generation);
     }
 
     /// <summary>
@@ -173,8 +181,11 @@ public sealed class FrameHttpQueue : IDisposable
         if (slot.Generation != handle.Generation) return false;
         if (Volatile.Read(ref slot.State) != StateDone) return false;
 
-        outcome = new HttpOutcome(slot.Status, slot.Error,
-            slot.Buffer is null ? default : slot.Buffer.AsSpan(0, slot.Length));
+        outcome = new HttpOutcome(
+            status: slot.Status,
+            error: slot.Error,
+            body: slot.Buffer is null ? default : slot.Buffer.AsSpan(start: 0, length: slot.Length)
+        );
         return true;
     }
 
@@ -215,7 +226,7 @@ public sealed class FrameHttpQueue : IDisposable
         slot.Spec = null;
         slot.Error = null;
         slot.Generation = 0;
-        Volatile.Write(ref slot.State, StateFree);
+        Volatile.Write(location: ref slot.State, value: StateFree);
         _free[_freeTop++] = handle.Index;
     }
 
@@ -259,7 +270,7 @@ public sealed class FrameHttpQueue : IDisposable
 
         try
         {
-            var result = await _runner.SendAsync(spec, cts.Token).ConfigureAwait(false);
+            var result = await _runner.SendAsync(spec: spec, ct: cts.Token).ConfigureAwait(false);
             if (result.IsOk)
             {
                 using var response = result.Value;
@@ -274,21 +285,19 @@ public sealed class FrameHttpQueue : IDisposable
                 }
             }
             else
-            {
                 slot.Error = result.Error;
-            }
         }
         catch (Exception e)
         {
             // The frame thread must never see an exception it cannot catch. Anything unexpected
             // down there becomes an error value up here.
-            slot.Error = new HttpError.Transport(TransportFault.Unknown, e);
+            slot.Error = new HttpError.Transport(Fault: TransportFault.Unknown, Inner: e);
         }
         finally
         {
             slot.Cancellation = null;
             // Release write: everything above is visible to the frame thread before it sees Done.
-            Volatile.Write(ref slot.State, StateDone);
+            Volatile.Write(location: ref slot.State, value: StateDone);
         }
     }
 

@@ -54,7 +54,8 @@ public sealed class GraphInspectorPanel : Widget
 
     private void Gap(float height) => Add(new SizedBox(height: height));
 
-    private static AdwButton ActionButton(string icon, string label, Action onPressed, bool destructive = false) =>
+    private static AdwButton ActionButton(string icon, string label, Action onPressed,
+        bool destructive = false) =>
         new(label: label, onPressed: onPressed) {
             IconName = icon,
             Style = destructive ? AdwButtonStyle.Destructive : AdwButtonStyle.Regular,
@@ -77,9 +78,15 @@ public sealed class GraphInspectorPanel : Widget
     private void Section(string title)
     {
         Gap(14f);
-        Add(new Label(text: title.ToUpperInvariant(), fontSize: _theme.FontSizeCaption, color: _theme.Hint) {
-            LetterSpacing = 0.6f,
-        });
+        Add(
+            new Label(
+                text: title.ToUpperInvariant(),
+                fontSize: _theme.FontSizeCaption,
+                color: _theme.Hint
+            ) {
+                LetterSpacing = 0.6f,
+            }
+        );
         Gap(4f);
         Add(new AdwSeparator());
         Gap(4f);
@@ -92,24 +99,37 @@ public sealed class GraphInspectorPanel : Widget
         if (!string.IsNullOrWhiteSpace(category))
         {
             Gap(4f);
-            Add(new Row {
-                MainAxisAlignment = MainAxisAlignment.Start,
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = {
-                    new DecoratedBox {
-                        Fill = GraphCanvas.CategoryColor(category),
-                        Radius = 3f,
-                        Child = new SizedBox(width: 10f, height: 10f),
+            Add(
+                new Row {
+                    MainAxisAlignment = MainAxisAlignment.Start,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
+                    Children = {
+                        new DecoratedBox {
+                            Fill = GraphCanvas.CategoryColor(category),
+                            Radius = 3f,
+                            Child = new SizedBox(width: 10f, height: 10f),
+                        },
+                        new SizedBox(6f),
+                        Text(
+                            text: category,
+                            size: _theme.FontSizeCaption,
+                            color: _theme.Hint,
+                            oneLine: true
+                        ),
                     },
-                    new SizedBox(6f),
-                    Text(text: category, size: _theme.FontSizeCaption, color: _theme.Hint, oneLine: true),
-                },
-            });
+                }
+            );
         }
 
         if (string.IsNullOrWhiteSpace(description)) return;
         Gap(6f);
-        Add(Text(text: description, size: _theme.FontSizeCaption, color: _theme.OnSurface.WithAlpha(0.7f)));
+        Add(
+            Text(
+                text: description,
+                size: _theme.FontSizeCaption,
+                color: _theme.OnSurface.WithAlpha(0.7f)
+            )
+        );
     }
 
     /// <summary>
@@ -125,7 +145,14 @@ public sealed class GraphInspectorPanel : Widget
         _suppressRebuild = true;
         try
         {
-            _state.Commands.Execute(new ChangeNodePropertyCommand(nodeId: nodeId, propertyKey: def.Id, oldValue: old, newValue: value));
+            _state.Commands.Execute(
+                new ChangeNodePropertyCommand(
+                    nodeId: nodeId,
+                    propertyKey: def.Id,
+                    oldValue: old,
+                    newValue: value
+                )
+            );
         }
         finally
         {
@@ -139,7 +166,11 @@ public sealed class GraphInspectorPanel : Widget
 
     private static int Decimals(PropertyDefinition def) =>
         def.Type == GraphTypeRef.Int ? 0
-        : def.Step is { } step and > 0f ? Math.Clamp((int)Math.Ceiling(-Math.Log10(step) - 1e-6), 0, 6)
+        : def.Step is { } step and > 0f ? Math.Clamp(
+            value: (int)Math.Ceiling(-Math.Log10(step) - 1e-6),
+            min: 0,
+            max: 6
+        )
         : 3;
 
     private void Rebuild()
@@ -147,10 +178,12 @@ public sealed class GraphInspectorPanel : Widget
         if (_suppressRebuild) return;
         _content.Children.Clear();
         if (_state.SelectedEdges.Count > 1) RebuildEdges();
-        else if (_state.SelectedEdgeId is { } edgeId && _state.Graph.Edges.FirstOrDefault(e => e.Id == edgeId) is { } edge)
+        else if (_state.SelectedEdgeId is { } edgeId &&
+                 _state.Graph.Edges.FirstOrDefault(e => e.Id == edgeId) is { } edge)
             RebuildEdge(edge);
         else if (_state.SelectedNodes.Count > 1) RebuildMultiple();
-        else if (_state.PrimarySelection is { } id && _state.Graph.FindNode(id) is { } node) RebuildNode(node);
+        else if (_state.PrimarySelection is { } id && _state.Graph.FindNode(id) is { } node)
+            RebuildNode(node);
         else RebuildGraphSummary();
         MarkNeedsLayout();
     }
@@ -158,38 +191,80 @@ public sealed class GraphInspectorPanel : Widget
     private string NodeName(Guid id)
     {
         var node = _state.Graph.FindNode(id);
-        return node is null ? "(missing)" : _state.Registry.GetNodeDefinition(node.DefinitionId)?.DisplayName ?? node.DefinitionId;
+        return node is null
+            ? "(missing)"
+            : _state.Registry.GetNodeDefinition(node.DefinitionId)?.DisplayName ??
+              node.DefinitionId;
     }
 
     private void RebuildEdge(GraphEdge edge)
     {
         Header(title: "Cable", category: null, description: null);
         Section("Route");
-        foreach ((string side, var end) in new[] { ("From", edge.From), ("To", edge.To) })
+        foreach ((string side, var end) in new[] {
+                     ("From", edge.From),
+                     ("To", edge.To),
+                 })
         {
-            string? shown = GraphConnections.Resolve(_state.Graph, _state.Registry, end)?.Pin.DisplayName;
-            string pin = string.IsNullOrWhiteSpace(shown) ? end.PinId : shown; // unnamed pins fall back to their id
-            Add(new SizedBox(height: RowH, child: new Row {
-                MainAxisAlignment = MainAxisAlignment.Start,
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = {
-                    new SizedBox(width: 44f, child: Text(text: side, size: _theme.FontSizeBody, color: _theme.Hint)),
-                    new Expanded(Text(text: $"{NodeName(end.NodeId)} · {pin}", size: _theme.FontSizeBody, color: _theme.OnSurface, oneLine: true)),
-                },
-            }));
+            string? shown = GraphConnections.Resolve(
+                graph: _state.Graph,
+                registry: _state.Registry,
+                endpoint: end
+            )?.Pin.DisplayName;
+            string pin = string.IsNullOrWhiteSpace(shown)
+                ? end.PinId
+                : shown; // unnamed pins fall back to their id
+            Add(
+                new SizedBox(
+                    height: RowH,
+                    child: new Row {
+                        MainAxisAlignment = MainAxisAlignment.Start,
+                        CrossAxisAlignment = CrossAxisAlignment.Center,
+                        Children = {
+                            new SizedBox(
+                                width: 44f,
+                                child: Text(
+                                    text: side,
+                                    size: _theme.FontSizeBody,
+                                    color: _theme.Hint
+                                )
+                            ),
+                            new Expanded(
+                                Text(
+                                    text: $"{NodeName(end.NodeId)} · {pin}",
+                                    size: _theme.FontSizeBody,
+                                    color: _theme.OnSurface,
+                                    oneLine: true
+                                )
+                            ),
+                        },
+                    }
+                )
+            );
         }
 
         Gap(8f);
-        Add(new Row {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            Children = {
-                ActionButton(destructive: true, label: "Disconnect", icon: MaterialIcons.LinkOff,
-                    onPressed: () => _state.Commands.Execute(new DeleteEdgeCommand(edge.Id))),
-            },
-        });
+        Add(
+            new Row {
+                MainAxisAlignment = MainAxisAlignment.Start,
+                Children = {
+                    ActionButton(
+                        destructive: true,
+                        label: "Disconnect",
+                        icon: MaterialIcons.LinkOff,
+                        onPressed: () => _state.Commands.Execute(new DeleteEdgeCommand(edge.Id))
+                    ),
+                },
+            }
+        );
         Gap(10f);
-        Add(Text(text: "Drag the cable's input end to re-plug it. Alt-click a cable to cut it.",
-            size: _theme.FontSizeCaption, color: _theme.Hint));
+        Add(
+            Text(
+                text: "Drag the cable's input end to re-plug it. Alt-click a cable to cut it.",
+                size: _theme.FontSizeCaption,
+                color: _theme.Hint
+            )
+        );
     }
 
     private void RebuildEdges()
@@ -197,47 +272,102 @@ public sealed class GraphInspectorPanel : Widget
         Header(title: $"{_state.SelectedEdges.Count} cables", category: null, description: null);
         Section("Selection");
         foreach (var edge in _state.Graph.Edges.Where(e => _state.IsEdgeSelected(e.Id)))
-            Add(new SizedBox(height: 22f, child: Text(
-                text: $"{NodeName(edge.From.NodeId)} → {NodeName(edge.To.NodeId)}",
-                size: _theme.FontSizeBody, color: _theme.OnSurface, oneLine: true)));
+        {
+            Add(
+                new SizedBox(
+                    height: 22f,
+                    child: Text(
+                        text: $"{NodeName(edge.From.NodeId)} → {NodeName(edge.To.NodeId)}",
+                        size: _theme.FontSizeBody,
+                        color: _theme.OnSurface,
+                        oneLine: true
+                    )
+                )
+            );
+        }
+
         Gap(10f);
-        Add(new Row {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            Children = {
-                ActionButton(destructive: true, label: "Disconnect all", icon: MaterialIcons.LinkOff,
-                    onPressed: () => _state.Commands.Execute(new GraphGesture(
-                        _state.SelectedEdges.Select(id => (IGraphCommand)new DeleteEdgeCommand(id)).ToArray()))),
-            },
-        });
+        Add(
+            new Row {
+                MainAxisAlignment = MainAxisAlignment.Start,
+                Children = {
+                    ActionButton(
+                        destructive: true,
+                        label: "Disconnect all",
+                        icon: MaterialIcons.LinkOff,
+                        onPressed: () => _state.Commands.Execute(
+                            new GraphGesture(
+                                _state.SelectedEdges
+                                    .Select(id => (IGraphCommand)new DeleteEdgeCommand(id))
+                                    .ToArray()
+                            )
+                        )
+                    ),
+                },
+            }
+        );
     }
 
     private void RebuildMultiple()
     {
-        var ids = _state.SelectedNodes.Where(id => _state.Graph.EditorData.NodeLayouts.ContainsKey(id)).ToArray();
+        var ids = _state.SelectedNodes
+            .Where(id => _state.Graph.EditorData.NodeLayouts.ContainsKey(id)).ToArray();
         Header(title: $"{_state.SelectedNodes.Count} nodes", category: null, description: null);
         Section("Selection");
         // The names, most recent last — the same order the selection was built in.
-        foreach (var group in _state.Graph.Nodes.Where(n => _state.IsSelected(n.Id)).GroupBy(n => NodeName(n.Id)))
-            Add(new SizedBox(height: 22f, child: Text(
-                text: group.Count() > 1 ? $"{group.Key}  ×{group.Count()}" : group.Key,
-                size: _theme.FontSizeBody, color: _theme.OnSurface, oneLine: true)));
+        foreach (var group in _state.Graph.Nodes.Where(n => _state.IsSelected(n.Id))
+                     .GroupBy(n => NodeName(n.Id)))
+        {
+            Add(
+                new SizedBox(
+                    height: 22f,
+                    child: Text(
+                        text: group.Count() > 1 ? $"{group.Key}  ×{group.Count()}" : group.Key,
+                        size: _theme.FontSizeBody,
+                        color: _theme.OnSurface,
+                        oneLine: true
+                    )
+                )
+            );
+        }
 
         bool collapse = ids.Any(id => !_state.Graph.EditorData.NodeLayouts[id].IsCollapsed);
         Gap(10f);
-        Add(new Row {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            Children = {
-                ActionButton(label: collapse ? "Collapse" : "Expand", icon: collapse ? Icons.UnfoldLess : Icons.UnfoldMore,
-                    onPressed: () => _state.Commands.Execute(new CollapseNodesCommand(ids, collapse))),
-                new SizedBox(6f),
-                ActionButton(destructive: true, label: "Delete", icon: Icons.Delete,
-                    onPressed: () => _state.Commands.Execute(new GraphGesture(
-                        _state.SelectedNodes.Select(id => (IGraphCommand)new DeleteNodeCommand(id)).ToArray()))),
-            },
-        });
+        Add(
+            new Row {
+                MainAxisAlignment = MainAxisAlignment.Start,
+                Children = {
+                    ActionButton(
+                        label: collapse ? "Collapse" : "Expand",
+                        icon: collapse ? Icons.UnfoldLess : Icons.UnfoldMore,
+                        onPressed: () => _state.Commands.Execute(
+                            new CollapseNodesCommand(nodes: ids, collapsed: collapse)
+                        )
+                    ),
+                    new SizedBox(6f),
+                    ActionButton(
+                        destructive: true,
+                        label: "Delete",
+                        icon: Icons.Delete,
+                        onPressed: () => _state.Commands.Execute(
+                            new GraphGesture(
+                                _state.SelectedNodes
+                                    .Select(id => (IGraphCommand)new DeleteNodeCommand(id))
+                                    .ToArray()
+                            )
+                        )
+                    ),
+                },
+            }
+        );
         Gap(10f);
-        Add(Text(text: "Arrows nudge, Ctrl D duplicates, drag moves them together.",
-            size: _theme.FontSizeCaption, color: _theme.Hint));
+        Add(
+            Text(
+                text: "Arrows nudge, Ctrl D duplicates, drag moves them together.",
+                size: _theme.FontSizeCaption,
+                color: _theme.Hint
+            )
+        );
     }
 
     private void RebuildNode(GraphNode node)
@@ -247,7 +377,13 @@ public sealed class GraphInspectorPanel : Widget
         {
             Header(title: node.DefinitionId, category: null, description: null);
             Gap(6f);
-            Add(Text(text: $"Definition '{node.DefinitionId}' not found", size: _theme.FontSizeBody, color: _theme.Error));
+            Add(
+                Text(
+                    text: $"Definition '{node.DefinitionId}' not found",
+                    size: _theme.FontSizeBody,
+                    color: _theme.Error
+                )
+            );
             return;
         }
 
@@ -294,17 +430,32 @@ public sealed class GraphInspectorPanel : Widget
         var nodeId = node.Id;
         node.Properties.TryGetValue(key: prop.Id, value: out var current);
         var value = current is null || current.IsNull ? prop.DefaultValue : current;
-        string name = string.IsNullOrEmpty(prop.Unit) ? prop.DisplayName : $"{prop.DisplayName} ({prop.Unit})";
+        string name = string.IsNullOrEmpty(prop.Unit)
+            ? prop.DisplayName
+            : $"{prop.DisplayName} ({prop.Unit})";
 
         AdwButton reset = null!;
-        reset = new AdwButton(onPressed: () =>
-        {
-            // A structural edit as far as this panel goes: rebuild so the control shows the default.
-            var live = _state.Graph.FindNode(nodeId);
-            if (live is null) return;
-            _state.Commands.Execute(new ChangeNodePropertyCommand(nodeId: nodeId, propertyKey: prop.Id,
-                oldValue: live.Properties.GetValueOrDefault(prop.Id) ?? GraphValue.Null(), newValue: prop.DefaultValue));
-        }) { IconName = Icons.Undo, Style = AdwButtonStyle.Flat, Compact = true, Enabled = IsModified(node: node, def: prop) };
+        reset = new AdwButton(
+            onPressed: () =>
+            {
+                // A structural edit as far as this panel goes: rebuild so the control shows the default.
+                var live = _state.Graph.FindNode(nodeId);
+                if (live is null) return;
+                _state.Commands.Execute(
+                    new ChangeNodePropertyCommand(
+                        nodeId: nodeId,
+                        propertyKey: prop.Id,
+                        oldValue: live.Properties.GetValueOrDefault(prop.Id) ?? GraphValue.Null(),
+                        newValue: prop.DefaultValue
+                    )
+                );
+            }
+        ) {
+            IconName = Icons.Undo,
+            Style = AdwButtonStyle.Flat,
+            Compact = true,
+            Enabled = IsModified(node: node, def: prop),
+        };
 
         void Edited(GraphValue next)
         {
@@ -318,66 +469,123 @@ public sealed class GraphInspectorPanel : Widget
         Widget? control = null;
         Widget? below = null; // editors too wide for the value column go under the label
         if (prop.Editor == "gradient" && prop.Type == GraphTypeRef.String)
-            below = new SizedBox(height: 46f, child: new AdwGradientEditor(
-                gradient: ParseGradient(value.IsNull ? "" : value.AsString()),
-                onChanged: g => Edited(GraphValue.FromString(SerializeGradient(g)))));
+        {
+            below = new SizedBox(
+                height: 46f,
+                child: new AdwGradientEditor(
+                    gradient: ParseGradient(value.IsNull ? "" : value.AsString()),
+                    onChanged: g => Edited(GraphValue.FromString(SerializeGradient(g)))
+                )
+            );
+        }
         else if (prop.Type == GraphTypeRef.Int && prop.EnumLabels is { Length: > 0 } labels)
+        {
             control = new AdwDropDown(
                 items: labels,
-                selectedIndex: value.IsNull ? 0 : Math.Clamp(value: value.AsInt(), min: 0, max: labels.Length - 1),
+                selectedIndex: value.IsNull
+                    ? 0
+                    : Math.Clamp(value: value.AsInt(), min: 0, max: labels.Length - 1),
                 onSelected: index => Edited(GraphValue.FromInt(index))
             ) { Compact = true };
+        }
         else if (prop.Type == GraphTypeRef.Float || prop.Type == GraphTypeRef.Int)
         {
             bool integer = prop.Type == GraphTypeRef.Int;
-            control = new AdwNumberInput(value.IsNull ? 0f : integer ? value.AsInt() : value.AsFloat()) {
-                Step = prop.Step ?? (integer ? 1f : 0.01f),
-                Decimals = Decimals(prop),
-                Min = prop.Min ?? float.NegativeInfinity,
-                Max = prop.Max ?? float.PositiveInfinity,
-                OnChanged = v => Edited(integer
-                    ? GraphValue.FromInt((int)Math.Clamp(Math.Round(v), int.MinValue, int.MaxValue))
-                    : GraphValue.FromFloat(v)),
-            };
+            control =
+                new AdwNumberInput(value.IsNull ? 0f : integer ? value.AsInt() : value.AsFloat()) {
+                    Step = prop.Step ?? (integer ? 1f : 0.01f),
+                    Decimals = Decimals(prop),
+                    Min = prop.Min ?? float.NegativeInfinity,
+                    Max = prop.Max ?? float.PositiveInfinity,
+                    OnChanged = v => Edited(
+                        integer
+                            ? GraphValue.FromInt(
+                                (int)Math.Clamp(
+                                    value: Math.Round(v),
+                                    min: int.MinValue,
+                                    max: int.MaxValue
+                                )
+                            )
+                            : GraphValue.FromFloat(v)
+                    ),
+                };
         }
         else if (prop.Type == GraphTypeRef.Bool)
+        {
             control = new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
-                Children = { new AdwCheckButton(value: !value.IsNull && value.AsBool(), onChanged: v => Edited(GraphValue.FromBool(v))) },
+                Children = {
+                    new AdwCheckButton(
+                        value: !value.IsNull && value.AsBool(),
+                        onChanged: v => Edited(GraphValue.FromBool(v))
+                    ),
+                },
             };
+        }
         else if (prop.Type == GraphTypeRef.String)
+        {
             control = new AdwTextField(decoration: new AdwInputDecoration(prop.DisplayName)) {
                 Text = value.IsNull ? "" : value.AsString(),
                 OnChanged = text => Edited(GraphValue.FromString(text)),
             };
+        }
         else if (prop.Type == GraphTypeRef.Color)
-            below = BuildColorEditor(nodeId: nodeId, propDef: prop, propKey: prop.Id,
-                rgba: value.IsNull ? [0.8f, 0.8f, 0.8f, 1f] : value.AsFloat4());
+        {
+            below = BuildColorEditor(
+                nodeId: nodeId,
+                propDef: prop,
+                propKey: prop.Id,
+                rgba: value.IsNull ? [0.8f, 0.8f, 0.8f, 1f] : value.AsFloat4()
+            );
+        }
         else
-            control = Text(text: value.IsNull ? "—" : value.ToString() ?? "—", size: _theme.FontSizeCaption, color: _theme.Hint, oneLine: true);
+            control = Text(
+                text: value.IsNull ? "—" : value.ToString() ?? "—",
+                size: _theme.FontSizeCaption,
+                color: _theme.Hint,
+                oneLine: true
+            );
 
-        var label = Text(text: name, size: _theme.FontSizeBody, color: _theme.OnSurface, oneLine: true);
+        var label = Text(
+            text: name,
+            size: _theme.FontSizeBody,
+            color: _theme.OnSurface,
+            oneLine: true
+        );
         if (below is not null)
         {
-            Add(new SizedBox(height: RowH, child: new Row {
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = { new Expanded(label), new SizedBox(width: 24f, height: 24f, child: reset) },
-            }));
+            Add(
+                new SizedBox(
+                    height: RowH,
+                    child: new Row {
+                        CrossAxisAlignment = CrossAxisAlignment.Center,
+                        Children = {
+                            new Expanded(label),
+                            new SizedBox(width: 24f, height: 24f, child: reset),
+                        },
+                    }
+                )
+            );
             Add(below);
             Gap(4f);
             return;
         }
 
-        Add(new SizedBox(height: RowH, child: new Row {
-            CrossAxisAlignment = CrossAxisAlignment.Center,
-            Children = {
-                new SizedBox(width: LabelW, child: label),
-                new SizedBox(6f),
-                new Expanded(new SizedBox(height: 26f, child: control)),
-                new SizedBox(2f),
-                new SizedBox(width: 24f, height: 24f, child: reset),
-            },
-        }));
+        Add(
+            new SizedBox(
+                height: RowH,
+                child: new Row {
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
+                    Children = {
+                        new SizedBox(width: LabelW, child: label),
+                        new SizedBox(6f),
+                        new Expanded(new SizedBox(height: 26f, child: control)),
+                        new SizedBox(2f),
+                        new SizedBox(width: 24f, height: 24f, child: reset),
+                    },
+                }
+            )
+        );
     }
 
     /// <summary>
@@ -537,22 +745,46 @@ public sealed class GraphInspectorPanel : Widget
     private void RebuildGraphSummary()
     {
         var g = _state.Graph;
-        Header(title: g.Name.Length > 0 ? g.Name : "Untitled graph", category: null, description: null);
+        Header(
+            title: g.Name.Length > 0 ? g.Name : "Untitled graph",
+            category: null,
+            description: null
+        );
         Gap(4f);
-        Add(Text(text: $"{g.Nodes.Count} nodes · {g.Edges.Count} cables", size: _theme.FontSizeBody, color: _theme.Hint));
+        Add(
+            Text(
+                text: $"{g.Nodes.Count} nodes · {g.Edges.Count} cables",
+                size: _theme.FontSizeBody,
+                color: _theme.Hint
+            )
+        );
 
         var cr = _state.LastCompileResult;
         if (cr is not null)
         {
             Section("Build");
-            Add(Text(text: cr.Success ? "✓ Build succeeded" : "✗ Build failed", size: _theme.FontSizeBody,
-                color: cr.Success ? _theme.Success : _theme.Error));
+            Add(
+                Text(
+                    text: cr.Success ? "✓ Build succeeded" : "✗ Build failed",
+                    size: _theme.FontSizeBody,
+                    color: cr.Success ? _theme.Success : _theme.Error
+                )
+            );
             if (cr.CompiledArtifact is string { Length: > 0 } artifact)
             {
                 Gap(6f);
                 // Line by line, so each wraps on its own in the narrow panel.
-                foreach (string line in artifact.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries))
-                    Add(Text(text: line.TrimEnd(), size: _theme.FontSizeCaption, color: _theme.OnSurface));
+                foreach (string line in artifact.Split(
+                             separator: '\n',
+                             options: StringSplitOptions.RemoveEmptyEntries
+                         ))
+                    Add(
+                        Text(
+                            text: line.TrimEnd(),
+                            size: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
+                    );
             }
 
             if (cr.Diagnostics.Count > 0)
@@ -578,13 +810,35 @@ public sealed class GraphInspectorPanel : Widget
                      ("Scroll / right-drag", "Pan"),
                      ("Ctrl scroll / wheel", "Zoom"),
                  })
-            Add(new SizedBox(height: 20f, child: new Row {
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = {
-                    new SizedBox(width: LabelW + 44f, child: Text(text: keys, size: _theme.FontSizeCaption, color: _theme.OnSurface, oneLine: true)),
-                    new Expanded(Text(text: action, size: _theme.FontSizeCaption, color: _theme.Hint, oneLine: true)),
-                },
-            }));
+        {
+            Add(
+                new SizedBox(
+                    height: 20f,
+                    child: new Row {
+                        CrossAxisAlignment = CrossAxisAlignment.Center,
+                        Children = {
+                            new SizedBox(
+                                width: LabelW + 44f,
+                                child: Text(
+                                    text: keys,
+                                    size: _theme.FontSizeCaption,
+                                    color: _theme.OnSurface,
+                                    oneLine: true
+                                )
+                            ),
+                            new Expanded(
+                                Text(
+                                    text: action,
+                                    size: _theme.FontSizeCaption,
+                                    color: _theme.Hint,
+                                    oneLine: true
+                                )
+                            ),
+                        },
+                    }
+                )
+            );
+        }
     }
 
     public override Size Measure(Constraints c)

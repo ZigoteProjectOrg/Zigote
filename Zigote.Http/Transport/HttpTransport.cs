@@ -56,7 +56,16 @@ public sealed class HttpTransport : IDisposable
         CookieContainer? cookies = null,
         int maxRedirects = 10,
         Action<SocketsHttpHandler>? configureHandler = null)
-        : this(CreateInvoker(cookies, maxRedirects, configureHandler), ownsInvoker: true, baseAddress, defaultHeaders) =>
+        : this(
+            invoker: CreateInvoker(
+                cookies: cookies,
+                maxRedirects: maxRedirects,
+                configureHandler: configureHandler
+            ),
+            ownsInvoker: true,
+            baseAddress: baseAddress,
+            defaultHeaders: defaultHeaders
+        ) =>
         _http3 = http3;
 
     /// <summary>A transport over an invoker someone else owns — a test double, or a platform handler.</summary>
@@ -96,8 +105,7 @@ public sealed class HttpTransport : IDisposable
         // Cookie/redirect knobs are not pushed onto it — the browser owns both there anyway.
         if (!SocketsHttpHandler.IsSupported) return new HttpMessageInvoker(new HttpClientHandler());
 
-        var handler = new SocketsHttpHandler
-        {
+        var handler = new SocketsHttpHandler {
             // Two minutes: long enough that a busy client reuses connections, short enough that a
             // DNS change or a blue/green swap is picked up without a restart.
             PooledConnectionLifetime = TimeSpan.FromMinutes(2),
@@ -108,10 +116,10 @@ public sealed class HttpTransport : IDisposable
             // and it already strips Authorization when a redirect leaves the origin. Past the cap
             // the handler stops and hands back the last 3xx — an answer, not an error.
             AllowAutoRedirect = maxRedirects > 0,
-            MaxAutomaticRedirections = Math.Max(1, maxRedirects),
+            MaxAutomaticRedirections = Math.Max(val1: 1, val2: maxRedirects),
             // No cookie jar unless the app supplies one. The BCL default is a silent shared jar,
             // which makes request history part of every later request's meaning.
-            UseCookies = cookies is not null
+            UseCookies = cookies is not null,
         };
         if (cookies is not null) handler.CookieContainer = cookies;
         // The escape hatch runs last so it can override anything above — that is its whole point.
@@ -127,7 +135,8 @@ public sealed class HttpTransport : IDisposable
             Ranges: !browser,
             StreamingUpload: !browser,
             ConnectionPooling: sockets,
-            PersistentCache: !browser);
+            PersistentCache: !browser
+        );
     }
 
     private async ValueTask<HttpResult<HttpResponse>> SendAsync(HttpSpec spec, CancellationToken ct)
@@ -145,7 +154,7 @@ public sealed class HttpTransport : IDisposable
         }
         catch (InvalidOperationException e)
         {
-            return new HttpError.Transport(TransportFault.Unknown, e);
+            return new HttpError.Transport(Fault: TransportFault.Unknown, Inner: e);
         }
 
         HttpResponseMessage? message = null;
@@ -153,21 +162,36 @@ public sealed class HttpTransport : IDisposable
         {
             // ResponseHeadersRead, always: the body is ours to read, so progress, the deadline and
             // streaming responses all work the same way instead of three ways.
-            message = await _invoker.SendAsync(request, ct).ConfigureAwait(false);
+            message = await _invoker.SendAsync(request: request, cancellationToken: ct)
+                .ConfigureAwait(false);
             var headers = CollectHeaders(message);
 
             if (spec.Policy.IsStreaming)
             {
                 var stream = await message.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                var streamed = HttpResponse.FromStream(message.StatusCode, headers, stream);
+                var streamed = HttpResponse.FromStream(
+                    status: message.StatusCode,
+                    headers: headers,
+                    content: stream
+                );
                 message = null; // ownership moved to the response, which disposes the stream
                 return streamed;
             }
 
             long declared = message.Content.Headers.ContentLength ?? -1;
-            var (buffer, length) = await ReadBodyAsync(message, declared, spec.Policy.Progress, ct)
+            (byte[] buffer, int length) = await ReadBodyAsync(
+                    message: message,
+                    declared: declared,
+                    progress: spec.Policy.Progress,
+                    ct: ct
+                )
                 .ConfigureAwait(false);
-            return HttpResponse.FromPooled(message.StatusCode, headers, buffer, length);
+            return HttpResponse.FromPooled(
+                status: message.StatusCode,
+                headers: headers,
+                rented: buffer,
+                length: length
+            );
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -176,15 +200,18 @@ public sealed class HttpTransport : IDisposable
         catch (OperationCanceledException)
         {
             // Not our token: the handler's own ConnectTimeout fired.
-            return new HttpError.Timeout(TimeSpan.FromSeconds(10), TimeoutStage.Connect);
+            return new HttpError.Timeout(
+                Budget: TimeSpan.FromSeconds(10),
+                Stage: TimeoutStage.Connect
+            );
         }
         catch (HttpRequestException e)
         {
-            return new HttpError.Transport(Classify(e), e);
+            return new HttpError.Transport(Fault: Classify(e), Inner: e);
         }
         catch (IOException e)
         {
-            return new HttpError.Transport(TransportFault.Reset, e);
+            return new HttpError.Transport(Fault: TransportFault.Reset, Inner: e);
         }
         finally
         {
@@ -193,20 +220,23 @@ public sealed class HttpTransport : IDisposable
         }
     }
 
-    private static TransportFault Classify(HttpRequestException e) => e.HttpRequestError switch
-    {
+    private static TransportFault Classify(HttpRequestException e) => e.HttpRequestError switch {
         HttpRequestError.NameResolutionError => TransportFault.Dns,
         HttpRequestError.ConnectionError => TransportFault.Connect,
         HttpRequestError.SecureConnectionError => TransportFault.Tls,
-        HttpRequestError.ResponseEnded or HttpRequestError.HttpProtocolError => TransportFault.Reset,
-        _ => TransportFault.Unknown
+        HttpRequestError.ResponseEnded or HttpRequestError.HttpProtocolError =>
+            TransportFault.Reset,
+        _ => TransportFault.Unknown,
     };
 
     private static async ValueTask<(byte[] Buffer, int Length)> ReadBodyAsync(
-        HttpResponseMessage message, long declared, IProgress<HttpProgress>? progress, CancellationToken ct)
+        HttpResponseMessage message, long declared, IProgress<HttpProgress>? progress,
+        CancellationToken ct)
     {
         var stream = await message.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(declared > 0 ? (int)Math.Min(declared, int.MaxValue) : 8192);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(
+            declared > 0 ? (int)Math.Min(val1: declared, val2: int.MaxValue) : 8192
+        );
         int length = 0;
 
         while (true)
@@ -214,15 +244,19 @@ public sealed class HttpTransport : IDisposable
             if (length == buffer.Length)
             {
                 byte[] bigger = ArrayPool<byte>.Shared.Rent(buffer.Length * 2);
-                buffer.AsSpan(0, length).CopyTo(bigger);
+                buffer.AsSpan(start: 0, length: length).CopyTo(bigger);
                 ArrayPool<byte>.Shared.Return(buffer);
                 buffer = bigger;
             }
 
-            int read = await stream.ReadAsync(buffer.AsMemory(length), ct).ConfigureAwait(false);
+            int read = await stream
+                .ReadAsync(buffer: buffer.AsMemory(length), cancellationToken: ct)
+                .ConfigureAwait(false);
             if (read == 0) break;
             length += read;
-            progress?.Report(new HttpProgress(length, declared, Uploading: false));
+            progress?.Report(
+                new HttpProgress(Transferred: length, Total: declared, Uploading: false)
+            );
         }
 
         return (buffer, length);
@@ -231,31 +265,38 @@ public sealed class HttpTransport : IDisposable
     private static ImmutableArray<HeaderPair> CollectHeaders(HttpResponseMessage message)
     {
         var builder = ImmutableArray.CreateBuilder<HeaderPair>(8);
-        foreach (var h in message.Headers) Add(builder, h);
-        foreach (var h in message.Content.Headers) Add(builder, h);
+        foreach (var h in message.Headers) Add(into: builder, header: h);
+        foreach (var h in message.Content.Headers) Add(into: builder, header: h);
         return builder.ToImmutable();
 
-        static void Add(ImmutableArray<HeaderPair>.Builder into, KeyValuePair<string, IEnumerable<string>> header)
+        static void Add(ImmutableArray<HeaderPair>.Builder into,
+            KeyValuePair<string, IEnumerable<string>> header)
         {
-            foreach (string value in header.Value) into.Add(new HeaderPair(header.Key, value));
+            foreach (string value in header.Value)
+                into.Add(new HeaderPair(Name: header.Key, Value: value));
         }
     }
 
     private HttpRequestMessage BuildRequest(HttpSpec spec)
     {
-        var request = new HttpRequestMessage(spec.Verb.ToMethod(), spec.ResolveUri(_baseAddress));
+        var request = new HttpRequestMessage(
+            method: spec.Verb.ToMethod(),
+            requestUri: spec.ResolveUri(_baseAddress)
+        );
 
         foreach (var h in _defaultHeaders)
-            request.Headers.TryAddWithoutValidation(h.Name, h.Value);
+            request.Headers.TryAddWithoutValidation(name: h.Name, value: h.Value);
         if (!spec.Headers.IsDefaultOrEmpty)
+        {
             foreach (var h in spec.Headers)
-                request.Headers.TryAddWithoutValidation(h.Name, h.Value);
+                request.Headers.TryAddWithoutValidation(name: h.Name, value: h.Value);
+        }
 
         if (_http3)
         {
             // Opt-in, and only ever a request: RequestVersionOrLower falls back to h2 rather than
             // failing on a network that blocks QUIC.
-            request.Version = System.Net.HttpVersion.Version30;
+            request.Version = HttpVersion.Version30;
             request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
         }
 
@@ -263,13 +304,21 @@ public sealed class HttpTransport : IDisposable
         // the observability layer is Activity.Current here, so its ids go on the wire. The BCL
         // propagator skips fields already present, so a hand-set traceparent header wins.
         if (System.Diagnostics.Activity.Current is { } activity)
-            System.Diagnostics.DistributedContextPropagator.Current.Inject(activity, request,
-                static (carrier, name, value) =>
-                    ((HttpRequestMessage)carrier!).Headers.TryAddWithoutValidation(name, value));
+        {
+            System.Diagnostics.DistributedContextPropagator.Current.Inject(
+                activity: activity,
+                carrier: request,
+                setter: static (carrier, name, value) =>
+                    ((HttpRequestMessage)carrier!).Headers.TryAddWithoutValidation(
+                        name: name,
+                        value: value
+                    )
+            );
+        }
 
         var content = BuildContent(spec.Body);
         if (content is not null && spec.Policy.Progress is { } progress)
-            content = new ProgressContent(content, progress);
+            content = new ProgressContent(inner: content, progress: progress);
         request.Content = content;
         return request;
     }
@@ -283,13 +332,15 @@ public sealed class HttpTransport : IDisposable
             case HttpBody.BytesBody b:
             {
                 var content = new ReadOnlyMemoryContent(b.Content);
-                SetContentType(content, b.ContentType);
+                SetContentType(content: content, contentType: b.ContentType);
                 return content;
             }
             case HttpBody.FormBody f:
             {
                 var sb = new StringBuilder();
-                foreach (var field in f.Fields.IsDefault ? ImmutableArray<QueryParam>.Empty : f.Fields)
+                foreach (var field in f.Fields.IsDefault
+                             ? ImmutableArray<QueryParam>.Empty
+                             : f.Fields)
                 {
                     if (sb.Length > 0) sb.Append('&');
                     sb.Append(Uri.EscapeDataString(field.Name)).Append('=')
@@ -297,13 +348,13 @@ public sealed class HttpTransport : IDisposable
                 }
 
                 var content = new ByteArrayContent(Encoding.UTF8.GetBytes(sb.ToString()));
-                SetContentType(content, "application/x-www-form-urlencoded");
+                SetContentType(content: content, contentType: "application/x-www-form-urlencoded");
                 return content;
             }
             case HttpBody.StreamBody s:
             {
                 var content = new StreamContent(s.Content);
-                SetContentType(content, s.ContentType);
+                SetContentType(content: content, contentType: s.ContentType);
                 return content;
             }
             case HttpBody.MultipartBody m:
@@ -316,8 +367,9 @@ public sealed class HttpTransport : IDisposable
                 {
                     var inner = BuildContent(part.Content);
                     if (inner is null) continue; // an HttpBody.None part says nothing
-                    if (part.FileName is { } fileName) content.Add(inner, part.Name, fileName);
-                    else content.Add(inner, part.Name);
+                    if (part.FileName is { } fileName)
+                        content.Add(content: inner, name: part.Name, fileName: fileName);
+                    else content.Add(content: inner, name: part.Name);
                 }
 
                 return content;
@@ -329,7 +381,8 @@ public sealed class HttpTransport : IDisposable
 
     private static void SetContentType(HttpContent content, string contentType)
     {
-        if (MediaTypeHeaderValue.TryParse(contentType, out var parsed)) content.Headers.ContentType = parsed;
+        if (MediaTypeHeaderValue.TryParse(input: contentType, parsedValue: out var parsed))
+            content.Headers.ContentType = parsed;
     }
 
     /// <summary>
@@ -347,11 +400,17 @@ public sealed class HttpTransport : IDisposable
             _inner = inner;
             _progress = progress;
             foreach (var header in inner.Headers)
-                Headers.TryAddWithoutValidation(header.Key, header.Value);
+                Headers.TryAddWithoutValidation(name: header.Key, values: header.Value);
         }
 
         protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
-            _inner.CopyToAsync(new CountingStream(stream, _inner.Headers.ContentLength ?? -1, _progress));
+            _inner.CopyToAsync(
+                new CountingStream(
+                    inner: stream,
+                    total: _inner.Headers.ContentLength ?? -1,
+                    progress: _progress
+                )
+            );
 
         protected override bool TryComputeLength(out long length)
         {
@@ -368,7 +427,8 @@ public sealed class HttpTransport : IDisposable
     }
 
     /// <summary>Write-only pass-through that counts. Never disposes the wire stream — the handler owns it.</summary>
-    private sealed class CountingStream(Stream inner, long total, IProgress<HttpProgress> progress) : Stream
+    private sealed class CountingStream(Stream inner, long total, IProgress<HttpProgress> progress)
+        : Stream
     {
         private long _written;
 
@@ -385,29 +445,36 @@ public sealed class HttpTransport : IDisposable
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            inner.Write(buffer, offset, count);
+            inner.Write(buffer: buffer, offset: offset, count: count);
             Report(count);
         }
 
-        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
+            CancellationToken ct = default)
         {
-            await inner.WriteAsync(buffer, ct).ConfigureAwait(false);
+            await inner.WriteAsync(buffer: buffer, cancellationToken: ct).ConfigureAwait(false);
             Report(buffer.Length);
         }
 
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
-            WriteAsync(buffer.AsMemory(offset, count), ct).AsTask();
+        public override Task WriteAsync(byte[] buffer, int offset, int count,
+            CancellationToken ct) =>
+            WriteAsync(buffer: buffer.AsMemory(start: offset, length: count), ct: ct).AsTask();
 
         public override void Flush() => inner.Flush();
         public override Task FlushAsync(CancellationToken ct) => inner.FlushAsync(ct);
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
         public override void SetLength(long value) => throw new NotSupportedException();
 
         private void Report(int count)
         {
             _written += count;
-            progress.Report(new HttpProgress(_written, total, Uploading: true));
+            progress.Report(new HttpProgress(Transferred: _written, Total: total, Uploading: true));
         }
     }
 }

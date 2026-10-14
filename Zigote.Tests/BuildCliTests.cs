@@ -18,7 +18,7 @@ public class BuildCliTests
     [InlineData("0.2.0-preview.3", 200)] // prerelease tags do not reach the number
     [InlineData("2.10.9", 21009)]
     public void VersionCode_IsMonotonicInTheVersion(string version, int expected) =>
-        Assert.Equal(expected, Build.VersionCode(version));
+        Assert.Equal(expected: expected, actual: Build.VersionCode(version));
 
     [Fact]
     public void VersionCode_RefusesAComponentItCannotPack() =>
@@ -30,36 +30,42 @@ public class BuildCliTests
         string[] releases = ["1.0.0", "1.0.1", "1.1.0", "1.10.0", "2.0.0"];
         int[] codes = [.. releases.Select(Build.VersionCode)];
         for (int i = 1; i < codes.Length; i++)
-            Assert.True(codes[i] > codes[i - 1], $"{releases[i]} must outrank {releases[i - 1]}");
+            Assert.True(
+                condition: codes[i] > codes[i - 1],
+                userMessage: $"{releases[i]} must outrank {releases[i - 1]}"
+            );
     }
 
     [Fact]
     public void Png_RoundTripsThroughResize()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"zigote-icon-{Guid.NewGuid():N}.png");
-        string resized = path.Replace(".png", "-48.png");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote-icon-{Guid.NewGuid():N}.png"
+        );
+        string resized = path.Replace(oldValue: ".png", newValue: "-48.png");
         try
         {
             // A 4x4 image, opaque red in the top-left quadrant and transparent elsewhere: enough to
             // catch a channel swap, an alpha bleed, or a row-filter mistake.
             WriteSolid(path: path, size: 4);
             var icon = Png.Load(path);
-            Assert.Equal(4, icon.Width);
-            Assert.Equal(255, icon.Pixels[0]); // R
-            Assert.Equal(0, icon.Pixels[1]); // G
-            Assert.Equal(255, icon.Pixels[3]); // A
+            Assert.Equal(expected: 4, actual: icon.Width);
+            Assert.Equal(expected: 255, actual: icon.Pixels[0]); // R
+            Assert.Equal(expected: 0, actual: icon.Pixels[1]); // G
+            Assert.Equal(expected: 255, actual: icon.Pixels[3]); // A
 
             icon.Resized(48).Save(resized);
             var scaled = Png.Load(resized);
-            Assert.Equal(48, scaled.Width);
-            Assert.Equal(48, scaled.Height);
+            Assert.Equal(expected: 48, actual: scaled.Width);
+            Assert.Equal(expected: 48, actual: scaled.Height);
             // The top-left pixel is inside the red quadrant at every scale.
-            Assert.Equal(255, scaled.Pixels[0]);
-            Assert.Equal(0, scaled.Pixels[2]);
-            Assert.Equal(255, scaled.Pixels[3]);
+            Assert.Equal(expected: 255, actual: scaled.Pixels[0]);
+            Assert.Equal(expected: 0, actual: scaled.Pixels[2]);
+            Assert.Equal(expected: 255, actual: scaled.Pixels[3]);
             // ...and the bottom-right one is inside the transparent half, with no red bled into it.
-            int last = (47 * 48 + 47) * 4;
-            Assert.Equal(0, scaled.Pixels[last + 3]);
+            int last = ((47 * 48) + 47) * 4;
+            Assert.Equal(expected: 0, actual: scaled.Pixels[last + 3]);
         }
         finally
         {
@@ -71,7 +77,10 @@ public class BuildCliTests
     [Fact]
     public void Png_RefusesWhatItCannotRead()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"zigote-not-a-{Guid.NewGuid():N}.png");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote-not-a-{Guid.NewGuid():N}.png"
+        );
         File.WriteAllText(path: path, contents: "definitely not a png");
         try
         {
@@ -86,11 +95,11 @@ public class BuildCliTests
     /// <summary>Writes a square RGBA PNG: red where x and y are in the first half, transparent elsewhere.</summary>
     private static void WriteSolid(string path, int size)
     {
-        var pixels = new byte[size * size * 4];
+        byte[] pixels = new byte[size * size * 4];
         for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
         {
-            int at = (y * size + x) * 4;
+            int at = ((y * size) + x) * 4;
             bool filled = x < size / 2 && y < size / 2;
             pixels[at] = filled ? (byte)255 : (byte)0;
             pixels[at + 3] = filled ? (byte)255 : (byte)0;
@@ -109,36 +118,46 @@ public class GoldenDiffTests
     [Fact]
     public void Compose_PutsExpectedActualAndDifferenceSideBySide()
     {
-        var expected = Solid(size: 4, r: 10, g: 20, b: 30);
-        var actual = Solid(size: 4, r: 10, g: 20, b: 30);
+        var expected = Solid(
+            size: 4,
+            r: 10,
+            g: 20,
+            b: 30
+        );
+        var actual = Solid(
+            size: 4,
+            r: 10,
+            g: 20,
+            b: 30
+        );
         // One pixel moved, in the middle of the image.
-        actual.Pixels[(2 * 4 + 2) * 4] = 200;
+        actual.Pixels[((2 * 4) + 2) * 4] = 200;
 
-        var panel = Zigote.Cli.Test.Compose(expected: expected, actual: actual);
+        var panel = Test.Compose(expected: expected, actual: actual);
 
-        Assert.Equal(12, panel.Width); // three 4-wide panels
-        Assert.Equal(4, panel.Height);
+        Assert.Equal(expected: 12, actual: panel.Width); // three 4-wide panels
+        Assert.Equal(expected: 4, actual: panel.Height);
         // Panel 1 is the expected image untouched, panel 2 the actual.
-        Assert.Equal(10, panel.Pixels[0]);
-        Assert.Equal(200, panel.Pixels[((2 * 12) + 4 + 2) * 4]);
+        Assert.Equal(expected: 10, actual: panel.Pixels[0]);
+        Assert.Equal(expected: 200, actual: panel.Pixels[((2 * 12) + 4 + 2) * 4]);
         // Panel 3: magenta exactly where they differ, dimmed everywhere else.
         int changed = ((2 * 12) + 8 + 2) * 4;
-        Assert.Equal(255, panel.Pixels[changed]);
-        Assert.Equal(0, panel.Pixels[changed + 1]);
-        Assert.Equal(255, panel.Pixels[changed + 2]);
+        Assert.Equal(expected: 255, actual: panel.Pixels[changed]);
+        Assert.Equal(expected: 0, actual: panel.Pixels[changed + 1]);
+        Assert.Equal(expected: 255, actual: panel.Pixels[changed + 2]);
         int unchanged = 8 * 4;
-        Assert.Equal(10 / 3, panel.Pixels[unchanged]);
+        Assert.Equal(expected: 10 / 3, actual: panel.Pixels[unchanged]);
     }
 
     private static Png Solid(int size, byte r, byte g, byte b)
     {
-        var pixels = new byte[size * size * 4];
+        byte[] pixels = new byte[size * size * 4];
         for (int i = 0; i < size * size; i++)
         {
             pixels[i * 4] = r;
-            pixels[i * 4 + 1] = g;
-            pixels[i * 4 + 2] = b;
-            pixels[i * 4 + 3] = 255;
+            pixels[(i * 4) + 1] = g;
+            pixels[(i * 4) + 2] = b;
+            pixels[(i * 4) + 3] = 255;
         }
 
         return Png.FromPixels(width: size, height: size, rgba: pixels);
@@ -158,19 +177,28 @@ public class DefaultIconTests
     public void DefaultIcon_IsARoundedOpaqueSquareWithAMark()
     {
         var icon = Png.DefaultIcon(name: "Fresh", size: 256);
-        icon.Save(Path.Combine(Path.GetTempPath(), "zigote-default-icon.png"));
+        icon.Save(Path.Combine(path1: Path.GetTempPath(), path2: "zigote-default-icon.png"));
 
-        Assert.Equal(256, icon.Width);
-        Assert.Equal(256, icon.Height);
-        Assert.Equal(0, Alpha(icon: icon, x: 0, y: 0)); // the corner is rounded away
-        Assert.Equal(255, Alpha(icon: icon, x: 128, y: 128)); // and the middle is solid
+        Assert.Equal(expected: 256, actual: icon.Width);
+        Assert.Equal(expected: 256, actual: icon.Height);
+        Assert.Equal(
+            expected: 0,
+            actual: Alpha(icon: icon, x: 0, y: 0)
+        ); // the corner is rounded away
+        Assert.Equal(
+            expected: 255,
+            actual: Alpha(icon: icon, x: 128, y: 128)
+        ); // and the middle is solid
 
         // The mark is light on a dark ground: some pixel has to be much brighter than the centre.
-        int ground = icon.Pixels[(128 * 256 + 128) * 4];
+        int ground = icon.Pixels[((128 * 256) + 128) * 4];
         bool hasMark = Enumerable
-            .Range(0, 256 * 256)
-            .Any(i => icon.Pixels[i * 4] > ground + 100 && icon.Pixels[i * 4 + 3] == 255);
-        Assert.True(hasMark, "the placeholder needs a visible mark, not a plain colour field");
+            .Range(start: 0, count: 256 * 256)
+            .Any(i => icon.Pixels[i * 4] > ground + 100 && icon.Pixels[(i * 4) + 3] == 255);
+        Assert.True(
+            condition: hasMark,
+            userMessage: "the placeholder needs a visible mark, not a plain colour field"
+        );
     }
 
     [Fact]
@@ -178,16 +206,17 @@ public class DefaultIconTests
     {
         var one = Png.DefaultIcon(name: "Fresh", size: 64);
         var other = Png.DefaultIcon(name: "Zigote.UI.Adwaita.Gallery", size: 64);
-        int at = (32 * 64 + 8) * 4; // inside the ground, left of the mark
+        int at = ((32 * 64) + 8) * 4; // inside the ground, left of the mark
 
         Assert.NotEqual(
-            (one.Pixels[at], one.Pixels[at + 1], one.Pixels[at + 2]),
-            (other.Pixels[at], other.Pixels[at + 1], other.Pixels[at + 2])
+            expected: (one.Pixels[at], one.Pixels[at + 1], one.Pixels[at + 2]),
+            actual: (other.Pixels[at], other.Pixels[at + 1], other.Pixels[at + 2])
         );
         // ...and the same name is the same colour on every machine and every build.
         var again = Png.DefaultIcon(name: "Fresh", size: 64);
-        Assert.Equal(one.Pixels[at], again.Pixels[at]);
+        Assert.Equal(expected: one.Pixels[at], actual: again.Pixels[at]);
     }
 
-    private static byte Alpha(Png icon, int x, int y) => icon.Pixels[(y * icon.Width + x) * 4 + 3];
+    private static byte Alpha(Png icon, int x, int y) =>
+        icon.Pixels[(((y * icon.Width) + x) * 4) + 3];
 }

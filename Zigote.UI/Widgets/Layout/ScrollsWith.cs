@@ -90,8 +90,11 @@ public sealed class ScrollsWith : Widget
         {
             if (widget is ScrollView or ListView) return widget;
             foreach (var child in widget.GetChildren())
+            {
                 if (Find(child) is { } found)
                     return found;
+            }
+
             return null;
         }
     }

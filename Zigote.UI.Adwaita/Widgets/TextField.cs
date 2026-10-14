@@ -1288,12 +1288,14 @@ public class AdwTextField : Widget, ITextInputClient
 
         // No IME (a shell on Wayland): the printable character never arrives as a text event, so
         // compose it here. Skipped for control scancodes handled above, and for Ctrl/⌘ chords.
-        if (ComposeFromKeys && !cmd && keyChar >= 32 && keyChar != 127 && !IsHandledNavScancode(scancode))
+        if (ComposeFromKeys && !cmd && keyChar >= 32 && keyChar != 127 &&
+            !IsHandledNavScancode(scancode))
             OnTextInput(keyChar.ToString());
     }
 
     private static bool IsHandledNavScancode(uint sc) =>
-        sc is 42 or 76 or 80 or 79 or 82 or 81 or 74 or 77 or 40 or 88; // backspace,delete,arrows,home,end,enter
+        sc is 42 or 76 or 80 or 79 or 82 or 81 or 74 or 77 or 40
+            or 88; // backspace,delete,arrows,home,end,enter
 
     private void InsertNewline()
     {

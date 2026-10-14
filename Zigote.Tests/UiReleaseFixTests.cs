@@ -41,9 +41,9 @@ public class UiReleaseFixTests
     public void AnimatedSwitcher_SameKeyChild_UpdatesInPlace()
     {
         var a = new Probe { Key = new ValueKey<int>(1) };
-        var sw = new AnimatedSwitcher(a);
-
-        sw.Child = new Probe { Key = new ValueKey<int>(1) }; // same key + type, new instance
+        var sw = new AnimatedSwitcher(a) {
+            Child = new Probe { Key = new ValueKey<int>(1) }, // same key + type, new instance
+        };
 
         Assert.Same(expected: a, actual: sw.Child); // retained (no cross-fade)
         Assert.Equal(

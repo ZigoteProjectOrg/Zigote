@@ -469,7 +469,8 @@ internal sealed class AdwFileBrowserHeader : Widget
     public AdwFileBrowserHeader(AdwFileBrowserModel model) => _model = model;
 
     /// <summary>Sort targets are the whole strip height, so it grows with the finger.</summary>
-    private float BarHeight => _compact ? MathF.Max(x: Height, y: AdwTouchMetrics.MinTarget) : Height;
+    private float BarHeight =>
+        _compact ? MathF.Max(x: Height, y: AdwTouchMetrics.MinTarget) : Height;
 
     public Action<AdwFileSortColumn>? OnSort { get; set; }
 

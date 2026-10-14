@@ -303,13 +303,14 @@ public class Transform2DTests
         Assert.True(paint.Count > 0);
 
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < 500; i++)
             {
-                paint.Clear();
-                xf.Paint(paint);
+                for (int i = 0; i < 500; i++)
+                {
+                    paint.Clear();
+                    xf.Paint(paint);
+                }
             }
-        });
+        );
         long allocated = measured;
         Assert.Equal(expected: 0, actual: allocated);
     }

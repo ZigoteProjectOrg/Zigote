@@ -42,7 +42,7 @@ public sealed class TimelinePanel : Widget
             fontSize: theme.FontSizeCaption,
             color: theme.Hint
         );
-        _scrub = new AdwSlider() {
+        _scrub = new AdwSlider {
             Min = 0f,
             Max = 1f,
             OnChanged = _state.SeekAnimation,

@@ -73,9 +73,13 @@ public readonly struct JsonChannel<TArgs, TReply>(
             channel: name,
             handler: (ReadOnlySpan<byte> payload, IBufferWriter<byte> replyWriter) =>
             {
-                TArgs? decoded = JsonSerializer.Deserialize(utf8Json: payload, jsonTypeInfo: args);
+                var decoded = JsonSerializer.Deserialize(utf8Json: payload, jsonTypeInfo: args);
                 using var writer = new Utf8JsonWriter(replyWriter);
-                JsonSerializer.Serialize(writer: writer, value: handler(decoded!), jsonTypeInfo: reply);
+                JsonSerializer.Serialize(
+                    writer: writer,
+                    value: handler(decoded!),
+                    jsonTypeInfo: reply
+                );
                 return true;
             }
         );
@@ -99,7 +103,9 @@ public readonly struct JsonChannel<TArgs, TReply>(
         // implementations follow the same two prefixes (see docs/plugins.md).
         if (reply.StartsWith('e')) throw new PlatformChannelException(reply[1..]);
         if (!reply.StartsWith('k'))
-            throw new PlatformChannelException($"Malformed typed reply on '{name}': expected a 'k' or 'e' prefix.");
+            throw new PlatformChannelException(
+                $"Malformed typed reply on '{name}': expected a 'k' or 'e' prefix."
+            );
         return reply.Length == 1
             ? default
             : JsonSerializer.Deserialize(json: reply.AsSpan(1), jsonTypeInfo: replyInfo);
@@ -125,7 +131,7 @@ public readonly struct JsonChannel<TArgs, TReply>(
                 Task<TReply> work;
                 try
                 {
-                    TArgs? decoded = JsonSerializer.Deserialize(json: payload, jsonTypeInfo: args);
+                    var decoded = JsonSerializer.Deserialize(json: payload, jsonTypeInfo: args);
                     work = handler(decoded!);
                 }
                 catch (Exception e)
@@ -140,7 +146,8 @@ public readonly struct JsonChannel<TArgs, TReply>(
         );
     }
 
-    private static async Task RespondWhenDone(string token, Task<TReply> work, JsonTypeInfo<TReply> replyInfo)
+    private static async Task RespondWhenDone(string token, Task<TReply> work,
+        JsonTypeInfo<TReply> replyInfo)
     {
         try
         {

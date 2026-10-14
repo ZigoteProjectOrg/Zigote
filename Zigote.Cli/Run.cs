@@ -18,7 +18,7 @@ public static class Run
     public static int Execute(RunVerb options)
     {
         string? adb = Device.TryFindAdb();
-        List<Device.Attached> ready = adb is null ? [] : Device.ReadyDevices(adb);
+        var ready = adb is null ? [] : Device.ReadyDevices(adb);
         ready.AddRange(Ios.Simulators());
         var device = Resolve(spec: options.DeviceSpec, ready: ready);
 
@@ -94,8 +94,11 @@ public static class Run
             Console.WriteLine(
                 "  inspect on: the app prints its port as `[inspect] listening on …` — attach the "
             );
-            Console.WriteLine("  Rider plugin or the MCP server to it, or Shift+D for the in-app overlay.");
+            Console.WriteLine(
+                "  Rider plugin or the MCP server to it, or Shift+D for the in-app overlay."
+            );
         }
+
         Console.WriteLine(
             reload
                 ? "  hot reload on: edit a Build() and save — the tree re-runs in place."
@@ -113,19 +116,33 @@ public static class Run
     /// </summary>
     internal static Device.Attached? Resolve(string? spec, List<Device.Attached> ready)
     {
-        if (string.Equals(a: spec, b: "desktop", comparisonType: StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(
+                a: spec,
+                b: "desktop",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
             return null;
 
         if (spec is not null)
         {
             var matches = ready
-                .Where(d => d.Serial.Equals(value: spec, comparisonType: StringComparison.OrdinalIgnoreCase))
+                .Where(d => d.Serial.Equals(
+                        value: spec,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 .ToList();
             if (matches.Count == 0)
             {
                 matches = ready
-                    .Where(d => d.Serial.Contains(value: spec, comparisonType: StringComparison.OrdinalIgnoreCase)
-                                || d.Model.Contains(value: spec, comparisonType: StringComparison.OrdinalIgnoreCase)
+                    .Where(d => d.Serial.Contains(
+                                    value: spec,
+                                    comparisonType: StringComparison.OrdinalIgnoreCase
+                                )
+                                || d.Model.Contains(
+                                    value: spec,
+                                    comparisonType: StringComparison.OrdinalIgnoreCase
+                                )
                     )
                     .ToList();
             }
@@ -172,7 +189,8 @@ public static class Run
         Console.Write($"Which one? [1-{ready.Count + 1}] ");
 
         string? answer = Console.ReadLine()?.Trim();
-        if (!int.TryParse(answer, out int choice) || choice < 1 || choice > ready.Count + 1)
+        if (!int.TryParse(s: answer, result: out int choice) || choice < 1 ||
+            choice > ready.Count + 1)
             throw new CliError($"'{answer}' is not one of the choices.");
         return choice == ready.Count + 1 ? null : ready[choice - 1];
     }

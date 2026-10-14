@@ -99,24 +99,24 @@ public class AdwMotionTests
             minHeight: 0f,
             maxHeight: 20f
         );
-        Paint(bar, wide);
+        Paint(w: bar, c: wide);
 
         bar.Value = 0.8f;
 
         // One frame in, the fill has started but is nowhere near the target — the point of the
         // change: a bar that jumped would already be at 80.
         Ticker.AdvanceAll(1f / 60f);
-        float early = FillWidth(Paint(bar, wide));
+        float early = FillWidth(Paint(w: bar, c: wide));
         Assert.InRange(actual: early, low: 0.01f, high: 40f);
 
         for (int i = 0; i < 240; i++) Ticker.AdvanceAll(1f / 60f);
-        float settled = FillWidth(Paint(bar, wide));
+        float settled = FillWidth(Paint(w: bar, c: wide));
         Assert.Equal(expected: 80f, actual: settled, precision: 1);
 
         // And it stops: more frames must not move it (a motion that never settles keeps the ticker
         // running, which keeps the whole event loop awake).
         for (int i = 0; i < 10; i++) Ticker.AdvanceAll(1f / 60f);
-        Assert.Equal(expected: settled, actual: FillWidth(Paint(bar, wide)), precision: 4);
+        Assert.Equal(expected: settled, actual: FillWidth(Paint(w: bar, c: wide)), precision: 4);
 
         bar.Detach();
     }
@@ -129,8 +129,8 @@ public class AdwMotionTests
         bar.Attach(owner: null!, parent: null);
         float w = FillWidth(
             Paint(
-                bar,
-                new Constraints(
+                w: bar,
+                c: new Constraints(
                     minWidth: 0f,
                     maxWidth: 100f,
                     minHeight: 0f,
@@ -145,7 +145,10 @@ public class AdwMotionTests
     [Fact]
     public void StatusPage_Keeps_One_Entrance_Across_Rebuilds()
     {
-        var page = new AdwStatusPage { Title = "Nothing here", Description = "Yet" };
+        var page = new AdwStatusPage {
+            Title = "Nothing here",
+            Description = "Yet",
+        };
         page.Attach(owner: null!, parent: null);
         page.Measure(Room);
 
@@ -168,7 +171,10 @@ public class AdwMotionTests
     [Fact]
     public void StatusPage_Can_Turn_The_Entrance_Off()
     {
-        var page = new AdwStatusPage { Title = "Nothing here", Animated = false };
+        var page = new AdwStatusPage {
+            Title = "Nothing here",
+            Animated = false,
+        };
         page.Attach(owner: null!, parent: null);
         page.Measure(Room);
         Assert.Null(FindAnimate(page));
@@ -208,7 +214,10 @@ public class AdwMotionTests
         var lazy = Run(0f);
         var flicked = Run(3f); // three sheet-heights per second, upwards
 
-        Assert.True(condition: lazy.FramesToArrive < 600, userMessage: "a plain snap never arrived");
+        Assert.True(
+            condition: lazy.FramesToArrive < 600,
+            userMessage: "a plain snap never arrived"
+        );
         Assert.True(
             condition: flicked.FramesToArrive < 600,
             userMessage: "a flicked snap never arrived"
@@ -233,19 +242,19 @@ public class AdwMotionTests
         var group = new AdwToggleGroup(labels: ["One", "Two", "Three"]);
         group.Measure(wide); // builds the subtree…
         group.Attach(owner: null!, parent: null); // …which this then mounts, tickers and all
-        float first = PillX(Paint(group, wide));
+        float first = PillX(Paint(w: group, c: wide));
 
         // Where the pill ends up is what a group built on the third segment shows outright.
         var settledGroup = new AdwToggleGroup(labels: ["One", "Two", "Three"], active: 2);
         settledGroup.Measure(wide);
         settledGroup.Attach(owner: null!, parent: null);
-        float third = PillX(Paint(settledGroup, wide));
+        float third = PillX(Paint(w: settledGroup, c: wide));
         Assert.True(condition: third > first, userMessage: "the third segment is not to the right");
 
         group.Active = 2;
         Ticker.AdvanceAll(1f / 60f);
         Ticker.AdvanceAll(1f / 60f);
-        float moving = PillX(Paint(group, wide));
+        float moving = PillX(Paint(w: group, c: wide));
 
         // Mid-slide: past the first segment, not yet at the third. A selection that jumped would
         // already be at `third` on the first frame.
@@ -253,7 +262,7 @@ public class AdwMotionTests
         Assert.True(condition: moving < third - 0.5f, userMessage: "the selection jumped");
 
         for (int i = 0; i < 240; i++) Ticker.AdvanceAll(1f / 60f);
-        Assert.Equal(expected: third, actual: PillX(Paint(group, wide)), precision: 1);
+        Assert.Equal(expected: third, actual: PillX(Paint(w: group, c: wide)), precision: 1);
 
         group.Detach();
         settledGroup.Detach();
@@ -274,7 +283,7 @@ public class AdwMotionTests
         group.Attach(owner: null!, parent: null);
 
         var palette = AdwPalette.For(ThemeProvider.Of(BuildContext.Current));
-        foreach (var c in Paint(group, wide).DebugCommands)
+        foreach (var c in Paint(w: group, c: wide).DebugCommands)
         {
             var color = new Color(
                 r: c.ColorR,
@@ -297,7 +306,7 @@ public class AdwMotionTests
         float? x = null;
         foreach (var c in list.DebugCommands)
         {
-            if (c.Kind != Zigote.Core.Native.ZgPaintOp.Rect) continue;
+            if (c.Kind != Core.Native.ZgPaintOp.Rect) continue;
             var color = new Color(
                 r: c.ColorR,
                 g: c.ColorG,
@@ -317,9 +326,8 @@ public class AdwMotionTests
     {
         if (root is Animate animate) return animate;
         foreach (var child in root.GetChildren())
-        {
-            if (FindAnimate(child) is { } found) return found;
-        }
+            if (FindAnimate(child) is { } found)
+                return found;
 
         return null;
     }
@@ -330,11 +338,10 @@ public class AdwMotionTests
         float width = 0f;
         foreach (var c in list.DebugCommands)
         {
-            if (c.Kind != Zigote.Core.Native.ZgPaintOp.Rect) continue;
+            if (c.Kind != Core.Native.ZgPaintOp.Rect) continue;
             width = width == 0f ? c.RectW : MathF.Min(x: width, y: c.RectW);
         }
 
         return width;
     }
-
 }

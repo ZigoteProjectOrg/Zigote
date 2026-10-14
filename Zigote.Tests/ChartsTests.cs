@@ -530,13 +530,14 @@ public class ChartsTests
 
         const int rounds = 100;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < rounds; i++)
             {
-                chart.InvalidateData();
-                LaidOut(chart);
+                for (int i = 0; i < rounds; i++)
+                {
+                    chart.InvalidateData();
+                    LaidOut(chart);
+                }
             }
-        });
+        );
         long perRound = measured / rounds;
         Assert.True(
             condition: perRound < 8_000,
@@ -1042,13 +1043,14 @@ public class ChartsTests
 
         const int frames = 300;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < frames; i++)
             {
-                paint.Clear();
-                chart.Paint(paint);
+                for (int i = 0; i < frames; i++)
+                {
+                    paint.Clear();
+                    chart.Paint(paint);
+                }
             }
-        });
+        );
         long allocated = measured;
         Assert.True(
             condition: allocated == 0,
@@ -1360,18 +1362,19 @@ public class ChartsTests
 
         const int iterations = 200;
         long measured = AllocGuard.Measure(() =>
-        {
-            for (int i = 0; i < iterations; i++)
             {
-                StackCompute.Compute(
-                    points: points,
-                    seriesOrder: order,
-                    mode: ChartStacking.Normalized,
-                    result: result,
-                    scratch: scratch
-                );
+                for (int i = 0; i < iterations; i++)
+                {
+                    StackCompute.Compute(
+                        points: points,
+                        seriesOrder: order,
+                        mode: ChartStacking.Normalized,
+                        result: result,
+                        scratch: scratch
+                    );
+                }
             }
-        });
+        );
         long allocated = measured;
 
         Assert.True(

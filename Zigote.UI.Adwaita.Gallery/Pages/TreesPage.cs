@@ -13,7 +13,10 @@ public sealed class TreesPage : ComposedWidget
                 new Node(
                     Name: "Zigote.UI",
                     Children: [
-                        new Node(Name: "Widgets", Children: [new Node("Layout"), new Node("Controls")]),
+                        new Node(
+                            Name: "Widgets",
+                            Children: [new Node("Layout"), new Node("Controls")]
+                        ),
                         new Node("Theme"),
                         new Node("Semantics"),
                     ]
@@ -27,7 +30,9 @@ public sealed class TreesPage : ComposedWidget
         ),
     ];
 
-    private readonly List<string> _order = ["Bloom", "Tone mapping", "Colour grading", "Vignette", "Film grain"];
+    private readonly List<string> _order =
+        ["Bloom", "Tone mapping", "Colour grading", "Vignette", "Film grain"];
+
     private readonly Signal<string> _selected = new("(nothing selected)");
     private readonly Signal<int> _revision = new(0);
 
@@ -96,7 +101,10 @@ public sealed class TreesPage : ComposedWidget
                                     {
                                         string moved = _order[from];
                                         _order.RemoveAt(from);
-                                        _order.Insert(index: Math.Clamp(value: to, min: 0, max: _order.Count), item: moved);
+                                        _order.Insert(
+                                            index: Math.Clamp(value: to, min: 0, max: _order.Count),
+                                            item: moved
+                                        );
                                         _revision.Value++;
                                     }
                                 );

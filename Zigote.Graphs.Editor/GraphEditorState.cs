@@ -156,12 +156,17 @@ public sealed class GraphEditorState
         else
             LastValidation = GraphValidationResult.Ok;
         var diagnostics = LastValidation.Diagnostics.ToList();
-        foreach (var diagnostic in GraphInputValidation.Validate(Graph, Registry))
+        foreach (var diagnostic in GraphInputValidation.Validate(graph: Graph, registry: Registry))
+        {
             if (!diagnostics.Any(d => d.NodeId == diagnostic.NodeId && d.PinId == diagnostic.PinId
-                && d.Severity == GraphDiagnosticSeverity.Error))
+                    && d.Severity == GraphDiagnosticSeverity.Error
+                ))
                 diagnostics.Add(diagnostic);
+        }
+
         LastValidation = new GraphValidationResult {
-            IsValid = LastValidation.IsValid && !diagnostics.Any(d => d.Severity == GraphDiagnosticSeverity.Error),
+            IsValid = LastValidation.IsValid &&
+                      !diagnostics.Any(d => d.Severity == GraphDiagnosticSeverity.Error),
             Diagnostics = diagnostics,
         };
         return LastValidation;
@@ -181,8 +186,14 @@ public sealed class GraphEditorState
         );
         var diagnostics = compiled.Diagnostics.ToList();
         foreach (var diagnostic in LastValidation!.Diagnostics)
-            if (!diagnostics.Any(d => d.NodeId == diagnostic.NodeId && d.PinId == diagnostic.PinId && d.Code == diagnostic.Code))
+        {
+            if (!diagnostics.Any(d =>
+                    d.NodeId == diagnostic.NodeId && d.PinId == diagnostic.PinId &&
+                    d.Code == diagnostic.Code
+                ))
                 diagnostics.Add(diagnostic);
+        }
+
         LastCompileResult = new GraphCompileResult {
             Success = compiled.Success && LastValidation.IsValid,
             Diagnostics = diagnostics,

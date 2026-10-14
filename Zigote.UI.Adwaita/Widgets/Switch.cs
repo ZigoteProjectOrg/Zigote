@@ -51,6 +51,7 @@ public sealed class AdwSwitch : Widget
             }
             else if (value) _anim.Forward();
             else _anim.Reverse();
+
             MarkNeedsPaint();
         }
     }

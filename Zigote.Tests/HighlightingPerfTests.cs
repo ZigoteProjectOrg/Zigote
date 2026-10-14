@@ -24,15 +24,15 @@ public class HighlightingPerfTests
     /// <summary>A realistic C# document: code, doc comments, strings, and a block-comment section.</summary>
     private static string[] CSharpDocument(int lines)
     {
-        var result = new string[lines];
+        string[] result = new string[lines];
         for (int i = 0; i < lines; i++)
         {
-            result[i] = (i % 8) switch
-            {
+            result[i] = (i % 8) switch {
                 0 => $"/// <summary>Computes value {i} for the frame budget.</summary>",
                 1 => $"public static int Value{i}(int x, ReadOnlySpan<char> name)",
                 2 => "{",
-                3 => $"    var label = $\"item {i}: {{x}}\"; // interpolated + trailing comment",
+                3 =>
+                    $"    var label = $\"item {i}: {{x}}\"; // interpolated + trailing comment",
                 4 => $"    if (x > 0x{i:X4} && name.Length != {i}) return x * {i} + 42;",
                 5 => "    /* block comment opening on this line",
                 6 => "       still inside the block comment */ return -1;",
@@ -70,7 +70,10 @@ public class HighlightingPerfTests
                 state = tok.Tokenize(line: line, state: state, output: output);
             }
 
-            best = Math.Min(val1: best, val2: Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            best = Math.Min(
+                val1: best,
+                val2: Stopwatch.GetElapsedTime(start).TotalMilliseconds
+            );
         }
 
         return best;
@@ -96,7 +99,9 @@ public class HighlightingPerfTests
         // One 24k-char line: the worst case for a per-line lexer (no line boundaries to hide behind).
         var sb = new StringBuilder("{");
         for (int i = 0; i < 400; i++)
-            sb.Append($"\"key{i}\":{{\"n\":{i},\"s\":\"value {i}\",\"b\":true,\"x\":[1,2.5e3,0x0]}},");
+            sb.Append(
+                $"\"key{i}\":{{\"n\":{i},\"s\":\"value {i}\",\"b\":true,\"x\":[1,2.5e3,0x0]}},"
+            );
         sb.Append('}');
         string line = sb.ToString();
 
@@ -121,12 +126,11 @@ public class HighlightingPerfTests
         // Inputs chosen to stress the choice/backtrack machinery: unterminated strings, an
         // operator wall, digit runs that repeatedly fail the hex/binary prefixes, and a
         // catch-all-only line. Each must stay linear, not exponential.
-        string[] lines =
-        [
+        string[] lines = [
             "\"" + new string(c: 'a', count: 8000),
-            new string(c: '=', count: 8000),
+            new(c: '=', count: 8000),
             string.Concat(Enumerable.Repeat(element: "0x_ 0b_ 0.e ", count: 600)),
-            new string(c: '\\', count: 8000),
+            new(c: '\\', count: 8000),
         ];
 
         var output = new List<Token>();

@@ -7,6 +7,7 @@ using DeviceInfo;
 using FilePicker;
 using Geolocation;
 using Haptics;
+using MediaSession;
 using Notifications;
 using PathProvider;
 using Permissions;
@@ -324,15 +325,42 @@ internal sealed class NotificationsPage : ComposedWidget
 {
     private readonly NotificationClient _client = new("dev.zigote.PluginsDemo", "Zigote Plugins");
     private readonly Signal<string> _status = new("Not started");
+    private readonly MediaSessionClient _media = new("dev.zigote.PluginsDemo", "Zigote Plugins");
+    private readonly Signal<string> _mediaLog = new("No command yet");
+
+    // A pretend track: the plugin carries state and commands, it never touches audio.
+    private NowPlaying _track = new("Demo Track")
+    {
+        Artist = "Zigote", Album = "Plugins", Duration = TimeSpan.FromMinutes(3), CanNext = true, CanPrevious = true,
+    };
 
     protected override void OnMount()
-        => _ = _client.StartAsync().ContinueWith(t => _status.Value = t.IsFaulted
+    {
+        _ = _client.StartAsync().ContinueWith(t => _status.Value = t.IsFaulted
             ? "Could not start: " + t.Exception?.InnerException?.Message
             : $"Ready (actions {(_client.SupportsActions ? "supported" : "unsupported")})");
+
+        // Arrives on the OS's thread; the Signal write is what makes that safe.
+        _media.Command += command =>
+        {
+            _mediaLog.Value = $"{command.Action} {(command.Action == MediaAction.SeekTo ? command.Position.ToString(@"m\:ss") : "")} at {DateTime.Now:HH:mm:ss}";
+            _track = command.Action switch
+            {
+                MediaAction.Play => _track with { Playing = true },
+                MediaAction.Pause or MediaAction.Stop => _track with { Playing = false },
+                MediaAction.PlayPause => _track with { Playing = !_track.Playing },
+                MediaAction.SeekTo => _track with { Position = command.Position },
+                _ => _track,
+            };
+            _media.Update(_track);
+        };
+        _ = _media.StartAsync();
+    }
 
     public override void Detach()
     {
         _client.Dispose();
+        _media.Dispose();
         base.Detach();
     }
 
@@ -345,6 +373,19 @@ internal sealed class NotificationsPage : ComposedWidget
                 Demo.Action("Show one", "client.Show(notification)", "Notify", () =>
                     _client.Show(new Notification("Zigote", "A notification from the plugin demo"))),
                 Demo.Action("Close it", "client.Close()", "Close", () => _client.Close()),
+            },
+        },
+        new AdwPreferencesGroup("Now playing", "audio_service — try `playerctl status` or the media keys on Linux")
+        {
+            Rows =
+            {
+                Demo.Action("Publish a track", "media.Update(nowPlaying)", "Publish", () =>
+                {
+                    _media.Update(_track = _track with { Playing = true });
+                    _mediaLog.Value = _media.Active ? "Published — the system can see it" : "Inactive here (Linux, Android and iOS only)";
+                }),
+                Demo.Action("Clear it", "media.Update(null)", "Clear", () => _media.Update(null)),
+                new Watch(() => Demo.Fact("Last command", _mediaLog.Value)),
             },
         });
 }

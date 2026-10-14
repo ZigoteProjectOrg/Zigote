@@ -127,7 +127,7 @@ public sealed class AdwColumnView<T> : ComposedWidget
     public AdwColumnView(IReadOnlyList<T> items, params AdwColumn<T>[] columns)
     {
         _items = items;
-        _columns = [..columns];
+        _columns = [.. columns];
         Reset();
     }
 
@@ -174,9 +174,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
         get
         {
             foreach (int item in _order)
-            {
-                if (_selected.Contains(item)) yield return _items[item];
-            }
+                if (_selected.Contains(item))
+                    yield return _items[item];
         }
     }
 
@@ -209,7 +208,9 @@ public sealed class AdwColumnView<T> : ComposedWidget
     /// <summary>Sort by column <paramref name="column" /> (-1 restores the items' own order).</summary>
     public void SortBy(int column, bool ascending = true)
     {
-        _sortColumn = column >= 0 && column < _columns.Count && _columns[column].Sort is not null ? column : -1;
+        _sortColumn = column >= 0 && column < _columns.Count && _columns[column].Sort is not null
+            ? column
+            : -1;
         _sortAscending = ascending;
         ApplySort();
         _header?.MarkNeedsPaint();
@@ -221,9 +222,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
     {
         _selected.Clear();
         foreach (int i in itemIndices)
-        {
-            if ((uint)i < (uint)_items.Count) _selected.Add(i);
-        }
+            if ((uint)i < (uint)_items.Count)
+                _selected.Add(i);
 
         _body?.MarkNeedsPaint();
         OnSelectionChanged?.Invoke();
@@ -242,6 +242,7 @@ public sealed class AdwColumnView<T> : ComposedWidget
             _cellWidths[c] = new float[_items.Count];
             _fitted[c] = new string?[_items.Count];
         }
+
         _order = new int[_items.Count];
         for (int i = 0; i < _order.Length; i++) _order[i] = i;
         ApplySort();
@@ -261,7 +262,12 @@ public sealed class AdwColumnView<T> : ComposedWidget
         var items = _items;
         if (_order.Length < BackgroundSortRows || Owner is not { } app)
         {
-            SortOrder(order: _order, items: items, compare: compare, dir: dir);
+            SortOrder(
+                order: _order,
+                items: items,
+                compare: compare,
+                dir: dir
+            );
             return;
         }
 
@@ -271,10 +277,16 @@ public sealed class AdwColumnView<T> : ComposedWidget
         int[] order = (int[])_order.Clone();
         Task.Run(() =>
             {
-                SortOrder(order: order, items: items, compare: compare, dir: dir);
+                SortOrder(
+                    order: order,
+                    items: items,
+                    compare: compare,
+                    dir: dir
+                );
                 app.Post(() =>
                     {
-                        if (version != _sortVersion || !ReferenceEquals(objA: items, objB: _items)) return;
+                        if (version != _sortVersion || !ReferenceEquals(objA: items, objB: _items))
+                            return;
                         _order = order;
                         _body?.MarkNeedsPaint();
                     }
@@ -287,7 +299,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
     ///     Stable: ties fall back to the items' own order, so reversing a sort reverses only what
     ///     differs and the result does not depend on the order the sort started from.
     /// </summary>
-    private static void SortOrder(int[] order, IReadOnlyList<T> items, Comparison<T> compare, int dir) =>
+    private static void SortOrder(int[] order, IReadOnlyList<T> items, Comparison<T> compare,
+        int dir) =>
         Array.Sort(
             array: order,
             comparison: (a, b) =>
@@ -309,7 +322,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
     {
         string text = Cell(column: column, item: item);
         ref float measured = ref _cellWidths[column][item];
-        if (measured == 0f && text.Length > 0) measured = TextMeasure.Width(text: text, fontSize: fs);
+        if (measured == 0f && text.Length > 0)
+            measured = TextMeasure.Width(text: text, fontSize: fs);
         if (measured <= room) return (text, measured);
 
         if (_fittedFor[column] != room)
@@ -329,11 +343,14 @@ public sealed class AdwColumnView<T> : ComposedWidget
         while (lo < hi)
         {
             int mid = (lo + hi + 1) / 2;
-            if (TextMeasure.Width(text: text.AsSpan(start: 0, length: mid), fontSize: fs) + ellipsis <= room) lo = mid;
+            if (TextMeasure.Width(text: text.AsSpan(start: 0, length: mid), fontSize: fs) +
+                ellipsis <= room) lo = mid;
             else hi = mid - 1;
         }
 
-        return lo == 0 ? "…" : string.Concat(str0: text.AsSpan(start: 0, length: lo).TrimEnd(), str1: "…");
+        return lo == 0
+            ? "…"
+            : string.Concat(str0: text.AsSpan(start: 0, length: lo).TrimEnd(), str1: "…");
     }
 
     // ── Column geometry ───────────────────────────────────────────────────────
@@ -416,7 +433,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
         {
             if (_anchor < 0) _anchor = position;
             if (!toggle) _selected.Clear();
-            int lo = Math.Min(val1: _anchor, val2: position), hi = Math.Max(val1: _anchor, val2: position);
+            int lo = Math.Min(val1: _anchor, val2: position),
+                hi = Math.Max(val1: _anchor, val2: position);
             for (int p = lo; p <= hi; p++) _selected.Add(_order[p]);
         }
         else
@@ -433,7 +451,11 @@ public sealed class AdwColumnView<T> : ComposedWidget
     {
         if (_order.Length == 0) return;
         position = Math.Clamp(value: position, min: 0, max: _order.Length - 1);
-        SelectAt(position: position, toggle: false, range: extend && SelectionMode == AdwSelectionMode.Multiple);
+        SelectAt(
+            position: position,
+            toggle: false,
+            range: extend && SelectionMode == AdwSelectionMode.Multiple
+        );
         _scroll?.EnsureVisible(top: position * RowH, height: RowH);
     }
 
@@ -452,12 +474,20 @@ public sealed class AdwColumnView<T> : ComposedWidget
         public override Size Measure(Constraints c)
         {
             float w = owner.ResolveWidths(owner._viewW);
-            _size = new Size(width: w, height: MathF.Max(x: owner._order.Length * owner.RowH, y: owner.RowH));
+            _size = new Size(
+                width: w,
+                height: MathF.Max(x: owner._order.Length * owner.RowH, y: owner.RowH)
+            );
             return _size;
         }
 
         public override void Layout(Offset origin) =>
-            Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
 
         public override void Paint(PaintList paint)
         {
@@ -480,12 +510,31 @@ public sealed class AdwColumnView<T> : ComposedWidget
             {
                 int item = owner._order[pos];
                 float y = Bounds.Y + (pos * rowH);
-                var row = new Rect(x: Bounds.X, y: y, width: _size.Width, height: rowH);
-                bool selected = owner.SelectionMode != AdwSelectionMode.None && owner._selected.Contains(item);
-                var bg = AdwStyle.ViewRowFill(theme: theme, hovered: pos == _hover, pressed: false, selected: selected);
+                var row = new Rect(
+                    x: Bounds.X,
+                    y: y,
+                    width: _size.Width,
+                    height: rowH
+                );
+                bool selected = owner.SelectionMode != AdwSelectionMode.None &&
+                                owner._selected.Contains(item);
+                var bg = AdwStyle.ViewRowFill(
+                    theme: theme,
+                    hovered: pos == _hover,
+                    pressed: false,
+                    selected: selected
+                );
                 if (bg.A > 0f) paint.AddRect(bounds: row, color: bg);
                 if (owner.ShowRowSeparators && pos > 0)
-                    paint.AddRect(bounds: new Rect(x: row.X, y: y, width: row.Width, height: 1f), color: theme.Separator);
+                    paint.AddRect(
+                        bounds: new Rect(
+                            x: row.X,
+                            y: y,
+                            width: row.Width,
+                            height: 1f
+                        ),
+                        color: theme.Separator
+                    );
                 if (pos == owner._cursor && Focused)
                     paint.AddFocusRing(bounds: row, radius: 0f, theme: theme);
 
@@ -497,18 +546,46 @@ public sealed class AdwColumnView<T> : ComposedWidget
                     float w = owner._widths[c];
                     var color = col.Dim ? p.DimLabel : p.ViewFg;
                     float textX = x + CellPadX;
-                    paint.AddClipStart(new Rect(x: x, y: y, width: MathF.Max(x: 0f, y: w - 4f), height: rowH));
+                    paint.AddClipStart(
+                        new Rect(
+                            x: x,
+                            y: y,
+                            width: MathF.Max(x: 0f, y: w - 4f),
+                            height: rowH
+                        )
+                    );
                     if (col.Icon?.Invoke(owner._items[item]) is { } glyph)
                     {
-                        Icons.Draw(paint: paint, glyph: glyph, box: new Rect(x: textX, y: y, width: IconSize, height: rowH),
-                            color: color, size: IconSize);
+                        Icons.Draw(
+                            paint: paint,
+                            glyph: glyph,
+                            box: new Rect(
+                                x: textX,
+                                y: y,
+                                width: IconSize,
+                                height: rowH
+                            ),
+                            color: color,
+                            size: IconSize
+                        );
                         textX += IconSize + 8f;
                     }
 
                     float room = MathF.Max(x: 0f, y: x + w - CellPadX - textX);
-                    (string text, float textW) = owner.Fit(column: c, item: item, room: room, fs: fs);
+                    (string text, float textW) = owner.Fit(
+                        column: c,
+                        item: item,
+                        room: room,
+                        fs: fs
+                    );
                     if (col.Align == AdwColumnAlign.End) textX = x + w - CellPadX - textW;
-                    paint.AddText(text: text, baselineX: textX, baselineY: baseline, color: color, fontSize: fs);
+                    paint.AddText(
+                        text: text,
+                        baselineX: textX,
+                        baselineY: baseline,
+                        color: color,
+                        fontSize: fs
+                    );
                     paint.AddClipEnd();
                     x += w;
                 }
@@ -547,7 +624,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
             var mods = app?.CurrentModifiers ?? Modifiers.None;
             bool toggle = mods.HasCommand(), range = (mods & Modifiers.Shift) != 0;
             float time = app?.Time ?? 0f;
-            bool doubleClick = !toggle && !range && pos == _lastClick && time - _lastClickTime < DoubleClickSeconds;
+            bool doubleClick = !toggle && !range && pos == _lastClick &&
+                               time - _lastClickTime < DoubleClickSeconds;
             _lastClick = pos;
             _lastClickTime = time;
 
@@ -566,7 +644,8 @@ public sealed class AdwColumnView<T> : ComposedWidget
             }
 
             // Right-clicking inside the selection keeps it; elsewhere it moves to that row first.
-            if (!owner._selected.Contains(owner._order[pos])) owner.SelectAt(position: pos, toggle: false, range: false);
+            if (!owner._selected.Contains(owner._order[pos]))
+                owner.SelectAt(position: pos, toggle: false, range: false);
             owner.OnContextMenu?.Invoke(arg1: owner._items[owner._order[pos]], arg2: point);
         }
 
@@ -578,7 +657,10 @@ public sealed class AdwColumnView<T> : ComposedWidget
             switch ((KeyCode)scancode)
             {
                 case KeyCode.Up:
-                    owner.MoveCursor(position: cursor < 0 ? owner._order.Length - 1 : cursor - 1, extend: shift);
+                    owner.MoveCursor(
+                        position: cursor < 0 ? owner._order.Length - 1 : cursor - 1,
+                        extend: shift
+                    );
                     break;
                 case KeyCode.Down:
                     owner.MoveCursor(position: cursor + 1, extend: shift);
@@ -596,12 +678,18 @@ public sealed class AdwColumnView<T> : ComposedWidget
                     owner.MoveCursor(position: owner._order.Length - 1, extend: shift);
                     break;
                 case KeyCode.Space when cursor >= 0:
-                    owner.SelectAt(position: cursor, toggle: owner.SelectionMode == AdwSelectionMode.Multiple, range: false);
+                    owner.SelectAt(
+                        position: cursor,
+                        toggle: owner.SelectionMode == AdwSelectionMode.Multiple,
+                        range: false
+                    );
                     break;
-                case KeyCode.Enter or KeyCode.KpEnter when cursor >= 0 && cursor < owner._order.Length:
+                case KeyCode.Enter or KeyCode.KpEnter
+                    when cursor >= 0 && cursor < owner._order.Length:
                     owner.OnActivated?.Invoke(owner._items[owner._order[cursor]]);
                     break;
-                case KeyCode.A when mods.HasCommand() && owner.SelectionMode == AdwSelectionMode.Multiple:
+                case KeyCode.A when mods.HasCommand() &&
+                                    owner.SelectionMode == AdwSelectionMode.Multiple:
                     owner.Select(Enumerable.Range(start: 0, count: owner._items.Count));
                     break;
             }
@@ -613,11 +701,19 @@ public sealed class AdwColumnView<T> : ComposedWidget
             config.Label = owner.SemanticsLabel;
             config.Value = $"{owner._order.Length} rows, {owner._selected.Count} selected";
             config.Actions = SemanticsAction.Focus;
-            config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(flag: SemanticsFlags.Focused, on: Focused);
+            config.AddFlag(flag: SemanticsFlags.Focusable, on: true).AddFlag(
+                flag: SemanticsFlags.Focused,
+                on: Focused
+            );
         }
 
         public override int DebugStateHash() =>
-            HashCode.Combine(value1: owner._order.Length, value2: owner._selected.Count, value3: owner._cursor, value4: _hover);
+            HashCode.Combine(
+                value1: owner._order.Length,
+                value2: owner._selected.Count,
+                value3: owner._cursor,
+                value4: _hover
+            );
     }
 
     /// <summary>The column titles: sort on click, resize by dragging a title's right edge.</summary>
@@ -647,7 +743,12 @@ public sealed class AdwColumnView<T> : ComposedWidget
         }
 
         public override void Layout(Offset origin) =>
-            Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
 
         public override void Paint(PaintList paint)
         {
@@ -662,22 +763,59 @@ public sealed class AdwColumnView<T> : ComposedWidget
             {
                 var col = owner._columns[c];
                 float w = owner._widths[c];
-                var cell = new Rect(x: x, y: Bounds.Y, width: w, height: HeaderH);
+                var cell = new Rect(
+                    x: x,
+                    y: Bounds.Y,
+                    width: w,
+                    height: HeaderH
+                );
                 if (col.Sort is not null && (_hover == c || _pressed == c) && _dragColumn < 0)
-                    paint.AddRect(bounds: cell, color: _pressed == c ? p.ViewActiveFill : p.ViewHoverFill);
+                    paint.AddRect(
+                        bounds: cell,
+                        color: _pressed == c ? p.ViewActiveFill : p.ViewHoverFill
+                    );
 
                 bool sorted = owner._sortColumn == c;
                 var color = sorted ? p.ViewFg : p.DimLabel;
                 float arrowW = sorted ? 16f : 0f;
-                (string title, float titleW) = Title(column: c, room: MathF.Max(x: 0f, y: w - (CellPadX * 2f) - arrowW), fs: fs);
-                float tx = col.Align == AdwColumnAlign.End ? x + w - CellPadX - titleW - arrowW : x + CellPadX;
-                paint.AddClipStart(new Rect(x: x, y: Bounds.Y, width: MathF.Max(x: 0f, y: w - 4f), height: HeaderH));
-                paint.AddText(text: title, baselineX: tx, baselineY: baseline, color: color, fontSize: fs,
-                    fontWeight: FontWeight.Bold);
+                (string title, float titleW) = Title(
+                    column: c,
+                    room: MathF.Max(x: 0f, y: w - (CellPadX * 2f) - arrowW),
+                    fs: fs
+                );
+                float tx = col.Align == AdwColumnAlign.End
+                    ? x + w - CellPadX - titleW - arrowW
+                    : x + CellPadX;
+                paint.AddClipStart(
+                    new Rect(
+                        x: x,
+                        y: Bounds.Y,
+                        width: MathF.Max(x: 0f, y: w - 4f),
+                        height: HeaderH
+                    )
+                );
+                paint.AddText(
+                    text: title,
+                    baselineX: tx,
+                    baselineY: baseline,
+                    color: color,
+                    fontSize: fs,
+                    fontWeight: FontWeight.Bold
+                );
                 if (sorted)
                 {
-                    Icons.Draw(paint: paint, glyph: owner._sortAscending ? Icons.DropUp : Icons.DropDown,
-                        box: new Rect(x: tx + titleW, y: Bounds.Y, width: arrowW, height: HeaderH), color: color, size: 16f);
+                    Icons.Draw(
+                        paint: paint,
+                        glyph: owner._sortAscending ? Icons.DropUp : Icons.DropDown,
+                        box: new Rect(
+                            x: tx + titleW,
+                            y: Bounds.Y,
+                            width: arrowW,
+                            height: HeaderH
+                        ),
+                        color: color,
+                        size: 16f
+                    );
                 }
 
                 paint.AddClipEnd();
@@ -685,16 +823,30 @@ public sealed class AdwColumnView<T> : ComposedWidget
                 // The resize handle shows only where it can be grabbed, and while it is held.
                 if (col.Resizable && (_resizeHover == c || _dragColumn == c))
                 {
-                    paint.AddRect(bounds: new Rect(x: x + w - 1f, y: Bounds.Y + 6f, width: 1f, height: HeaderH - 12f),
-                        color: _dragColumn == c ? p.Accent : theme.Separator);
+                    paint.AddRect(
+                        bounds: new Rect(
+                            x: x + w - 1f,
+                            y: Bounds.Y + 6f,
+                            width: 1f,
+                            height: HeaderH - 12f
+                        ),
+                        color: _dragColumn == c ? p.Accent : theme.Separator
+                    );
                 }
 
                 x += w;
             }
 
             paint.AddClipEnd();
-            paint.AddRect(bounds: new Rect(x: Bounds.X, y: Bounds.Bottom - 1f, width: Bounds.Width, height: 1f),
-                color: theme.Separator);
+            paint.AddRect(
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Bottom - 1f,
+                    width: Bounds.Width,
+                    height: 1f
+                ),
+                color: theme.Separator
+            );
         }
 
         /// <summary>The title, ellipsized when its column is too narrow; recut only when the room changes.</summary>
@@ -713,7 +865,9 @@ public sealed class AdwColumnView<T> : ComposedWidget
                 _titleRoom[column] = room;
                 // Bold is wider than the cells' regular weight; measure it as drawn.
                 float full = TextMeasure.Width(text: title, fontSize: fs, weight: FontWeight.Bold);
-                string cut = full <= room ? title : Ellipsize(text: title, room: room * 0.94f, fs: fs);
+                string cut = full <= room
+                    ? title
+                    : Ellipsize(text: title, room: room * 0.94f, fs: fs);
                 _titleCut[column] = cut;
                 _titleWidth[column] = ReferenceEquals(objA: cut, objB: title)
                     ? full
@@ -760,7 +914,10 @@ public sealed class AdwColumnView<T> : ComposedWidget
             if (_dragColumn >= 0)
             {
                 var col = owner._columns[_dragColumn];
-                col.Width = MathF.Max(x: col.MinWidth, y: MathF.Round(_dragStartWidth + point.X - _dragStartX));
+                col.Width = MathF.Max(
+                    x: col.MinWidth,
+                    y: MathF.Round(_dragStartWidth + point.X - _dragStartX)
+                );
                 MarkNeedsLayout();
                 owner._body?.MarkNeedsLayout();
                 return;

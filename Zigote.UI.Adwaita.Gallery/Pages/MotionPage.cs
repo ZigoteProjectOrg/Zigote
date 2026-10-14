@@ -80,22 +80,41 @@ public sealed class MotionPage : ComposedWidget
                 ),
                 Demo.Titled(
                     title: "Entrances",
-                    description: "One call each. They compose — chain another onto the same widget " +
-                                 "and it joins the same timeline.",
+                    description:
+                    "One call each. They compose — chain another onto the same widget " +
+                    "and it joins the same timeline.",
                     child: new Column(spacing: Spacing.Lg, mainAxisSize: MainAxisSize.Min) {
                         Children = {
                             Demo.Stage(
                                 Grid(
-                                    Tile(name: "FadeInUp", preset: w => w.FadeInUp(), into: _entrances),
-                                    Tile(name: "FadeInDown", preset: w => w.FadeInDown(), into: _entrances),
-                                    Tile(name: "FadeInLeft", preset: w => w.FadeInLeft(), into: _entrances),
-                                    Tile(name: "FadeInRight", preset: w => w.FadeInRight(), into: _entrances),
+                                    Tile(
+                                        name: "FadeInUp",
+                                        preset: w => w.FadeInUp(),
+                                        into: _entrances
+                                    ),
+                                    Tile(
+                                        name: "FadeInDown",
+                                        preset: w => w.FadeInDown(),
+                                        into: _entrances
+                                    ),
+                                    Tile(
+                                        name: "FadeInLeft",
+                                        preset: w => w.FadeInLeft(),
+                                        into: _entrances
+                                    ),
+                                    Tile(
+                                        name: "FadeInRight",
+                                        preset: w => w.FadeInRight(),
+                                        into: _entrances
+                                    ),
                                     Tile(name: "PopIn", preset: w => w.PopIn(), into: _entrances),
                                     Tile(name: "ZoomIn", preset: w => w.ZoomIn(), into: _entrances),
                                     Tile(name: "SpinIn", preset: w => w.SpinIn(), into: _entrances)
                                 )
                             ),
-                            Demo.Bar(new AdwButton(label: "Replay", onPressed: () => Replay(_entrances))),
+                            Demo.Bar(
+                                new AdwButton(label: "Replay", onPressed: () => Replay(_entrances))
+                            ),
                         },
                     }
                 ),
@@ -107,32 +126,46 @@ public sealed class MotionPage : ComposedWidget
                             Demo.Stage(
                                 Grid(
                                     Tile(name: "PopOut", preset: w => w.PopOut(), into: _exits),
-                                    Tile(name: "FadeOutDown", preset: w => w.FadeOutDown(), into: _exits)
+                                    Tile(
+                                        name: "FadeOutDown",
+                                        preset: w => w.FadeOutDown(),
+                                        into: _exits
+                                    )
                                 )
                             ),
-                            Demo.Bar(new AdwButton(label: "Replay", onPressed: () => Replay(_exits))),
+                            Demo.Bar(
+                                new AdwButton(label: "Replay", onPressed: () => Replay(_exits))
+                            ),
                         },
                     }
                 ),
                 Demo.Titled(
                     title: "Attention",
-                    description: "For a field that was rejected — enough to notice, not enough to annoy.",
+                    description:
+                    "For a field that was rejected — enough to notice, not enough to annoy.",
                     child: new Column(spacing: Spacing.Lg, mainAxisSize: MainAxisSize.Min) {
                         Children = {
                             Demo.Stage(
                                 Grid(
-                                    Tile(name: "Attention", preset: w => w.Attention(), into: _attention),
+                                    Tile(
+                                        name: "Attention",
+                                        preset: w => w.Attention(),
+                                        into: _attention
+                                    ),
                                     Tile(name: "Wobble", preset: w => w.Wobble(), into: _attention)
                                 )
                             ),
-                            Demo.Bar(new AdwButton(label: "Again", onPressed: () => Replay(_attention))),
+                            Demo.Bar(
+                                new AdwButton(label: "Again", onPressed: () => Replay(_attention))
+                            ),
                         },
                     }
                 ),
                 Demo.Titled(
                     title: "Ambient",
-                    description: "Loops with no end: they cost one ticker each and stop the moment " +
-                                 "the page unmounts.",
+                    description:
+                    "Loops with no end: they cost one ticker each and stop the moment " +
+                    "the page unmounts.",
                     child: Demo.Stage(
                         Grid(
                             Tile(name: "Pulse", preset: w => w.Pulse(), into: null),
@@ -143,14 +176,15 @@ public sealed class MotionPage : ComposedWidget
                 ),
                 Demo.Titled(
                     title: "Staggered",
-                    description: "A list that arrives as a wave — one Interval curve per index, so " +
-                                 "the whole run is still a single timeline per row.",
+                    description:
+                    "A list that arrives as a wave — one Interval curve per index, so " +
+                    "the whole run is still a single timeline per row.",
                     child: new Column(spacing: Spacing.Lg, mainAxisSize: MainAxisSize.Min) {
                         Children = {
-                            Demo.Stage(
-                                StaggeredRows()
+                            Demo.Stage(StaggeredRows()),
+                            Demo.Bar(
+                                new AdwButton(label: "Replay", onPressed: () => Replay(_rows))
                             ),
-                            Demo.Bar(new AdwButton(label: "Replay", onPressed: () => Replay(_rows))),
                         },
                     }
                 ),

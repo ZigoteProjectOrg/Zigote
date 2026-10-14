@@ -47,7 +47,7 @@ public sealed class NativeViewHost : Widget
         get => _view;
         set
         {
-            if (ReferenceEquals(_view, value)) return;
+            if (ReferenceEquals(objA: _view, objB: value)) return;
             if (_shown) _view?.SetVisible(false);
             _view = value;
             _shown = false;
@@ -65,17 +65,21 @@ public sealed class NativeViewHost : Widget
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(
-            width: float.IsInfinity(c.MaxWidth) ? PreferredSize.Width : c.MaxWidth,
-            height: float.IsInfinity(c.MaxHeight) ? PreferredSize.Height : c.MaxHeight
-        ));
+        _size = c.Constrain(
+            new Size(
+                width: float.IsInfinity(c.MaxWidth) ? PreferredSize.Width : c.MaxWidth,
+                height: float.IsInfinity(c.MaxHeight) ? PreferredSize.Height : c.MaxHeight
+            )
+        );
         return _size;
     }
 
-    public override void Layout(Offset origin)
-    {
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
-    }
+    public override void Layout(Offset origin) => Bounds = new Rect(
+        x: origin.X,
+        y: origin.Y,
+        width: _size.Width,
+        height: _size.Height
+    );
 
     public override void Paint(PaintList paint)
     {

@@ -24,7 +24,10 @@ public static class AdwDateFormat
     }
 
     /// <summary>The culture's short time — "9:30 AM", "09:30".</summary>
-    public static string Time(TimeOnly time) => time.ToString(format: "t", provider: CultureInfo.CurrentCulture);
+    public static string Time(TimeOnly time) => time.ToString(
+        format: "t",
+        provider: CultureInfo.CurrentCulture
+    );
 }
 
 /// <summary>
@@ -77,7 +80,10 @@ public sealed class AdwDateButton : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        _content = new AdwButtonContent(iconName: MaterialIcons.CalendarToday, label: Format(_value));
+        _content = new AdwButtonContent(
+            iconName: MaterialIcons.CalendarToday,
+            label: Format(_value)
+        );
         _button = new AdwButton(onPressed: Enabled ? Open : null) { Content = _content };
         return _button;
     }
@@ -145,7 +151,10 @@ public sealed class AdwTimeButton : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        _content = new AdwButtonContent(iconName: MaterialIcons.Schedule, label: AdwDateFormat.Time(_value));
+        _content = new AdwButtonContent(
+            iconName: MaterialIcons.Schedule,
+            label: AdwDateFormat.Time(_value)
+        );
         _button = new AdwButton(onPressed: Enabled ? Open : null) { Content = _content };
         return _button;
     }
@@ -212,12 +221,23 @@ public sealed class AdwDateRow : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var p = AdwPalette.For(ThemeProvider.Of(context));
-        _valueLabel = new Label(text: AdwDateFormat.Medium(_value), style: AdwTypography.Body, color: p.DimLabel) {
+        _valueLabel = new Label(
+            text: AdwDateFormat.Medium(_value),
+            style: AdwTypography.Body,
+            color: p.DimLabel
+        ) {
             MaxLines = 1,
         };
-        _icon = new IconGlyph(glyph: MaterialIcons.CalendarToday, size: AdwMetrics.IconSize, color: p.DimLabel);
+        _icon = new IconGlyph(
+            glyph: MaterialIcons.CalendarToday,
+            size: AdwMetrics.IconSize,
+            color: p.DimLabel
+        );
         return new AdwActionRow(title: Title, subtitle: Subtitle) {
-            Suffixes = { _valueLabel, _icon },
+            Suffixes = {
+                _valueLabel,
+                _icon,
+            },
             OnActivated = Open,
         };
     }
@@ -229,7 +249,11 @@ public sealed class AdwDateRow : ComposedWidget
             MaxDate = MaxDate,
             IsMarked = IsMarked,
         };
-        var popover = new AdwPopover(child: calendar, anchor: AdwRowAnchor.Suffix(row: Bounds, a: _valueLabel, b: _icon), app: Owner);
+        var popover = new AdwPopover(
+            child: calendar,
+            anchor: AdwRowAnchor.Suffix(row: Bounds, a: _valueLabel, b: _icon),
+            app: Owner
+        );
         calendar.OnChanged = d =>
         {
             Value = d;
@@ -281,12 +305,23 @@ public sealed class AdwTimeRow : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var p = AdwPalette.For(ThemeProvider.Of(context));
-        _valueLabel = new Label(text: AdwDateFormat.Time(_value), style: AdwTypography.Body, color: p.DimLabel) {
+        _valueLabel = new Label(
+            text: AdwDateFormat.Time(_value),
+            style: AdwTypography.Body,
+            color: p.DimLabel
+        ) {
             MaxLines = 1,
         };
-        _icon = new IconGlyph(glyph: MaterialIcons.Schedule, size: AdwMetrics.IconSize, color: p.DimLabel);
+        _icon = new IconGlyph(
+            glyph: MaterialIcons.Schedule,
+            size: AdwMetrics.IconSize,
+            color: p.DimLabel
+        );
         return new AdwActionRow(title: Title, subtitle: Subtitle) {
-            Suffixes = { _valueLabel, _icon },
+            Suffixes = {
+                _valueLabel,
+                _icon,
+            },
             OnActivated = Open,
         };
     }
@@ -300,7 +335,11 @@ public sealed class AdwTimeRow : ComposedWidget
             Value = t;
             OnChanged?.Invoke(t);
         };
-        new AdwPopover(child: picker, anchor: AdwRowAnchor.Suffix(row: Bounds, a: _valueLabel, b: _icon), app: Owner).Show();
+        new AdwPopover(
+            child: picker,
+            anchor: AdwRowAnchor.Suffix(row: Bounds, a: _valueLabel, b: _icon),
+            app: Owner
+        ).Show();
     }
 }
 
@@ -316,6 +355,11 @@ internal static class AdwRowAnchor
         if (a is null || b is null) return row;
         float left = MathF.Min(x: a.Bounds.X, y: b.Bounds.X);
         float right = MathF.Max(x: a.Bounds.Right, y: b.Bounds.Right);
-        return new Rect(x: left, y: row.Y, width: right - left, height: row.Height - 6f);
+        return new Rect(
+            x: left,
+            y: row.Y,
+            width: right - left,
+            height: row.Height - 6f
+        );
     }
 }

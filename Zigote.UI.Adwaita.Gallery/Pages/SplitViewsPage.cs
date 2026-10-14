@@ -59,16 +59,16 @@ public sealed class SplitViewsPage : ComposedWidget
         var split = new AdwOverlaySplitView {
             SidebarWidth = 200f,
             AutoCollapseBelow = 420f,
-        };
-        split.Sidebar = new AdwStatusPage {
-            IconName = MaterialIcons.ViewSidebar,
-            Title = "Sidebar",
-            Compact = true,
-        };
-        split.Content = new AdwStatusPage {
-            IconName = MaterialIcons.Article,
-            Title = "Content",
-            Compact = true,
+            Sidebar = new AdwStatusPage {
+                IconName = MaterialIcons.ViewSidebar,
+                Title = "Sidebar",
+                Compact = true,
+            },
+            Content = new AdwStatusPage {
+                IconName = MaterialIcons.Article,
+                Title = "Content",
+                Compact = true,
+            },
         };
 
         var bar = new AdwHeaderBar {

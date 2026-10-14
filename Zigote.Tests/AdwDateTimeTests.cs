@@ -8,105 +8,126 @@ namespace Zigote.Tests;
 /// <summary>The calendar, the time picker and the column view, driven the way a keyboard drives them.</summary>
 public class AdwDateTimeTests
 {
-    private static void Key(Zigote.UI.Widgets.Widget w, KeyCode key, Modifiers mods = default) =>
-        w.OnKey(keyChar: '\0', scancode: (uint)key, down: true, mods: mods);
+    private static void Key(UI.Widgets.Widget w, KeyCode key, Modifiers mods = default) =>
+        w.OnKey(
+            keyChar: '\0',
+            scancode: (uint)key,
+            down: true,
+            mods: mods
+        );
 
     [Fact]
     public void CalendarKeysMoveTheDayAndFollowItAcrossMonths()
     {
         var seen = new List<DateOnly>();
-        var cal = new AdwCalendar(value: new DateOnly(2026, 10, 31), onChanged: seen.Add);
+        var cal = new AdwCalendar(
+            value: new DateOnly(year: 2026, month: 10, day: 31),
+            onChanged: seen.Add
+        );
 
-        Key(cal, KeyCode.Right);
-        Assert.Equal(new DateOnly(2026, 11, 1), cal.Value);
-        Assert.Equal(new DateOnly(2026, 11, 1), cal.DisplayedMonth);
+        Key(w: cal, key: KeyCode.Right);
+        Assert.Equal(expected: new DateOnly(year: 2026, month: 11, day: 1), actual: cal.Value);
+        Assert.Equal(
+            expected: new DateOnly(year: 2026, month: 11, day: 1),
+            actual: cal.DisplayedMonth
+        );
 
-        Key(cal, KeyCode.Up);
-        Assert.Equal(new DateOnly(2026, 10, 25), cal.Value);
+        Key(w: cal, key: KeyCode.Up);
+        Assert.Equal(expected: new DateOnly(year: 2026, month: 10, day: 25), actual: cal.Value);
 
-        Key(cal, KeyCode.PageDown, Modifiers.Shift); // a year
-        Assert.Equal(new DateOnly(2027, 10, 25), cal.Value);
+        Key(w: cal, key: KeyCode.PageDown, mods: Modifiers.Shift); // a year
+        Assert.Equal(expected: new DateOnly(year: 2027, month: 10, day: 25), actual: cal.Value);
 
-        Key(cal, KeyCode.End);
-        Assert.Equal(new DateOnly(2027, 10, 31), cal.Value);
-        Assert.Equal(4, seen.Count);
+        Key(w: cal, key: KeyCode.End);
+        Assert.Equal(expected: new DateOnly(year: 2027, month: 10, day: 31), actual: cal.Value);
+        Assert.Equal(expected: 4, actual: seen.Count);
     }
 
     [Fact]
     public void CalendarNeverSelectsOutsideItsRange()
     {
-        var cal = new AdwCalendar(value: new DateOnly(2026, 10, 14)) {
-            MinDate = new DateOnly(2026, 10, 10),
-            MaxDate = new DateOnly(2026, 10, 20),
+        var cal = new AdwCalendar(value: new DateOnly(year: 2026, month: 10, day: 14)) {
+            MinDate = new DateOnly(year: 2026, month: 10, day: 10),
+            MaxDate = new DateOnly(year: 2026, month: 10, day: 20),
         };
 
-        Key(cal, KeyCode.PageUp);
-        Assert.Equal(new DateOnly(2026, 10, 10), cal.Value);
-        Key(cal, KeyCode.PageDown);
-        Assert.Equal(new DateOnly(2026, 10, 20), cal.Value);
+        Key(w: cal, key: KeyCode.PageUp);
+        Assert.Equal(expected: new DateOnly(year: 2026, month: 10, day: 10), actual: cal.Value);
+        Key(w: cal, key: KeyCode.PageDown);
+        Assert.Equal(expected: new DateOnly(year: 2026, month: 10, day: 20), actual: cal.Value);
     }
 
     [Fact]
     public void CalendarActivatesOnEnterAfterChanging()
     {
         DateOnly? activated = null;
-        var cal = new AdwCalendar(value: new DateOnly(2026, 1, 1)) { OnDayActivated = d => activated = d };
-        Key(cal, KeyCode.Down);
+        var cal = new AdwCalendar(value: new DateOnly(year: 2026, month: 1, day: 1)) {
+            OnDayActivated = d => activated = d,
+        };
+        Key(w: cal, key: KeyCode.Down);
         Assert.Null(activated); // moving is not picking
-        Key(cal, KeyCode.Enter);
-        Assert.Equal(new DateOnly(2026, 1, 8), activated);
+        Key(w: cal, key: KeyCode.Enter);
+        Assert.Equal(expected: new DateOnly(year: 2026, month: 1, day: 8), actual: activated);
     }
 
     [Fact]
     public void TimePickerWrapsWithoutCarrying()
     {
-        var picker = new AdwTimePicker(new TimeOnly(23, 59)) { Use24Hour = true };
+        var picker = new AdwTimePicker(new TimeOnly(hour: 23, minute: 59)) { Use24Hour = true };
         picker.Step(segment: 1, dir: 1);
-        Assert.Equal(new TimeOnly(23, 0), picker.Value); // minutes wrap, the hour stays
+        Assert.Equal(
+            expected: new TimeOnly(hour: 23, minute: 0),
+            actual: picker.Value
+        ); // minutes wrap, the hour stays
         picker.Step(segment: 0, dir: 1);
-        Assert.Equal(new TimeOnly(0, 0), picker.Value);
+        Assert.Equal(expected: new TimeOnly(hour: 0, minute: 0), actual: picker.Value);
     }
 
     [Fact]
     public void TimePickerMinuteStepSnapsToItsGrid()
     {
-        var picker = new AdwTimePicker(new TimeOnly(10, 7)) { MinuteStep = 5 };
+        var picker = new AdwTimePicker(new TimeOnly(hour: 10, minute: 7)) { MinuteStep = 5 };
         picker.Step(segment: 1, dir: 1);
-        Assert.Equal(10, picker.Value.Minute);
+        Assert.Equal(expected: 10, actual: picker.Value.Minute);
         picker.Step(segment: 1, dir: -1);
         picker.Step(segment: 1, dir: -1);
-        Assert.Equal(0, picker.Value.Minute);
+        Assert.Equal(expected: 0, actual: picker.Value.Minute);
         picker.Step(segment: 1, dir: -1);
-        Assert.Equal(55, picker.Value.Minute);
+        Assert.Equal(expected: 55, actual: picker.Value.Minute);
     }
 
     [Fact]
     public void TypingFillsHoursThenMinutes()
     {
-        var picker = new AdwTimePicker(new TimeOnly(12, 0)) { Use24Hour = true };
+        var picker = new AdwTimePicker(new TimeOnly(hour: 12, minute: 0)) { Use24Hour = true };
         picker.OnTextInput("0730");
-        Assert.Equal(new TimeOnly(7, 30), picker.Value);
+        Assert.Equal(expected: new TimeOnly(hour: 7, minute: 30), actual: picker.Value);
 
         // A digit no two-digit hour can start with is a whole hour on its own.
-        picker.OnKey('\0', (uint)KeyCode.Left, true, default);
+        picker.OnKey(
+            keyChar: '\0',
+            scancode: (uint)KeyCode.Left,
+            down: true,
+            mods: default
+        );
         picker.OnTextInput("9");
-        Assert.Equal(new TimeOnly(9, 30), picker.Value);
+        Assert.Equal(expected: new TimeOnly(hour: 9, minute: 30), actual: picker.Value);
     }
 
     [Fact]
     public void TwelveHourTypingKeepsTheHalfOfTheDay()
     {
-        var picker = new AdwTimePicker(new TimeOnly(15, 0)) { Use24Hour = false };
+        var picker = new AdwTimePicker(new TimeOnly(hour: 15, minute: 0)) { Use24Hour = false };
         picker.OnTextInput("11");
-        Assert.Equal(new TimeOnly(23, 0), picker.Value); // still PM
+        Assert.Equal(expected: new TimeOnly(hour: 23, minute: 0), actual: picker.Value); // still PM
         picker.OnTextInput("00a");
-        Assert.Equal(new TimeOnly(11, 0), picker.Value);
+        Assert.Equal(expected: new TimeOnly(hour: 11, minute: 0), actual: picker.Value);
     }
 
     private sealed record Row(string Name, int Size);
 
     private static AdwColumnView<Row> Table(params Row[] rows) => new(
-        rows,
+        items: rows,
         new AdwColumn<Row>(title: "Name", text: r => r.Name).SortBy(r => r.Name),
         new AdwColumn<Row>(title: "Size", text: r => r.Size.ToString()).SortBy(r => r.Size)
     ) { SelectionMode = AdwSelectionMode.Multiple };
@@ -114,35 +135,42 @@ public class AdwDateTimeTests
     [Fact]
     public void ColumnViewSortsStablyAndKeepsTheSelectionOnItsRows()
     {
-        var table = Table(new Row("b", 2), new Row("a", 2), new Row("c", 1));
+        var table = Table(
+            new Row(Name: "b", Size: 2),
+            new Row(Name: "a", Size: 2),
+            new Row(Name: "c", Size: 1)
+        );
         table.Select([0, 2]); // "b" and "c"
 
         table.SortBy(column: 1); // by size; "b" and "a" tie and keep their order
-        Assert.Equal(["c", "b"], table.SelectedItems.Select(r => r.Name));
+        Assert.Equal(expected: ["c", "b"], actual: table.SelectedItems.Select(r => r.Name));
 
         table.SortBy(column: 0, ascending: false);
-        Assert.Equal(["c", "b"], table.SelectedItems.Select(r => r.Name));
-        Assert.Equal(0, table.SortColumn);
+        Assert.Equal(expected: ["c", "b"], actual: table.SelectedItems.Select(r => r.Name));
+        Assert.Equal(expected: 0, actual: table.SortColumn);
     }
 
     [Fact]
     public void ColumnViewIgnoresSortOnAnUnsortableColumn()
     {
-        var table = new AdwColumnView<Row>([new Row("a", 1)], new AdwColumn<Row>(title: "Name", text: r => r.Name));
+        var table = new AdwColumnView<Row>(
+            items: [new Row(Name: "a", Size: 1)],
+            new AdwColumn<Row>(title: "Name", text: r => r.Name)
+        );
         table.SortBy(column: 0);
-        Assert.Equal(-1, table.SortColumn);
+        Assert.Equal(expected: -1, actual: table.SortColumn);
     }
 
     [Fact]
     public void NewItemsClearTheSelection()
     {
-        var table = Table(new Row("a", 1));
+        var table = Table(new Row(Name: "a", Size: 1));
         table.Select([0]);
         int changes = 0;
         table.OnSelectionChanged = () => changes++;
-        table.Items = [new Row("z", 9)];
-        Assert.Equal(0, table.SelectedCount);
-        Assert.Equal(1, changes);
+        table.Items = [new Row(Name: "z", Size: 9)];
+        Assert.Equal(expected: 0, actual: table.SelectedCount);
+        Assert.Equal(expected: 1, actual: changes);
     }
 
     [Fact]
@@ -152,9 +180,12 @@ public class AdwDateTimeTests
         string text = "com.apple.WebKit.WebContent.Captive";
         float room = TextMeasure.Width(text: text, fontSize: fs) / 2f;
         string cut = AdwColumnView<Row>.Ellipsize(text: text, room: room, fs: fs);
-        Assert.EndsWith("…", cut);
-        Assert.StartsWith(cut[..^1], text);
+        Assert.EndsWith(expectedEndString: "…", actualString: cut);
+        Assert.StartsWith(expectedStartString: cut[..^1], actualString: text);
         Assert.True(TextMeasure.Width(text: cut, fontSize: fs) <= room + 1f);
-        Assert.Equal("…", AdwColumnView<Row>.Ellipsize(text: text, room: 1f, fs: fs));
+        Assert.Equal(
+            expected: "…",
+            actual: AdwColumnView<Row>.Ellipsize(text: text, room: 1f, fs: fs)
+        );
     }
 }

@@ -35,8 +35,8 @@ builder is recreated (and reset) by every rebuild, while a closed-over one is re
 ## Layout
 
 - `Zigote.UI.Functional` — the library: one widget, `View`.
-- `Zigote.UI.Functional.Demo` — an Adwaita window written entirely as functions
-  (state, lifecycle, theme reactivity, shape-from-state).
+- `Zigote.UI.Functional.Demo` — an Adwaita window written entirely as functions (state, lifecycle, theme reactivity,
+  shape-from-state).
 - `Zigote.UI.Functional.Tests` — the `View` contract, headless.
 
 ```sh

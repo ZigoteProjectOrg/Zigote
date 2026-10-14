@@ -616,7 +616,12 @@ let private controlsTab () =
                     spacing = 8f,
                     children =
                         [
-                            w (AdwCheckButton(value = agree.Peek(), onChanged = fun v -> agree.Value <- v))
+                            w (
+                                AdwCheckButton(
+                                    value = agree.Peek(),
+                                    onChanged = fun v -> agree.Value <- v
+                                )
+                            )
                             Text "Accept the functional style"
                         ]
                 )
@@ -937,7 +942,10 @@ let private deskRow (i: Instrument) : Widget =
                 children =
                     [
                         watch (fun () ->
-                            AdwCheckButton(value = Set.contains i.Symbol selected.Value, onChanged = setSelected i.Symbol))
+                            AdwCheckButton(
+                                value = Set.contains i.Symbol selected.Value,
+                                onChanged = setSelected i.Symbol
+                            ))
                         sized 64f (Text(i.Symbol, heading))
                         w (Expanded(Text(i.Name, muted, maxLines = 1)))
                         // fine-grained: price cell binds ONLY i.Price
@@ -1032,7 +1040,10 @@ let private deskTab () =
                                     )
                                 )
                             )
-                            AdwCheckButton(value = heldOnly.Peek(), onChanged = fun b -> heldOnly.Value <- b)
+                            AdwCheckButton(
+                                value = heldOnly.Peek(),
+                                onChanged = fun b -> heldOnly.Value <- b
+                            )
                             Text "Held"
                             sized
                                 160f

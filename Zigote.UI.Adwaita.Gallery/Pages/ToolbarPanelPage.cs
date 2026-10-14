@@ -74,14 +74,23 @@ public sealed class ToolbarPanelPage : ComposedWidget
         ) {
             Content = new Padding(
                 padding: EdgeInsets.All(Spacing.Lg),
-                child: new Column(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Stretch) {
-                    Children = {
-                        new Label(text: "Opacity", style: AdwTypography.Caption, color: theme.TextSecondary),
-                        new AdwSlider(value: 0.8f),
-                        new Label(text: "Blend", style: AdwTypography.Caption, color: theme.TextSecondary),
-                        new AdwDropDown(items: ["Normal", "Multiply", "Screen"]),
-                    },
-                }
+                child: new
+                    Column(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                        Children = {
+                            new Label(
+                                text: "Opacity",
+                                style: AdwTypography.Caption,
+                                color: theme.TextSecondary
+                            ),
+                            new AdwSlider(value: 0.8f),
+                            new Label(
+                                text: "Blend",
+                                style: AdwTypography.Caption,
+                                color: theme.TextSecondary
+                            ),
+                            new AdwDropDown(items: ["Normal", "Multiply", "Screen"]),
+                        },
+                    }
             ),
             OnClose = () => _panel = null,
         };

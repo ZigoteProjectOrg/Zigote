@@ -34,8 +34,7 @@ module private P =
 
     // ── Comments ──────────────────────────────────────────────────────────────
 
-    let lineCommentP: P<Token> =
-        span TokenKind.Comment (stringReturn "//" () >>. skipToEol)
+    let lineCommentP: P<Token> = span TokenKind.Comment (stringReturn "//" () >>. skipToEol)
 
     /// Body of a block comment: consume up to and including «*/» and clear the
     /// user state, or consume the rest of the line and set it.
@@ -44,8 +43,7 @@ module private P =
         <|> (skipToEol >>. setUserState true)
 
     /// «/*» opening on this line. Sets user state = true iff «*/» is not also on this line.
-    let blockCommentOpenP: P<Token> =
-        span TokenKind.Comment (stringReturn "/*" () >>. blockBody)
+    let blockCommentOpenP: P<Token> = span TokenKind.Comment (stringReturn "/*" () >>. blockBody)
 
     /// Continuation of a block comment opened on a previous line (used only as a line prefix
     /// when the incoming state is "in block"). Clears the flag when it finds the closing «*/».
@@ -81,7 +79,8 @@ module private P =
             <|> (skipMany1Satisfies digitOr_
                  >>. optional (skipChar '.' >>. skipManySatisfies digitOr_)
                  >>. optional (
-                     skipAnyOf "eE" >>. optional (skipAnyOf "+-")
+                     skipAnyOf "eE"
+                     >>. optional (skipAnyOf "+-")
                      >>. skipMany1Satisfies Char.IsAsciiDigit
                  )
                  >>. skipManySatisfies "fFdDmMuUlL".Contains)
@@ -119,8 +118,7 @@ module private P =
 
     // ── Operators & punctuation ───────────────────────────────────────────────
 
-    let operatorP: P<Token> =
-        span TokenKind.Operator (skipMany1Satisfies "+-*/%=<>!&|^~?".Contains)
+    let operatorP: P<Token> = span TokenKind.Operator (skipMany1Satisfies "+-*/%=<>!&|^~?".Contains)
 
     let punctP: P<Token> = span TokenKind.Punctuation (skipAnyOf "()[]{},:;.")
 

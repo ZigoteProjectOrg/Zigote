@@ -1580,8 +1580,8 @@ public sealed partial class ViewportPanel : Widget
                     IsHidden = true,
                     MeshColor = new Vec3(x: 1f, y: 1f, z: 1f),
                     MeshEffect = RenderEffect.Unlit,
+                    Position = Vec3.Zero,
                 };
-                _gizmoCenter.Position = Vec3.Zero;
 
                 _gizmoRoot.AddChild(_gizmoX);
                 _gizmoRoot.AddChild(_gizmoY);

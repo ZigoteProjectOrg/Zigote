@@ -131,7 +131,10 @@ public static class GnomeDesktop
         string? scheme = Gsettings(schema: "org.gnome.desktop.interface", key: "color-scheme");
         if (scheme is not null) PrefersDark = scheme.Contains("prefer-dark");
 
-        string? animations = Gsettings(schema: "org.gnome.desktop.interface", key: "enable-animations");
+        string? animations = Gsettings(
+            schema: "org.gnome.desktop.interface",
+            key: "enable-animations"
+        );
         if (animations is not null) EnableAnimations = !animations.Contains("false");
 
         string? layout = Gsettings(

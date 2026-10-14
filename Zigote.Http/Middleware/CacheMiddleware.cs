@@ -24,7 +24,8 @@ public static class CacheMiddleware
     ///     running against a transport that is being torn down.
     /// </param>
     public static Middleware Create(
-        IHttpCacheStore store, Uri? baseAddress, TimeProvider time, CancellationToken lifetime = default)
+        IHttpCacheStore store, Uri? baseAddress, TimeProvider time,
+        CancellationToken lifetime = default)
     {
         // Guards against a burst of stale-while-revalidate hits firing one refresh each.
         var refreshing = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
@@ -34,7 +35,7 @@ public static class CacheMiddleware
             var mode = spec.Policy.EffectiveCache;
             if (mode == CacheMode.Bypass || spec.Policy.IsStreaming || !spec.Verb.IsCacheable())
             {
-                var passed = await next(spec, ct).ConfigureAwait(false);
+                var passed = await next(spec: spec, ct: ct).ConfigureAwait(false);
 
                 // RFC 9111 §4.4: a non-error answer to an unsafe method proves the resource changed,
                 // so the stored GET/HEAD entries for that URI are now lies. Without this, PUTting an
@@ -47,8 +48,8 @@ public static class CacheMiddleware
                     // cannot drift apart. The verb prefix is what changes.
                     string written = spec.CacheKey(baseAddress);
                     string target = written[(spec.Verb.Token().Length + 1)..];
-                    await store.RemoveAsync($"GET {target}", ct).ConfigureAwait(false);
-                    await store.RemoveAsync($"HEAD {target}", ct).ConfigureAwait(false);
+                    await store.RemoveAsync(key: $"GET {target}", ct: ct).ConfigureAwait(false);
+                    await store.RemoveAsync(key: $"HEAD {target}", ct: ct).ConfigureAwait(false);
                 }
 
                 return passed;
@@ -57,41 +58,57 @@ public static class CacheMiddleware
             string key = spec.CacheKey(baseAddress);
             var entry = mode == CacheMode.RefreshOnly
                 ? null
-                : await store.GetAsync(key, ct).ConfigureAwait(false);
+                : await store.GetAsync(key: key, ct: ct).ConfigureAwait(false);
 
-            if (entry is not null && !VaryMatches(entry, spec))
+            if (entry is not null && !VaryMatches(entry: entry, spec: spec))
             {
                 // A different variant is stored. Treat as a miss; the store call below replaces it.
                 entry = null;
             }
 
-            var routeTag = new KeyValuePair<string, object?>("url.template", spec.Path.Template);
+            var routeTag = new KeyValuePair<string, object?>(
+                key: "url.template",
+                value: spec.Path.Template
+            );
             if (entry is not null)
             {
-                switch (FreshnessRules.Evaluate(entry, spec.Policy, time.GetUtcNow()))
+                switch (FreshnessRules.Evaluate(
+                            entry: entry,
+                            policy: spec.Policy,
+                            now: time.GetUtcNow()
+                        ))
                 {
                     case Freshness.Fresh:
-                        ObservabilityMiddleware.CacheHits.Add(1, routeTag);
+                        ObservabilityMiddleware.CacheHits.Add(delta: 1, tag: routeTag);
                         return entry.ToResponse();
 
                     case Freshness.StaleUsable:
-                        ObservabilityMiddleware.CacheHits.Add(1, routeTag);
-                        StartBackgroundRefresh(next, store, spec, key, time, refreshing, lifetime);
+                        ObservabilityMiddleware.CacheHits.Add(delta: 1, tag: routeTag);
+                        StartBackgroundRefresh(
+                            next: next,
+                            store: store,
+                            spec: spec,
+                            key: key,
+                            time: time,
+                            refreshing: refreshing,
+                            lifetime: lifetime
+                        );
                         return entry.ToResponse();
                 }
             }
 
             if (mode == CacheMode.CacheOnly)
             {
-                ObservabilityMiddleware.CacheMisses.Add(1, routeTag);
+                ObservabilityMiddleware.CacheMisses.Add(delta: 1, tag: routeTag);
                 return new HttpError.Policy(PolicyFault.CacheMiss);
             }
 
-            var request = entry is null ? spec : WithValidators(spec, entry);
-            if (entry is not null) ObservabilityMiddleware.CacheRevalidations.Add(1, routeTag);
-            else ObservabilityMiddleware.CacheMisses.Add(1, routeTag);
+            var request = entry is null ? spec : WithValidators(spec: spec, entry: entry);
+            if (entry is not null)
+                ObservabilityMiddleware.CacheRevalidations.Add(delta: 1, tag: routeTag);
+            else ObservabilityMiddleware.CacheMisses.Add(delta: 1, tag: routeTag);
 
-            var result = await next(request, ct).ConfigureAwait(false);
+            var result = await next(spec: request, ct: ct).ConfigureAwait(false);
             if (!result.IsOk) return result;
 
             var response = result.Value;
@@ -100,24 +117,27 @@ public static class CacheMiddleware
             {
                 // §4.3.4: the stored headers are updated from the 304 and the stored body is reused.
                 response.Dispose();
-                var refreshed = entry with
-                {
-                    Headers = MergeHeaders(entry.Headers, response.Headers),
+                var refreshed = entry with {
+                    Headers = MergeHeaders(stored: entry.Headers, received: response.Headers),
                     StoredAt = time.GetUtcNow(),
-                    InitialAgeSeconds = 0
+                    InitialAgeSeconds = 0,
                 };
-                await store.SetAsync(key, refreshed, ct).ConfigureAwait(false);
+                await store.SetAsync(key: key, entry: refreshed, ct: ct).ConfigureAwait(false);
                 return refreshed.ToResponse();
             }
 
-            if (IsStorable(spec, response))
+            if (IsStorable(spec: spec, response: response))
             {
-                var stored = ToEntry(response, spec, time.GetUtcNow());
-                await store.SetAsync(key, stored, ct).ConfigureAwait(false);
+                var stored = ToEntry(response: response, spec: spec, now: time.GetUtcNow());
+                await store.SetAsync(key: key, entry: stored, ct: ct).ConfigureAwait(false);
                 // Hand back the stored copy: it owns a plain array, so the pooled buffer the
                 // transport rented goes back to the pool here rather than in the caller's hands.
                 response.Dispose();
-                return HttpResponse.FromBytes(stored.Status, stored.Headers, stored.Body);
+                return HttpResponse.FromBytes(
+                    status: stored.Status,
+                    headers: stored.Headers,
+                    body: stored.Body
+                );
             }
 
             if (!spec.Verb.IsCacheable() || !FreshnessRules.IsStorableStatus((int)response.Status))
@@ -125,7 +145,7 @@ public static class CacheMiddleware
 
             // Explicitly uncacheable (no-store, or private auth without public): drop any stale copy
             // rather than leaving one that would be served later.
-            if (entry is not null) await store.RemoveAsync(key, ct).ConfigureAwait(false);
+            if (entry is not null) await store.RemoveAsync(key: key, ct: ct).ConfigureAwait(false);
             return response;
         };
     }
@@ -134,42 +154,53 @@ public static class CacheMiddleware
         Send next, IHttpCacheStore store, HttpSpec spec, string key, TimeProvider time,
         ConcurrentDictionary<string, byte> refreshing, CancellationToken lifetime)
     {
-        if (!refreshing.TryAdd(key, 0)) return;
+        if (!refreshing.TryAdd(key: key, value: 0)) return;
 
         // Untied to the caller's token on purpose: the caller already has an answer, and a refresh
         // that dies because one widget navigated away is a refresh that never happens. Tied to the
         // runner's lifetime instead — dispose is the one caller allowed to stop it.
         _ = Task.Run(async () =>
-        {
-            try
             {
-                var fresh = await next(spec with { Policy = spec.Policy with { Cache = CacheMode.Bypass } },
-                    lifetime).ConfigureAwait(false);
-                if (fresh.IsOk)
+                try
                 {
-                    using var response = fresh.Value;
-                    if (IsStorable(spec, response))
-                        await store.SetAsync(key, ToEntry(response, spec, time.GetUtcNow())).ConfigureAwait(false);
+                    var fresh = await next(
+                        spec: spec with { Policy = spec.Policy with { Cache = CacheMode.Bypass } },
+                        ct: lifetime
+                    ).ConfigureAwait(false);
+                    if (fresh.IsOk)
+                    {
+                        using var response = fresh.Value;
+                        if (IsStorable(spec: spec, response: response))
+                            await store.SetAsync(
+                                key: key,
+                                entry: ToEntry(
+                                    response: response,
+                                    spec: spec,
+                                    now: time.GetUtcNow()
+                                )
+                            ).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception e) when (e is IOException or HttpRequestException
+                                              or OperationCanceledException)
+                {
+                    // A failed background refresh leaves the stale entry in place. That is the point.
+                }
+                finally
+                {
+                    refreshing.TryRemove(key: key, value: out _);
                 }
             }
-            catch (Exception e) when (e is IOException or HttpRequestException or OperationCanceledException)
-            {
-                // A failed background refresh leaves the stale entry in place. That is the point.
-            }
-            finally
-            {
-                refreshing.TryRemove(key, out _);
-            }
-        });
+        );
     }
 
     private static HttpSpec WithValidators(HttpSpec spec, CachedResponse entry)
     {
         var headers = spec.Headers.IsDefault ? ImmutableArray<HeaderPair>.Empty : spec.Headers;
         if (entry.Header("ETag") is { Length: > 0 } etag)
-            headers = headers.Add(new HeaderPair("If-None-Match", etag));
+            headers = headers.Add(new HeaderPair(Name: "If-None-Match", Value: etag));
         else if (entry.Header("Last-Modified") is { Length: > 0 } modified)
-            headers = headers.Add(new HeaderPair("If-Modified-Since", modified));
+            headers = headers.Add(new HeaderPair(Name: "If-Modified-Since", Value: modified));
         else
             return spec; // nothing to revalidate with: a plain request is the honest fallback
 
@@ -178,7 +209,8 @@ public static class CacheMiddleware
 
     private static bool IsStorable(HttpSpec spec, HttpResponse response)
     {
-        if (!spec.Verb.IsCacheable() || !FreshnessRules.IsStorableStatus((int)response.Status)) return false;
+        if (!spec.Verb.IsCacheable() || !FreshnessRules.IsStorableStatus((int)response.Status))
+            return false;
         if (response.ContentStream is not null) return false;
 
         var directives = CacheDirectives.Parse(response.Header("Cache-Control"));
@@ -188,20 +220,33 @@ public static class CacheMiddleware
         // (§3.5). Getting this wrong is how one user's data ends up in another user's editor.
         bool authorized = false;
         if (!spec.Headers.IsDefaultOrEmpty)
+        {
             foreach (var h in spec.Headers)
-                if (string.Equals(h.Name, "Authorization", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(
+                        a: h.Name,
+                        b: "Authorization",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    ))
                     authorized = true;
+            }
+        }
 
         return !authorized || directives.Public || directives.SharedMaxAge >= 0;
     }
 
-    private static CachedResponse ToEntry(HttpResponse response, HttpSpec spec, DateTimeOffset now) =>
-        new(response.Status,
-            response.Headers,
-            response.Body.ToArray(),
-            now,
-            long.TryParse(response.Header("Age"), out long age) ? age : 0,
-            VaryKey(response.Headers, spec));
+    private static CachedResponse
+        ToEntry(HttpResponse response, HttpSpec spec, DateTimeOffset now) =>
+        new(
+            Status: response.Status,
+            Headers: response.Headers,
+            Body: response.Body.ToArray(),
+            StoredAt: now,
+            InitialAgeSeconds: long.TryParse(s: response.Header("Age"), result: out long age)
+                ? age
+                : 0,
+            VaryKey: VaryKey(responseHeaders: response.Headers, spec: spec)
+        );
 
     private static ImmutableArray<HeaderPair> MergeHeaders(
         ImmutableArray<HeaderPair> stored, ImmutableArray<HeaderPair> received)
@@ -213,8 +258,11 @@ public static class CacheMiddleware
 
         var merged = ImmutableArray.CreateBuilder<HeaderPair>(stored.Length + received.Length);
         foreach (var h in stored)
+        {
             if (!names.Contains(h.Name))
                 merged.Add(h);
+        }
+
         merged.AddRange(received);
         return merged.ToImmutable();
     }
@@ -222,14 +270,24 @@ public static class CacheMiddleware
     private static bool VaryMatches(CachedResponse entry, HttpSpec spec) =>
         // "Vary: *" is stored as an unmatchable key, so it never matches — including itself.
         entry.VaryKey != "*" &&
-        string.Equals(entry.VaryKey, VaryKey(entry.Headers, spec), StringComparison.Ordinal);
+        string.Equals(
+            a: entry.VaryKey,
+            b: VaryKey(responseHeaders: entry.Headers, spec: spec),
+            comparisonType: StringComparison.Ordinal
+        );
 
     private static string VaryKey(ImmutableArray<HeaderPair> responseHeaders, HttpSpec spec)
     {
         string? vary = null;
         foreach (var h in responseHeaders)
-            if (string.Equals(h.Name, "Vary", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(
+                    a: h.Name,
+                    b: "Vary",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 vary = vary is null ? h.Value : $"{vary},{h.Value}";
+        }
 
         if (string.IsNullOrEmpty(vary)) return string.Empty;
         // "Vary: *" means no stored response may be reused. An unmatchable key says exactly that.
@@ -242,9 +300,17 @@ public static class CacheMiddleware
             if (name.IsEmpty) continue;
             sb.Append(name).Append('=');
             if (!spec.Headers.IsDefaultOrEmpty)
+            {
                 foreach (var h in spec.Headers)
-                    if (name.Equals(h.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (name.Equals(
+                            other: h.Name,
+                            comparisonType: StringComparison.OrdinalIgnoreCase
+                        ))
                         sb.Append(h.Value).Append(';');
+                }
+            }
+
             sb.Append('|');
         }
 

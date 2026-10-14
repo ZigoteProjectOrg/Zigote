@@ -17,4 +17,5 @@ app.Run();
 internal sealed class DemoApp() : AdwaitaApp(
     title: "Functional",
     theme: AdwTheme.Light,
-    followSystem: false);
+    followSystem: false
+);

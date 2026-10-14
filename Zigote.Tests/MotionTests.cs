@@ -26,7 +26,7 @@ public class MotionTests
     public void Spring_Settles_And_Reports_Done()
     {
         var m = new Motion(spec: MotionSpec.Smooth, value: 0f, target: 1f);
-        float seconds = RunToRest(ref m, dt: 1f / 60f);
+        float seconds = RunToRest(m: ref m, dt: 1f / 60f);
 
         Assert.False(float.IsNaN(seconds)); // a spring that never stops keeps the frame loop awake
         Assert.Equal(expected: 1f, actual: m.Value, precision: 3);
@@ -45,7 +45,7 @@ public class MotionTests
         foreach (float hz in rates)
         {
             var m = new Motion(spec: MotionSpec.Smooth, value: 0f, target: 1f);
-            float seconds = RunToRest(ref m, dt: 1f / hz);
+            float seconds = RunToRest(m: ref m, dt: 1f / hz);
             Assert.False(float.IsNaN(seconds));
             if (float.IsNaN(first)) first = seconds;
             else Assert.InRange(actual: seconds, low: first * 0.85f, high: first * 1.15f);
@@ -82,7 +82,7 @@ public class MotionTests
         // position, which is what a restart from the current value gives.
         m.Retarget(0f);
         Assert.Equal(expected: midway, actual: m.Value, precision: 5);
-        Assert.False(float.IsNaN(RunToRest(ref m, dt: 1f / 60f)));
+        Assert.False(float.IsNaN(RunToRest(m: ref m, dt: 1f / 60f)));
         Assert.Equal(expected: 0f, actual: m.Value, precision: 4);
     }
 
@@ -93,7 +93,8 @@ public class MotionTests
         {
             var m = new Motion(spec: spec, value: 0f, target: 1f);
             float peak = 0f;
-            for (int i = 0; i < 600 && m.Tick(1f / 120f); i++) peak = MathF.Max(x: peak, y: m.Value);
+            for (int i = 0; i < 600 && m.Tick(1f / 120f); i++)
+                peak = MathF.Max(x: peak, y: m.Value);
             return peak;
         }
 
@@ -112,7 +113,7 @@ public class MotionTests
         float projected = m.Projected;
         Assert.Equal(expected: 375f, actual: projected, precision: 0); // 1200 / 3.2
 
-        Assert.False(float.IsNaN(RunToRest(ref m, dt: 1f / 60f)));
+        Assert.False(float.IsNaN(RunToRest(m: ref m, dt: 1f / 60f)));
         // It stops once it is crawling (below Epsilon per 60 Hz frame), which leaves at most one
         // more velocity-decay's worth of travel unrun — the same trade the old scroller's
         // MinFlingSpeed made, and the reason Projected is a prediction rather than a promise.

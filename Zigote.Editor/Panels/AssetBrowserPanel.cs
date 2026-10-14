@@ -69,7 +69,9 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
         // Start with the asset folder open: it is where everything the user wants lives.
         if (state.ProjectDir is { } projectDir)
-            _expanded.Add(Path.GetFullPath(path: state.AssetRoot, basePath: projectDir).TrimEnd('/', '\\'));
+            _expanded.Add(
+                Path.GetFullPath(path: state.AssetRoot, basePath: projectDir).TrimEnd('/', '\\')
+            );
 
         string? root = RootPath;
         if (root != null && Directory.Exists(root))
@@ -520,9 +522,8 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         if (!down || _rows.Length == 0) return;
         int cur = -1;
         for (int i = 0; i < _rows.Length && cur < 0; i++)
-        {
-            if (_rows[i].FullPath == _selectedPath) cur = i;
-        }
+            if (_rows[i].FullPath == _selectedPath)
+                cur = i;
 
         switch ((KeyCode)scancode)
         {
@@ -577,7 +578,8 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
         // New folders go inside the clicked folder, beside the clicked file, or at the root.
         string folder = row is null ? root :
-            row.Value.IsDir ? row.Value.FullPath : Path.GetDirectoryName(row.Value.FullPath) ?? root;
+            row.Value.IsDir ? row.Value.FullPath :
+            Path.GetDirectoryName(row.Value.FullPath) ?? root;
         string target = row?.FullPath ?? root;
         List<ContextMenuItem> items = [];
         if (row is { IsDir: false } file && IsOpenable(file.FullPath))
@@ -632,7 +634,10 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
                                         relativeTo: root,
                                         path: renamable.FullPath
                                     ),
-                                    newRelativePath: Path.GetRelativePath(relativeTo: root, path: to)
+                                    newRelativePath: Path.GetRelativePath(
+                                        relativeTo: root,
+                                        path: to
+                                    )
                                 ))
                                 _selectedPath = to;
                         }
@@ -652,7 +657,10 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         try
         {
             var start = OperatingSystem.IsMacOS() ? new ProcessStartInfo("open") {
-                    ArgumentList = { "-R", path },
+                    ArgumentList = {
+                        "-R",
+                        path,
+                    },
                 } :
                 OperatingSystem.IsWindows() ? new ProcessStartInfo("explorer") {
                     ArgumentList = { "/select," + path },
@@ -692,7 +700,10 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                EditorLog.Add(severity: LogSeverity.Warning, message: $"{title} failed: {e.Message}");
+                EditorLog.Add(
+                    severity: LogSeverity.Warning,
+                    message: $"{title} failed: {e.Message}"
+                );
             }
 
             _dirty = true;

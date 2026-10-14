@@ -100,7 +100,12 @@ public sealed class Pressable : Widget, IPointerCapture
     {
         Child?.Paint(paint);
         if (Focused && Enabled)
-            paint.AddFocusRing(bounds: Bounds, radius: FocusRadius, theme: _theme, squircle: FocusSquircle);
+            paint.AddFocusRing(
+                bounds: Bounds,
+                radius: FocusRadius,
+                theme: _theme,
+                squircle: FocusSquircle
+            );
     }
 
     // Capture all pointer events so the child's visuals are driven entirely by this wrapper — except

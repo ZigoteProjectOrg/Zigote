@@ -32,10 +32,12 @@ public sealed class ZigoteEventSource : EventSource
     {
         if (command.Command != EventCommand.Enable) return;
         _frameMs ??= new EventCounter(name: "frame-time", eventSource: this) {
-            DisplayName = "Frame time", DisplayUnits = "ms",
+            DisplayName = "Frame time",
+            DisplayUnits = "ms",
         };
         _allocKb ??= new EventCounter(name: "ui-alloc-per-frame", eventSource: this) {
-            DisplayName = "UI-thread alloc / frame", DisplayUnits = "KB",
+            DisplayName = "UI-thread alloc / frame",
+            DisplayUnits = "KB",
         };
         _jank ??= new IncrementingEventCounter(name: "jank-frames", eventSource: this) {
             DisplayName = "Jank frames",
@@ -52,10 +54,10 @@ public sealed class ZigoteEventSource : EventSource
     }
 
     [Event(1, Level = EventLevel.Verbose, Keywords = Keywords.Scopes)]
-    public void ScopeStart(string Name) => WriteEvent(1, Name);
+    public void ScopeStart(string Name) => WriteEvent(eventId: 1, arg1: Name);
 
     [Event(2, Level = EventLevel.Verbose, Keywords = Keywords.Scopes)]
-    public void ScopeStop(string Name) => WriteEvent(2, Name);
+    public void ScopeStop(string Name) => WriteEvent(eventId: 2, arg1: Name);
 
     public static class Keywords
     {

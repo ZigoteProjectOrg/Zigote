@@ -20,6 +20,7 @@ using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 using Zigote.UI.Widgets.Menu;
+
 // AdwCodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
 // so the editor keeps this one Material widget. The rest of the shell is Adwaita.
 
@@ -112,7 +113,10 @@ public sealed class EditorLayout : Widget
             showConsole: () => dock.OpenPanel("console"),
             showPalette: ShowCommandPalette
         );
-        return new AdwToolbarView(dock) { TopBars = { header }, BottomBars = { status } };
+        return new AdwToolbarView(dock) {
+            TopBars = { header },
+            BottomBars = { status },
+        };
     }
 
     // ── Menu bar ────────────────────────────────────────────────────────────────
@@ -373,7 +377,9 @@ public sealed class EditorLayout : Widget
                     {
                         Dock?.OpenPanel("browser");
                         State.NotifyAssetSelected(file);
-                        State.NotifyOpenFile(file); // text/code opens in the editor; binary is ignored
+                        State.NotifyOpenFile(
+                            file
+                        ); // text/code opens in the editor; binary is ignored
                     }
                 )
             );
@@ -406,7 +412,8 @@ public sealed class EditorLayout : Widget
                     )
                 )
                 .ToArray();
-            if (items.Length > 0) dialog.Add(new AdwShortcutsSection(title: menu.Title, items: items));
+            if (items.Length > 0)
+                dialog.Add(new AdwShortcutsSection(title: menu.Title, items: items));
         }
 
         dialog.Add(
@@ -426,7 +433,8 @@ public sealed class EditorLayout : Widget
     {
         if (!State.IsPlaying)
         {
-            if (State.IsScriptBuilding) return; // StartPlay refuses mid-build; the button is disabled
+            if (State.IsScriptBuilding)
+                return; // StartPlay refuses mid-build; the button is disabled
             if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
             State.StartPlay();
         }
@@ -649,9 +657,10 @@ public sealed class EditorLayout : Widget
             registry: demoRegistry,
             theme: _theme,
             app: _app
-        );
-        // A docked tab opens small and gets maximized: keep the graph in view as it resizes.
-        graphPanel.AutoFrame = true;
+        ) {
+            // A docked tab opens small and gets maximized: keep the graph in view as it resizes.
+            AutoFrame = true,
+        };
 
         // ── Panel descriptors ─────────────────────────────────────────────────
         var panels = new DockPanel[] {

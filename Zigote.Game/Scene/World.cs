@@ -211,7 +211,7 @@ public sealed class World
         _syncBodies.Clear();
         for (int i = 0; i < _physicsBodies.Count; i++)
         {
-            (var node, var rb) = _physicsBodies[i];
+            var (node, rb) = _physicsBodies[i];
             if (node.Active && !rb.IsStatic && rb.BodyId != PhysicsWorld.InvalidBodyId)
                 _syncBodies.Add((node, rb.BodyId));
         }

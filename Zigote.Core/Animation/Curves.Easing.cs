@@ -164,9 +164,9 @@ public static partial class Curves
         float cx = 3f * x1, bx = (3f * (x2 - x1)) - cx, ax = 1f - cx - bx;
         float cy = 3f * y1, by = (3f * (y2 - y1)) - cy, ay = 1f - cy - by;
 
-        float SampleX(float t) => (((ax * t) + bx) * t + cx) * t;
-        float SampleY(float t) => (((ay * t) + by) * t + cy) * t;
-        float SlopeX(float t) => ((3f * ax * t) + (2f * bx)) * t + cx;
+        float SampleX(float t) => ((((ax * t) + bx) * t) + cx) * t;
+        float SampleY(float t) => ((((ay * t) + by) * t) + cy) * t;
+        float SlopeX(float t) => (((3f * ax * t) + (2f * bx)) * t) + cx;
 
         return x =>
         {

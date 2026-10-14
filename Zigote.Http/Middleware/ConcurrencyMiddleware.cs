@@ -22,7 +22,8 @@ public static class ConcurrencyMiddleware
     /// <param name="baseAddress">Resolves relative routes, so the gate keys by host.</param>
     public static Middleware Create(int maxPerHost, Uri? baseAddress)
     {
-        var gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+        var gates =
+            new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
         return next => async (spec, ct) =>
         {
@@ -35,14 +36,15 @@ public static class ConcurrencyMiddleware
             {
                 // An unresolvable spec fails identically a few layers down; gating it here would
                 // just report the wrong error from the wrong place.
-                return await next(spec, ct).ConfigureAwait(false);
+                return await next(spec: spec, ct: ct).ConfigureAwait(false);
             }
 
             // Static lambda + factory arg: the capturing overload allocates a closure per request
             // even on the (always) cache-hit path. Same pattern as RetryMiddleware's breakers.
             var gate = gates.GetOrAdd(
                 key: host,
-                valueFactory: static (_, max) => new SemaphoreSlim(initialCount: max, maxCount: max),
+                valueFactory: static (_, max) =>
+                    new SemaphoreSlim(initialCount: max, maxCount: max),
                 factoryArgument: maxPerHost
             );
             try
@@ -51,12 +53,13 @@ public static class ConcurrencyMiddleware
             }
             catch (OperationCanceledException)
             {
-                return new HttpError.Canceled(); // named as Timeout(Total) above us if it was the deadline
+                return
+                    new HttpError.Canceled(); // named as Timeout(Total) above us if it was the deadline
             }
 
             try
             {
-                return await next(spec, ct).ConfigureAwait(false);
+                return await next(spec: spec, ct: ct).ConfigureAwait(false);
             }
             finally
             {

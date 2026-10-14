@@ -70,6 +70,7 @@ public sealed class Image : Widget, IDisposable
     // come back from it on remount. Null for images loaded through LoadAsync or an engine handle,
     // which keep their texture across unmounts as before.
     private string? _sourcePath;
+
     private byte[]? _sourceBytes;
     private uint _sourceMaxDim;
 
@@ -88,19 +89,37 @@ public sealed class Image : Widget, IDisposable
         {
             if (_sourceMaxDim == 0)
             {
-                _textureHandle = ZigoteEngine.LoadTexture(path: path, outW: out _texWidth, outH: out _texHeight);
+                _textureHandle = ZigoteEngine.LoadTexture(
+                    path: path,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                );
                 return;
             }
+
             // No scaled file entry point on the engine: read here and go through the memory path,
             // which does the downsample during decode.
             _textureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
-                data: File.ReadAllBytes(path), maxDim: _sourceMaxDim, outW: out _texWidth, outH: out _texHeight);
+                data: File.ReadAllBytes(path),
+                maxDim: _sourceMaxDim,
+                outW: out _texWidth,
+                outH: out _texHeight
+            );
         }
         else if (_sourceBytes is { } bytes)
         {
             _textureHandle = _sourceMaxDim == 0
-                ? ZigoteEngine.LoadTextureFromMemory(data: bytes, outW: out _texWidth, outH: out _texHeight)
-                : ZigoteEngine.LoadTextureFromMemoryScaled(data: bytes, maxDim: _sourceMaxDim, outW: out _texWidth, outH: out _texHeight);
+                ? ZigoteEngine.LoadTextureFromMemory(
+                    data: bytes,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                )
+                : ZigoteEngine.LoadTextureFromMemoryScaled(
+                    data: bytes,
+                    maxDim: _sourceMaxDim,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                );
         }
     }
 
@@ -119,7 +138,8 @@ public sealed class Image : Widget, IDisposable
 
     protected override void OnMount()
     {
-        if (_textureHandle == 0 && !_disposed && (_sourcePath is not null || _sourceBytes is not null)) LoadFromSource();
+        if (_textureHandle == 0 && !_disposed &&
+            (_sourcePath is not null || _sourceBytes is not null)) LoadFromSource();
     }
 
     private Image(ulong handle, uint width, uint height)
@@ -133,7 +153,8 @@ public sealed class Image : Widget, IDisposable
     ///     Wrap an already-uploaded engine texture (e.g. the compositor backdrop). The caller owns
     ///     the handle and its lifetime — this Image does not release it on unmount or dispose.
     /// </summary>
-    public static Image FromTextureHandle(ulong handle, uint width, uint height) => new(handle, width, height) { _borrowed = true };
+    public static Image FromTextureHandle(ulong handle, uint width, uint height) =>
+        new(handle: handle, width: width, height: height) { _borrowed = true };
 
     private bool _borrowed;
 
@@ -187,7 +208,12 @@ public sealed class Image : Widget, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_borrowed) { _textureHandle = 0; return; }
+        if (_borrowed)
+        {
+            _textureHandle = 0;
+            return;
+        }
+
         _disposed = true;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
@@ -226,7 +252,10 @@ public sealed class Image : Widget, IDisposable
 
     public static Image FromBytes(ReadOnlySpan<byte> data, uint maxDim = 0)
     {
-        var image = new Image { _sourceBytes = data.ToArray(), _sourceMaxDim = maxDim };
+        var image = new Image {
+            _sourceBytes = data.ToArray(),
+            _sourceMaxDim = maxDim,
+        };
         image.LoadFromSource();
         return image;
     }

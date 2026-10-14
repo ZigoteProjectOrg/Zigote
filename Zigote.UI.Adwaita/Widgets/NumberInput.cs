@@ -56,7 +56,10 @@ public sealed class AdwNumberInput : Widget
         };
 
         _btnUp = new StepButton(glyph: Icons.Add, onPressed: () => Commit(Value + Step));
-        _btnDown = new StepButton(glyph: MaterialIcons.Remove, onPressed: () => Commit(Value - Step));
+        _btnDown = new StepButton(
+            glyph: MaterialIcons.Remove,
+            onPressed: () => Commit(Value - Step)
+        );
 
         _grip = new ScrubGrip(this);
 
@@ -266,13 +269,16 @@ public sealed class AdwNumberInput : Widget
         private Size _size;
         private ThemeData _theme = ThemeData.Dark;
 
-        public override int DebugStateHash() => HashCode.Combine(value1: _hovered, value2: _pressed);
+        public override int DebugStateHash() =>
+            HashCode.Combine(value1: _hovered, value2: _pressed);
 
         public override Size Measure(Constraints c)
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
             // Square at the entry height; a finger target on a touch layout.
-            float side = AdwTouchMetrics.IsCompact ? AdwTouchMetrics.MinTarget : AdwMetrics.EntryHeight;
+            float side = AdwTouchMetrics.IsCompact
+                ? AdwTouchMetrics.MinTarget
+                : AdwMetrics.EntryHeight;
             _size = c.Constrain(new Size(width: side, height: AdwMetrics.EntryHeight));
             return _size;
         }

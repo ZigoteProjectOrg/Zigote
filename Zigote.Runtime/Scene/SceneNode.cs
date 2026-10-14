@@ -768,125 +768,126 @@ public sealed class SceneNode : IEcsSceneNode
     /// </summary>
     public SceneNode DeepClone(string? nameOverride = null)
     {
-        var c = new SceneNode(name: nameOverride ?? Name, kind: Kind);
-        c.Position = Position;
-        c.Rotation = Rotation;
-        c.Scale = Scale;
-        c.Visible = Visible;
-        c.LodMaxDistance = LodMaxDistance;
-        c.LodGroup = LodGroup;
-        c.MeshPath = MeshPath; // safe: c.Handle == 0
-        c.MeshColor = MeshColor;
-        c.MeshMetallic = MeshMetallic;
-        c.MeshRoughness = MeshRoughness;
-        c.MeshClearcoat = MeshClearcoat;
-        c.MeshClearcoatRoughness = MeshClearcoatRoughness;
-        c.MeshSpecular = MeshSpecular;
-        c.MeshIor = MeshIor;
-        c.MeshTransmission = MeshTransmission;
-        c.MeshDoubleSided = MeshDoubleSided;
-        c.MeshAlphaCutoff = MeshAlphaCutoff;
-        c.MeshOcclusionStrength = MeshOcclusionStrength;
-        c.MeshEmissive = MeshEmissive;
-        c.MeshEffect = MeshEffect; // safe: c.Handle == 0
-        c.MeshAlphaMode = MeshAlphaMode; // safe: c.Handle == 0
-        c.TexturePath = TexturePath; // safe: c.Handle == 0
-        c.MetallicRoughnessTexturePath = MetallicRoughnessTexturePath; // safe: c.Handle == 0
-        c.NormalTexturePath = NormalTexturePath;
-        c.EmissiveTexturePath = EmissiveTexturePath;
-        c.LightKind = LightKind;
-        c.LightColor = LightColor;
-        c.LightIntensity = LightIntensity;
-        c.LightRange = LightRange;
-        c.LightTemperature = LightTemperature;
-        c.SpotInnerAngleDeg = SpotInnerAngleDeg;
-        c.SpotOuterAngleDeg = SpotOuterAngleDeg;
-        c.LightCastShadows = LightCastShadows;
-        c.CameraFovDegrees = CameraFovDegrees;
-        c.CameraNear = CameraNear;
-        c.CameraFar = CameraFar;
-        c.CameraProjection = CameraProjection;
-        c.CameraOrthoSize = CameraOrthoSize;
-        c.PhysEnabled = PhysEnabled;
-        c.PhysSensorPreset = PhysSensorPreset;
-        c.PhysSensorWidthMm = PhysSensorWidthMm;
-        c.PhysSensorHeightMm = PhysSensorHeightMm;
-        c.PhysFocalLengthMm = PhysFocalLengthMm;
-        c.PhysFStop = PhysFStop;
-        c.PhysApertureBlades = PhysApertureBlades;
-        c.PhysAnamorphic = PhysAnamorphic;
-        c.PhysDistortionK1 = PhysDistortionK1;
-        c.PhysIso = PhysIso;
-        c.PhysShutterSpeed = PhysShutterSpeed;
-        c.PhysFocusMode = PhysFocusMode;
-        c.PhysManualFocusM = PhysManualFocusM;
-        c.PhysFocusSpeed = PhysFocusSpeed;
-        c.PhysFocusTargetNodeId = PhysFocusTargetNodeId;
-        c.PhysFilmStock = PhysFilmStock;
-        c.PhysFilmStrength = PhysFilmStrength;
-        c.PhysAffectExposure = PhysAffectExposure;
-        c.PhysAffectGrade = PhysAffectGrade;
-        c.PhysAffectDof = PhysAffectDof;
-        c.ScriptPath = ScriptPath;
-        c.ScriptClass = ScriptClass;
-        c.UsePhysics = UsePhysics;
-        c.UseGravity = UseGravity;
-        c.IsStatic = IsStatic;
-        c.PhysicsShape = PhysicsShape;
-        c.PhysicsHalfExtents = PhysicsHalfExtents;
-        c.PhysicsMass = PhysicsMass;
-        c.PhysicsFriction = PhysicsFriction;
-        c.PhysicsRestitution = PhysicsRestitution;
-        c.AudioUseFile = AudioUseFile;
-        c.AudioClipPath = AudioClipPath;
-        c.AudioStreaming = AudioStreaming;
-        c.AudioWaveform = AudioWaveform;
-        c.AudioFrequency = AudioFrequency;
-        c.AudioVolume = AudioVolume;
-        c.AudioPitch = AudioPitch;
-        c.AudioLoop = AudioLoop;
-        c.AudioAutoPlay = AudioAutoPlay;
-        c.AudioSpatial = AudioSpatial;
-        c.AudioMinDistance = AudioMinDistance;
-        c.AudioMaxDistance = AudioMaxDistance;
-        c.AudioRolloff = AudioRolloff;
-        c.VfxGraphJson = VfxGraphJson;
-        c.VfxPlayOnStart = VfxPlayOnStart;
-        c.VfxBakedJson = VfxBakedJson;
-        c.SpriteCols = SpriteCols;
-        c.SpriteRows = SpriteRows;
-        c.SpriteFrame = SpriteFrame;
-        c.SpriteFps = SpriteFps;
-        c.SpriteColor = SpriteColor;
-        c.SpriteFlipX = SpriteFlipX;
-        c.SpriteFlipY = SpriteFlipY;
-        c.SpriteSortingLayer = SpriteSortingLayer;
-        c.SpriteOrderInLayer = SpriteOrderInLayer;
-        c.SpritePixelsPerUnit = SpritePixelsPerUnit;
-        c.SpritePivotX = SpritePivotX;
-        c.SpritePivotY = SpritePivotY;
-        c.SpriteBlend = SpriteBlend;
-        c.SpriteStage = SpriteStage;
-        c.SpriteShaderPath = SpriteShaderPath;
-        c.SpriteCornerRadius = SpriteCornerRadius;
-        c.SpriteBorderWidth = SpriteBorderWidth;
-        c.TilesetPath = TilesetPath;
-        c.TilemapLayers = [.. TilemapLayers.Select(l => l.Clone())];
-        c.TileWorldSize = TileWorldSize;
-        c.TilemapColor = TilemapColor;
-        c.TilemapBlend = TilemapBlend;
-        c.TilemapStage = TilemapStage;
-        c.TilemapCollision = TilemapCollision;
-        c.Collider2DEnabled = Collider2DEnabled;
-        c.Collider2DShape = Collider2DShape;
-        c.Collider2DOffset = Collider2DOffset;
-        c.Collider2DSize = Collider2DSize;
-        c.Collider2DRadius = Collider2DRadius;
-        c.Collider2DLayer = Collider2DLayer;
-        c.Collider2DIsTrigger = Collider2DIsTrigger;
-        c.Collider2DOneWayUp = Collider2DOneWayUp;
-        c.PrefabSource = PrefabSource;
-        c.Tag = Tag;
+        var c = new SceneNode(name: nameOverride ?? Name, kind: Kind) {
+            Position = Position,
+            Rotation = Rotation,
+            Scale = Scale,
+            Visible = Visible,
+            LodMaxDistance = LodMaxDistance,
+            LodGroup = LodGroup,
+            MeshPath = MeshPath, // safe: c.Handle == 0
+            MeshColor = MeshColor,
+            MeshMetallic = MeshMetallic,
+            MeshRoughness = MeshRoughness,
+            MeshClearcoat = MeshClearcoat,
+            MeshClearcoatRoughness = MeshClearcoatRoughness,
+            MeshSpecular = MeshSpecular,
+            MeshIor = MeshIor,
+            MeshTransmission = MeshTransmission,
+            MeshDoubleSided = MeshDoubleSided,
+            MeshAlphaCutoff = MeshAlphaCutoff,
+            MeshOcclusionStrength = MeshOcclusionStrength,
+            MeshEmissive = MeshEmissive,
+            MeshEffect = MeshEffect, // safe: c.Handle == 0
+            MeshAlphaMode = MeshAlphaMode, // safe: c.Handle == 0
+            TexturePath = TexturePath, // safe: c.Handle == 0
+            MetallicRoughnessTexturePath = MetallicRoughnessTexturePath, // safe: c.Handle == 0
+            NormalTexturePath = NormalTexturePath,
+            EmissiveTexturePath = EmissiveTexturePath,
+            LightKind = LightKind,
+            LightColor = LightColor,
+            LightIntensity = LightIntensity,
+            LightRange = LightRange,
+            LightTemperature = LightTemperature,
+            SpotInnerAngleDeg = SpotInnerAngleDeg,
+            SpotOuterAngleDeg = SpotOuterAngleDeg,
+            LightCastShadows = LightCastShadows,
+            CameraFovDegrees = CameraFovDegrees,
+            CameraNear = CameraNear,
+            CameraFar = CameraFar,
+            CameraProjection = CameraProjection,
+            CameraOrthoSize = CameraOrthoSize,
+            PhysEnabled = PhysEnabled,
+            PhysSensorPreset = PhysSensorPreset,
+            PhysSensorWidthMm = PhysSensorWidthMm,
+            PhysSensorHeightMm = PhysSensorHeightMm,
+            PhysFocalLengthMm = PhysFocalLengthMm,
+            PhysFStop = PhysFStop,
+            PhysApertureBlades = PhysApertureBlades,
+            PhysAnamorphic = PhysAnamorphic,
+            PhysDistortionK1 = PhysDistortionK1,
+            PhysIso = PhysIso,
+            PhysShutterSpeed = PhysShutterSpeed,
+            PhysFocusMode = PhysFocusMode,
+            PhysManualFocusM = PhysManualFocusM,
+            PhysFocusSpeed = PhysFocusSpeed,
+            PhysFocusTargetNodeId = PhysFocusTargetNodeId,
+            PhysFilmStock = PhysFilmStock,
+            PhysFilmStrength = PhysFilmStrength,
+            PhysAffectExposure = PhysAffectExposure,
+            PhysAffectGrade = PhysAffectGrade,
+            PhysAffectDof = PhysAffectDof,
+            ScriptPath = ScriptPath,
+            ScriptClass = ScriptClass,
+            UsePhysics = UsePhysics,
+            UseGravity = UseGravity,
+            IsStatic = IsStatic,
+            PhysicsShape = PhysicsShape,
+            PhysicsHalfExtents = PhysicsHalfExtents,
+            PhysicsMass = PhysicsMass,
+            PhysicsFriction = PhysicsFriction,
+            PhysicsRestitution = PhysicsRestitution,
+            AudioUseFile = AudioUseFile,
+            AudioClipPath = AudioClipPath,
+            AudioStreaming = AudioStreaming,
+            AudioWaveform = AudioWaveform,
+            AudioFrequency = AudioFrequency,
+            AudioVolume = AudioVolume,
+            AudioPitch = AudioPitch,
+            AudioLoop = AudioLoop,
+            AudioAutoPlay = AudioAutoPlay,
+            AudioSpatial = AudioSpatial,
+            AudioMinDistance = AudioMinDistance,
+            AudioMaxDistance = AudioMaxDistance,
+            AudioRolloff = AudioRolloff,
+            VfxGraphJson = VfxGraphJson,
+            VfxPlayOnStart = VfxPlayOnStart,
+            VfxBakedJson = VfxBakedJson,
+            SpriteCols = SpriteCols,
+            SpriteRows = SpriteRows,
+            SpriteFrame = SpriteFrame,
+            SpriteFps = SpriteFps,
+            SpriteColor = SpriteColor,
+            SpriteFlipX = SpriteFlipX,
+            SpriteFlipY = SpriteFlipY,
+            SpriteSortingLayer = SpriteSortingLayer,
+            SpriteOrderInLayer = SpriteOrderInLayer,
+            SpritePixelsPerUnit = SpritePixelsPerUnit,
+            SpritePivotX = SpritePivotX,
+            SpritePivotY = SpritePivotY,
+            SpriteBlend = SpriteBlend,
+            SpriteStage = SpriteStage,
+            SpriteShaderPath = SpriteShaderPath,
+            SpriteCornerRadius = SpriteCornerRadius,
+            SpriteBorderWidth = SpriteBorderWidth,
+            TilesetPath = TilesetPath,
+            TilemapLayers = [.. TilemapLayers.Select(l => l.Clone())],
+            TileWorldSize = TileWorldSize,
+            TilemapColor = TilemapColor,
+            TilemapBlend = TilemapBlend,
+            TilemapStage = TilemapStage,
+            TilemapCollision = TilemapCollision,
+            Collider2DEnabled = Collider2DEnabled,
+            Collider2DShape = Collider2DShape,
+            Collider2DOffset = Collider2DOffset,
+            Collider2DSize = Collider2DSize,
+            Collider2DRadius = Collider2DRadius,
+            Collider2DLayer = Collider2DLayer,
+            Collider2DIsTrigger = Collider2DIsTrigger,
+            Collider2DOneWayUp = Collider2DOneWayUp,
+            PrefabSource = PrefabSource,
+            Tag = Tag,
+        };
         foreach (var kv in ScriptExports) c.ScriptExports[kv.Key] = kv.Value;
         foreach (var child in Children) c.AddChild(child.DeepClone());
         return c;
@@ -936,7 +937,7 @@ public sealed class SceneNode : IEcsSceneNode
         // and everything that did goes over in a single zigote_scene_apply instead of three to six
         // P/Invokes per node. See SceneStream.
         var stream = new SceneStream();
-        SyncToNative(texBatch, stream);
+        SyncToNative(texBatch: texBatch, stream: stream);
         stream.Flush();
     }
 
@@ -972,9 +973,16 @@ public sealed class SceneNode : IEcsSceneNode
             {
                 stream.Transform(
                     node: Handle,
-                    x: Position.X, y: Position.Y, z: Position.Z,
-                    qx: Rotation.X, qy: Rotation.Y, qz: Rotation.Z, qw: Rotation.W,
-                    sx: s.X, sy: s.Y, sz: s.Z
+                    x: Position.X,
+                    y: Position.Y,
+                    z: Position.Z,
+                    qx: Rotation.X,
+                    qy: Rotation.Y,
+                    qz: Rotation.Z,
+                    qw: Rotation.W,
+                    sx: s.X,
+                    sy: s.Y,
+                    sz: s.Z
                 );
                 _pPos = Position;
                 _pRot = Rotation;
@@ -997,7 +1005,9 @@ public sealed class SceneNode : IEcsSceneNode
                         node: Handle,
                         kind: (uint)LightKind,
                         castShadows: LightCastShadows,
-                        r: eff.X, g: eff.Y, b: eff.Z,
+                        r: eff.X,
+                        g: eff.Y,
+                        b: eff.Z,
                         intensity: LightIntensity,
                         range: LightRange,
                         innerAngle: SpotInnerAngleDeg * deg2Rad,
@@ -1019,7 +1029,12 @@ public sealed class SceneNode : IEcsSceneNode
                 if (first || _pCameraFovDeg != fovDeg || _pCameraNear != CameraNear ||
                     _pCameraFar != CameraFar)
                 {
-                    stream.Camera(node: Handle, fovyDegrees: fovDeg, near: CameraNear, far: CameraFar);
+                    stream.Camera(
+                        node: Handle,
+                        fovyDegrees: fovDeg,
+                        near: CameraNear,
+                        far: CameraFar
+                    );
                     _pCameraFovDeg = fovDeg;
                     _pCameraNear = CameraNear;
                     _pCameraFar = CameraFar;
@@ -1048,13 +1063,19 @@ public sealed class SceneNode : IEcsSceneNode
                 {
                     stream.Material(
                         node: Handle,
-                        colorR: MeshColor.X, colorG: MeshColor.Y, colorB: MeshColor.Z,
-                        metallic: MeshMetallic, roughness: MeshRoughness,
+                        colorR: MeshColor.X,
+                        colorG: MeshColor.Y,
+                        colorB: MeshColor.Z,
+                        metallic: MeshMetallic,
+                        roughness: MeshRoughness,
                         clearcoat: MeshClearcoat,
                         clearcoatRoughness: MeshClearcoatRoughness,
                         specular: MeshSpecular,
-                        emissiveR: MeshEmissive.X, emissiveG: MeshEmissive.Y, emissiveB: MeshEmissive.Z,
-                        ior: MeshIor, transmission: MeshTransmission,
+                        emissiveR: MeshEmissive.X,
+                        emissiveG: MeshEmissive.Y,
+                        emissiveB: MeshEmissive.Z,
+                        ior: MeshIor,
+                        transmission: MeshTransmission,
                         occlusionStrength: MeshOcclusionStrength,
                         alphaCutoff: MeshAlphaCutoff,
                         effect: (uint)MeshEffect,
@@ -1091,7 +1112,7 @@ public sealed class SceneNode : IEcsSceneNode
             _nativePushed = true;
         }
 
-        foreach (var child in Children) child.SyncToNative(texBatch, stream);
+        foreach (var child in Children) child.SyncToNative(texBatch: texBatch, stream: stream);
     }
 
     /// <summary>

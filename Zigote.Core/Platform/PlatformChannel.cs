@@ -188,10 +188,11 @@ public static class PlatformChannel
             {
                 if (Listeners.TryRemove(KeyValuePair.Create(key: channel, value: existing))) return;
             }
-            else if (Listeners.TryUpdate(key: channel, newValue: trimmed, comparisonValue: existing))
-            {
-                return;
-            }
+            else if (Listeners.TryUpdate(
+                         key: channel,
+                         newValue: trimmed,
+                         comparisonValue: existing
+                     )) return;
         }
     }
 
@@ -246,7 +247,7 @@ public static class PlatformChannel
         if (ByteHandlers.TryGetValue(key: channel, value: out var byteHandler))
         {
             var byteReply = new ArrayBufferWriter<byte>(InitialReplyBuffer);
-            return byteHandler(Encoding.UTF8.GetBytes(payload), byteReply)
+            return byteHandler(payload: Encoding.UTF8.GetBytes(payload), reply: byteReply)
                 ? Encoding.UTF8.GetString(byteReply.WrittenSpan)
                 : null;
         }
@@ -263,7 +264,12 @@ public static class PlatformChannel
             {
                 // Length excludes the NUL the C ABI no longer relies on but still appreciates.
                 nuint bodyLen = (nuint)(body.Length - 1);
-                int written = Call(name: n, payload: p, payloadLen: bodyLen, buffer: buffer);
+                int written = Call(
+                    name: n,
+                    payload: p,
+                    payloadLen: bodyLen,
+                    buffer: buffer
+                );
                 // Negative means no native implementation either — nobody handles this channel.
                 if (written < 0) return null;
                 if (written > buffer.Length)
@@ -273,7 +279,12 @@ public static class PlatformChannel
                     // handler, not something to loop over.
                     ArrayPool<byte>.Shared.Return(buffer);
                     buffer = ArrayPool<byte>.Shared.Rent(written);
-                    written = Call(name: n, payload: p, payloadLen: bodyLen, buffer: buffer);
+                    written = Call(
+                        name: n,
+                        payload: p,
+                        payloadLen: bodyLen,
+                        buffer: buffer
+                    );
                     if (written < 0 || written > buffer.Length) return null;
                 }
 
@@ -315,13 +326,14 @@ public static class PlatformChannel
     ///     <see cref="ArrayBufferWriter{T}" /> and allocate nothing per call.
     /// </summary>
     /// <returns>True when something answered; false is the byte-shaped null of the text overload.</returns>
-    public static unsafe bool Invoke(string channel, ReadOnlySpan<byte> payload, IBufferWriter<byte> reply)
+    public static unsafe bool Invoke(string channel, ReadOnlySpan<byte> payload,
+        IBufferWriter<byte> reply)
     {
         ArgumentException.ThrowIfNullOrEmpty(channel);
         ArgumentNullException.ThrowIfNull(reply);
 
         if (ByteHandlers.TryGetValue(key: channel, value: out var byteHandler))
-            return byteHandler(payload, reply);
+            return byteHandler(payload: payload, reply: reply);
 
         // A text-shaped implementation serves byte callers the same way byte ones serve text.
         if (Handlers.TryGetValue(key: channel, value: out var handler))
@@ -341,13 +353,23 @@ public static class PlatformChannel
             fixed (byte* n = name)
             fixed (byte* p = payload)
             {
-                int written = Call(name: n, payload: p, payloadLen: (nuint)payload.Length, buffer: buffer);
+                int written = Call(
+                    name: n,
+                    payload: p,
+                    payloadLen: (nuint)payload.Length,
+                    buffer: buffer
+                );
                 if (written < 0) return false;
                 if (written > buffer.Length)
                 {
                     ArrayPool<byte>.Shared.Return(buffer);
                     buffer = ArrayPool<byte>.Shared.Rent(written);
-                    written = Call(name: n, payload: p, payloadLen: (nuint)payload.Length, buffer: buffer);
+                    written = Call(
+                        name: n,
+                        payload: p,
+                        payloadLen: (nuint)payload.Length,
+                        buffer: buffer
+                    );
                     if (written < 0 || written > buffer.Length) return false;
                 }
 

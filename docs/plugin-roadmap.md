@@ -10,7 +10,7 @@ Already covered — do not build: `shared_preferences` → **Zigote.Preferences*
 
 **Built** (see `plugins/`): DeviceInfo, PathProvider, UrlLauncher, Permissions, FilePicker,
 Notifications, Tray, WebView, Share, Battery, Haptics, AppSettings, Connectivity, SecureStorage,
-Geolocation, Sensors, Wakelock — every slot below. Timbre consumes them: its hand-rolled
+Geolocation, Sensors, Wakelock, MediaSession — every slot below. Timbre consumes them: its hand-rolled
 StatusNotifierItem, notification transport, XDG paths, url opening and Android SystemDialogs were
 replaced by the plugins.
 
@@ -130,7 +130,7 @@ Found by checking the code rather than the ranking (October 2026). Ordered by va
 
 | Item | pub.dev equivalent | Kind | Note |
 |---|---|---|---|
-| `Zigote.Plugins.MediaSession` | audio_service | plugin | Lock-screen / headset / media-key controls and now-playing metadata for Audioplayer and Videoplayer: MPRIS on Linux, SMTC on Windows, `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` on Apple, `MediaSession` + a foreground service on Android (without which background audio dies). `PlatformChannel`'s own doc comment uses this as its example; nothing implements it. |
+| ~~`Zigote.Plugins.MediaSession`~~ | audio_service | plugin | **Built** (plugins/MediaSession): MPRIS2 on Linux (lifted from Timbre), framework `MediaSession` + media notification + foreground service + audio focus on Android, `MPNowPlayingInfoCenter` on iOS. Windows SMTC and macOS Now Playing still to do. |
 | `Image.FromUrl` + disk cache | cached_network_image | framework | `Image` loads files, assets, bytes and resources only. Fetch through Zigote.Http, cache next to its response cache. |
 | `Zigote.Plugins.AudioRecorder` | record | plugin | Microphone capture — miniaudio, already in the engine, supports capture everywhere; the work is a capture FFI, permissions and an encoder. Prerequisite for speech-to-text. |
 | `Zigote.Plugins.Hotkeys` / `LaunchAtLogin` / `Updater` | hotkey_manager, launch_at_startup, auto_updater | plugins | The desktop trio a Tray app wants next. Hotkeys and launch-at-login are small; the updater (Sparkle / WinSparkle / AppImage) is not. |

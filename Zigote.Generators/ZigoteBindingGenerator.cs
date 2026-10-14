@@ -75,7 +75,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     {
         public string Name = string.Empty;
         public string BackingType = "int";
-        public List<KeyValuePair<string, string>> Members = new List<KeyValuePair<string, string>>();
+        public List<KeyValuePair<string, string>> Members = new();
     }
 
     /// <summary>
@@ -89,13 +89,21 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         int at = 0;
         while (true)
         {
-            int found = text.IndexOf(value: decl, startIndex: at, comparisonType: StringComparison.Ordinal);
+            int found = text.IndexOf(
+                value: decl,
+                startIndex: at,
+                comparisonType: StringComparison.Ordinal
+            );
             if (found < 0) yield break;
 
             at = found + decl.Length;
             if (found != 0 && text[found - 1] != '\n') continue; // must start a line
 
-            int eq = text.IndexOf(value: " = enum(", startIndex: at, comparisonType: StringComparison.Ordinal);
+            int eq = text.IndexOf(
+                value: " = enum(",
+                startIndex: at,
+                comparisonType: StringComparison.Ordinal
+            );
             int lineEnd = text.IndexOf(value: '\n', startIndex: at);
             if (eq < 0 || (lineEnd >= 0 && eq > lineEnd)) continue;
 
@@ -104,9 +112,11 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             int backingEnd = text.IndexOf(value: ')', startIndex: backingStart);
             if (backingEnd < 0) continue;
 
-            string zigBacking = text.Substring(startIndex: backingStart, length: backingEnd - backingStart).Trim();
-            string backing = zigBacking switch
-            {
+            string zigBacking = text.Substring(
+                startIndex: backingStart,
+                length: backingEnd - backingStart
+            ).Trim();
+            string backing = zigBacking switch {
                 "i32" => "int", "u32" => "uint", "i16" => "short", "u16" => "ushort",
                 "i8" => "sbyte", "u8" => "byte", "i64" => "long", "u64" => "ulong",
                 _ => "int",
@@ -121,12 +131,18 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             if (close < 0) continue;
 
             var members = new List<KeyValuePair<string, string>>();
-            foreach (string rawLine in text.Substring(startIndex: open + 1, length: close - open - 1)
+            foreach (string rawLine in text.Substring(
+                             startIndex: open + 1,
+                             length: close - open - 1
+                         )
                          .Split('\n'))
             {
                 string line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal)) continue;
-                if (!line.EndsWith(",", StringComparison.Ordinal)) continue;
+                if (line.Length == 0 || line.StartsWith(
+                        value: "//",
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
+                if (!line.EndsWith(value: ",", comparisonType: StringComparison.Ordinal)) continue;
 
                 int assign = line.IndexOf('=');
                 if (assign < 0) continue;
@@ -137,18 +153,21 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
                 string value = line.Substring(startIndex: assign + 1).TrimEnd(',').Trim();
                 if (memberName.Length == 0 || memberName.Contains(" ")) continue;
 
-                members.Add(new KeyValuePair<string, string>(key: SnakeToPascal(memberName), value: value));
+                members.Add(
+                    new KeyValuePair<string, string>(key: SnakeToPascal(memberName), value: value)
+                );
             }
 
             if (members.Count > 0)
-            {
-                yield return new ZigEnum { Name = name, BackingType = backing, Members = members };
-            }
+                yield return new ZigEnum {
+                    Name = name,
+                    BackingType = backing,
+                    Members = members,
+                };
         }
     }
 
-    private static int SizeOfCsType(string t) => t switch
-    {
+    private static int SizeOfCsType(string t) => t switch {
         "byte" => 1, "sbyte" => 1,
         "ushort" => 2, "short" => 2,
         "uint" => 4, "int" => 4, "float" => 4,
@@ -166,7 +185,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     private class ZigStruct
     {
         public string Name = string.Empty;
-        public List<ZigStructField> Fields = new List<ZigStructField>();
+        public List<ZigStructField> Fields = new();
     }
 
     /// <summary>
@@ -182,15 +201,22 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
 
         // A nested wire struct — the scene ops all begin with a ZgSceneOpHeader. Passed through by
         // name; its size and alignment come from the struct already parsed above it in abi.zig.
-        if (t.StartsWith("Zg", StringComparison.Ordinal) && t.All(c => char.IsLetterOrDigit(c))) return t;
+        if (t.StartsWith(value: "Zg", comparisonType: StringComparison.Ordinal) &&
+            t.All(c => char.IsLetterOrDigit(c))) return t;
 
-        if (t.StartsWith("[*c]", StringComparison.Ordinal) || t.StartsWith("[*]", StringComparison.Ordinal))
+        if (t.StartsWith(value: "[*c]", comparisonType: StringComparison.Ordinal) || t.StartsWith(
+                value: "[*]",
+                comparisonType: StringComparison.Ordinal
+            ))
             return "byte*"; // every pointer field the ABI has is a byte pointer
 
-        if (t.StartsWith("[", StringComparison.Ordinal))
+        if (t.StartsWith(value: "[", comparisonType: StringComparison.Ordinal))
         {
             int close = t.IndexOf(']');
-            if (close > 1 && int.TryParse(t.Substring(startIndex: 1, length: close - 1), out int len))
+            if (close > 1 && int.TryParse(
+                    s: t.Substring(startIndex: 1, length: close - 1),
+                    result: out int len
+                ))
             {
                 string elem = t.Substring(close + 1).Trim();
                 // Fixed-size arrays become C# `fixed` buffers, which only accept blittable
@@ -205,8 +231,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             return null;
         }
 
-        return t switch
-        {
+        return t switch {
             "u8" => "byte", "u16" => "ushort", "u32" => "uint", "u64" => "ulong",
             "i8" => "sbyte", "i16" => "short", "i32" => "int", "i64" => "long",
             "f32" => "float", "f64" => "double", "bool" => "byte",
@@ -221,13 +246,21 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         int at = 0;
         while (true)
         {
-            int found = text.IndexOf(value: decl, startIndex: at, comparisonType: StringComparison.Ordinal);
+            int found = text.IndexOf(
+                value: decl,
+                startIndex: at,
+                comparisonType: StringComparison.Ordinal
+            );
             if (found < 0) yield break;
 
             at = found + decl.Length;
             if (found != 0 && text[found - 1] != '\n') continue;
 
-            int marker = text.IndexOf(value: " = extern struct {", startIndex: at, comparisonType: StringComparison.Ordinal);
+            int marker = text.IndexOf(
+                value: " = extern struct {",
+                startIndex: at,
+                comparisonType: StringComparison.Ordinal
+            );
             int lineEnd = text.IndexOf(value: '\n', startIndex: at);
             if (marker < 0 || (lineEnd >= 0 && marker > lineEnd)) continue;
 
@@ -238,12 +271,18 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
 
             var st = new ZigStruct { Name = name };
             bool ok = true;
-            foreach (string rawLine in text.Substring(startIndex: open + 1, length: close - open - 1).Split('\n'))
+            foreach (string rawLine in text.Substring(
+                         startIndex: open + 1,
+                         length: close - open - 1
+                     ).Split('\n'))
             {
                 string line = rawLine.Trim();
-                int comment = line.IndexOf("//", StringComparison.Ordinal);
+                int comment = line.IndexOf(value: "//", comparisonType: StringComparison.Ordinal);
                 if (comment >= 0) line = line.Substring(startIndex: 0, length: comment).Trim();
-                if (line.Length == 0 || !line.EndsWith(",", StringComparison.Ordinal)) continue;
+                if (line.Length == 0 || !line.EndsWith(
+                        value: ",",
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
 
                 line = line.TrimEnd(',');
                 int colon = line.IndexOf(':');
@@ -256,9 +295,19 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
                 if (eq >= 0) fieldType = fieldType.Substring(startIndex: 0, length: eq).Trim();
 
                 string? mapped = MapZigFieldType(zigType: fieldType, arrayLength: out int arrayLen);
-                if (mapped is null) { ok = false; break; }
+                if (mapped is null)
+                {
+                    ok = false;
+                    break;
+                }
 
-                st.Fields.Add(new ZigStructField { Name = fieldName, Type = mapped, ArrayLength = arrayLen });
+                st.Fields.Add(
+                    new ZigStructField {
+                        Name = fieldName,
+                        Type = mapped,
+                        ArrayLength = arrayLen,
+                    }
+                );
             }
 
             if (ok && st.Fields.Count > 0) yield return st;
@@ -282,7 +331,10 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         var seenStructs = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string path, string text) in files)
         {
-            if (!path.EndsWith("/abi.zig", StringComparison.Ordinal)) continue;
+            if (!path.EndsWith(
+                    value: "/abi.zig",
+                    comparisonType: StringComparison.Ordinal
+                )) continue;
 
             foreach (var st in ParseZigStructs(text))
             {
@@ -298,7 +350,10 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         var seenEnums = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string path, string text) in files)
         {
-            if (!path.EndsWith("/abi.zig", StringComparison.Ordinal)) continue;
+            if (!path.EndsWith(
+                    value: "/abi.zig",
+                    comparisonType: StringComparison.Ordinal
+                )) continue;
 
             foreach (var en in ParseZigEnums(text))
             {
@@ -349,21 +404,25 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             var placed = new List<(string Name, string Type, int Offset, int ArrayLength)>();
             foreach (var f in st.Fields)
             {
-                int size = nestedSizes.TryGetValue(f.Type, out int ns) ? ns : SizeOfCsType(f.Type);
-                int align = nestedAligns.TryGetValue(f.Type, out int na) ? na : size;
+                int size = nestedSizes.TryGetValue(key: f.Type, value: out int ns)
+                    ? ns
+                    : SizeOfCsType(f.Type);
+                int align = nestedAligns.TryGetValue(key: f.Type, value: out int na) ? na : size;
                 int count = f.ArrayLength == 0 ? 1 : f.ArrayLength;
                 if (f.ArrayLength > 0) align = 1; // byte arrays
                 if (align > maxAlign) maxAlign = align;
-                if (offset % align != 0) offset += align - offset % align;
+                if (offset % align != 0) offset += align - (offset % align);
                 placed.Add((f.Name, f.Type, offset, f.ArrayLength));
                 offset += size * count;
             }
 
-            if (offset % maxAlign != 0) offset += maxAlign - offset % maxAlign;
+            if (offset % maxAlign != 0) offset += maxAlign - (offset % maxAlign);
             nestedSizes[st.Name] = offset;
             nestedAligns[st.Name] = maxAlign;
 
-            sb.AppendLine($"/// <summary>Generated from Zig <c>{st.Name}</c>. Aliases live in ZgStructs.cs.</summary>");
+            sb.AppendLine(
+                $"/// <summary>Generated from Zig <c>{st.Name}</c>. Aliases live in ZgStructs.cs.</summary>"
+            );
             sb.AppendLine($"[StructLayout(LayoutKind.Explicit, Size = {offset})]");
             sb.AppendLine($"public unsafe partial struct {st.Name}");
             sb.AppendLine("{");
@@ -371,7 +430,9 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             {
                 string csName = SnakeToPascal(f.Name);
                 if (f.ArrayLength > 0)
-                    sb.AppendLine($"    [FieldOffset({f.Offset})] public fixed {f.Type} {csName}[{f.ArrayLength}];");
+                    sb.AppendLine(
+                        $"    [FieldOffset({f.Offset})] public fixed {f.Type} {csName}[{f.ArrayLength}];"
+                    );
                 else
                     sb.AppendLine($"    [FieldOffset({f.Offset})] public {f.Type} {csName};");
             }
@@ -471,8 +532,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
                 length: nextBrace - closeParen - 1
             ).Trim();
 
-            var func = new ZigFunction();
-            func.EntryPoint = fnName;
+            var func = new ZigFunction { EntryPoint = fnName };
 
             string stripped = fnName.StartsWith("zigote_") ? fnName.Substring(7) : fnName;
             func.Name = SnakeToPascal(stripped);

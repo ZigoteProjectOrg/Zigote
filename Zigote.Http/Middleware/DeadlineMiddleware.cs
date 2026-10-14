@@ -12,19 +12,20 @@ public static class DeadlineMiddleware
     {
         var budget = spec.Policy.EffectiveDeadline;
         if (budget <= TimeSpan.Zero || budget == Timeout.InfiniteTimeSpan)
-            return await next(spec, ct).ConfigureAwait(false);
+            return await next(spec: spec, ct: ct).ConfigureAwait(false);
 
-        using var deadline = new CancellationTokenSource(budget, time);
+        using var deadline = new CancellationTokenSource(delay: budget, timeProvider: time);
         // Linking costs a CTS and a registration; a caller whose token can never fire (the frame
         // queue's common case) needs only the deadline's own token.
         using var linked = ct.CanBeCanceled
-            ? CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token)
+            ? CancellationTokenSource.CreateLinkedTokenSource(token1: ct, token2: deadline.Token)
             : null;
 
         HttpResult<HttpResponse> result;
         try
         {
-            result = await next(spec, linked?.Token ?? deadline.Token).ConfigureAwait(false);
+            result = await next(spec: spec, ct: linked?.Token ?? deadline.Token)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -36,8 +37,9 @@ public static class DeadlineMiddleware
 
         // The layers below cannot tell "the caller gave up" from "the clock ran out" — they see one
         // canceled token. Here we know which, so here is where it gets named.
-        if (result.Error is HttpError.Canceled && !ct.IsCancellationRequested && deadline.IsCancellationRequested)
-            return new HttpError.Timeout(budget, TimeoutStage.Total);
+        if (result.Error is HttpError.Canceled && !ct.IsCancellationRequested &&
+            deadline.IsCancellationRequested)
+            return new HttpError.Timeout(Budget: budget, Stage: TimeoutStage.Total);
 
         return result;
     };

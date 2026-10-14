@@ -45,7 +45,9 @@ public sealed class AdwSlider : Widget
         _min = min;
         _max = max;
         OnChanged = onChanged;
-        _glide = new AnimationController(durationSeconds: 0.15f, vsync: this) { Spec = AdwMotion.Control };
+        _glide = new AnimationController(durationSeconds: 0.15f, vsync: this) {
+            Spec = AdwMotion.Control,
+        };
         _glide.OnTick += MarkNeedsPaint;
     }
 
@@ -63,8 +65,12 @@ public sealed class AdwSlider : Widget
     {
         get
         {
-            float t = Max > Min ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f) : 0f;
-            return _glide.Status == AnimationStatus.Forward ? _glideFrom + ((t - _glideFrom) * _glide.Value) : t;
+            float t = Max > Min
+                ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f)
+                : 0f;
+            return _glide.Status == AnimationStatus.Forward
+                ? _glideFrom + ((t - _glideFrom) * _glide.Value)
+                : t;
         }
     }
 

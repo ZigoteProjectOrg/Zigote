@@ -72,7 +72,8 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         set
         {
             _snap.Duration = value;
-            if (_snap.Spec is { } spec) _snap.Spec = spec with { Response = MathF.Max(x: value, y: 0.01f) };
+            if (_snap.Spec is { } spec)
+                _snap.Spec = spec with { Response = MathF.Max(x: value, y: 0.01f) };
         }
     }
 

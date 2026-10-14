@@ -32,7 +32,8 @@ player.Position.Observe(() => elapsed.Text = Format(player.Position.Value));  //
 player.Muted.Value = true;                                                    // drives the mixer
 ```
 
-`VideoPlayerView` is the worked example: built once, one subscription per signal, no rebuilds. Binding a whole subtree with `Watch`
+`VideoPlayerView` is the worked example: built once, one subscription per signal, no rebuilds. Binding a whole subtree
+with `Watch`
 also works and is right for state that changes on user actions rather than per frame. `Duration`, `Progress`,
 `IsPlaying`, `TextureHandle` and `FrameSize` are derived reads.
 

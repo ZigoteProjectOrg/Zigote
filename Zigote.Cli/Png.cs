@@ -57,24 +57,30 @@ public sealed class Png
     {
         // A stable hue per name — the same app is the same colour on every machine and every build.
         int hash = 17;
-        foreach (char c in name) hash = hash * 31 + char.ToLowerInvariant(c);
-        (byte br, byte bg, byte bb) = HueToRgb((Math.Abs(hash) % 360) / 360.0);
+        foreach (char c in name) hash = (hash * 31) + char.ToLowerInvariant(c);
+        (byte br, byte bg, byte bb) = HueToRgb(Math.Abs(hash) % 360 / 360.0);
 
-        var pixels = new byte[size * size * 4];
+        byte[] pixels = new byte[size * size * 4];
         double radius = size * 0.22;
         double markOuter = size * 0.30, markInner = size * 0.19;
         for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
         {
-            int at = (y * size + x) * 4;
-            if (!InRoundedSquare(x: x, y: y, size: size, radius: radius)) continue;
+            int at = ((y * size) + x) * 4;
+            if (!InRoundedSquare(
+                    x: x,
+                    y: y,
+                    size: size,
+                    radius: radius
+                )) continue;
 
-            double dx = Math.Abs(x - size / 2.0), dy = Math.Abs(y - size / 2.0);
+            double dx = Math.Abs(x - (size / 2.0)), dy = Math.Abs(y - (size / 2.0));
             // One square outline, centred. A title bar was tried and dropped: at any size where the
             // frame border is thick enough to read, the bar merges into it — and a placeholder is
             // not worth tuning geometry for. The outline alone says "an app, no art yet" and still
             // reads at 48 pixels, which is where a placeholder is actually seen.
-            bool mark = Math.Max(dx, dy) <= markOuter && Math.Max(dx, dy) >= markInner;
+            bool mark = Math.Max(val1: dx, val2: dy) <= markOuter &&
+                        Math.Max(val1: dx, val2: dy) >= markInner;
 
             pixels[at] = mark ? (byte)245 : br;
             pixels[at + 1] = mark ? (byte)247 : bg;
@@ -91,7 +97,7 @@ public sealed class Png
         double left = radius, right = size - radius - 1;
         double cx = x < left ? left : x > right ? right : x;
         double cy = y < left ? left : y > right ? right : y;
-        return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
+        return ((x - cx) * (x - cx)) + ((y - cy) * (y - cy)) <= radius * radius;
     }
 
     /// <summary>A hue at fixed saturation and value — dark enough that a white mark reads on it.</summary>
@@ -101,8 +107,8 @@ public sealed class Png
         int sector = (int)Math.Floor(h) % 6;
         double f = h - Math.Floor(h);
         double p = value * (1 - saturation);
-        double q = value * (1 - f * saturation);
-        double t = value * (1 - (1 - f) * saturation);
+        double q = value * (1 - (f * saturation));
+        double t = value * (1 - ((1 - f) * saturation));
         (double r, double g, double b) = sector switch {
             0 => (value, t, p),
             1 => (q, value, p),
@@ -119,7 +125,8 @@ public sealed class Png
     public static Png Load(string path)
     {
         byte[] file = File.ReadAllBytes(path);
-        ReadOnlySpan<byte> signature = [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        ReadOnlySpan<byte> signature =
+            [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A];
         if (file.Length < 8 || !file.AsSpan(start: 0, length: 8).SequenceEqual(signature))
             throw new CliError($"'{Path.GetFileName(path)}' is not a PNG.");
 
@@ -129,7 +136,11 @@ public sealed class Png
         while (offset + 8 <= file.Length)
         {
             int length = BinaryPrimitives.ReadInt32BigEndian(file.AsSpan(offset));
-            string type = System.Text.Encoding.ASCII.GetString(bytes: file, index: offset + 4, count: 4);
+            string type = System.Text.Encoding.ASCII.GetString(
+                bytes: file,
+                index: offset + 4,
+                count: 4
+            );
             int dataAt = offset + 8;
             if (length < 0 || dataAt + length > file.Length)
                 throw new CliError($"'{Path.GetFileName(path)}' is truncated.");
@@ -151,9 +162,13 @@ public sealed class Png
                         ),
                     };
                     if (depth != 8)
-                        throw new CliError($"'{Path.GetFileName(path)}' is {depth}-bit; 8 bits per channel is what this reads.");
+                        throw new CliError(
+                            $"'{Path.GetFileName(path)}' is {depth}-bit; 8 bits per channel is what this reads."
+                        );
                     if (interlace != 0)
-                        throw new CliError($"'{Path.GetFileName(path)}' is interlaced. Re-export it without Adam7 interlacing.");
+                        throw new CliError(
+                            $"'{Path.GetFileName(path)}' is interlaced. Re-export it without Adam7 interlacing."
+                        );
                     break;
                 case "IDAT":
                     idat.Write(buffer: file, offset: dataAt, count: length);
@@ -194,14 +209,20 @@ public sealed class Png
         if (raw.Length < (long)(stride + 1) * height)
             throw new CliError("the PNG's pixel data is shorter than its header claims.");
 
-        var rgba = new byte[width * height * 4];
-        var previous = new byte[stride];
-        var current = new byte[stride];
+        byte[] rgba = new byte[width * height * 4];
+        byte[] previous = new byte[stride];
+        byte[] current = new byte[stride];
         for (int y = 0; y < height; y++)
         {
             int rowAt = y * (stride + 1);
             byte filter = raw[rowAt];
-            Array.Copy(sourceArray: raw, sourceIndex: rowAt + 1, destinationArray: current, destinationIndex: 0, length: stride);
+            Array.Copy(
+                sourceArray: raw,
+                sourceIndex: rowAt + 1,
+                destinationArray: current,
+                destinationIndex: 0,
+                length: stride
+            );
             for (int x = 0; x < stride; x++)
             {
                 int a = x >= channels ? current[x - channels] : 0; // left
@@ -211,7 +232,7 @@ public sealed class Png
                     0 => current[x],
                     1 => (byte)(current[x] + a),
                     2 => (byte)(current[x] + b),
-                    3 => (byte)(current[x] + (a + b) / 2),
+                    3 => (byte)(current[x] + ((a + b) / 2)),
                     4 => (byte)(current[x] + Paeth(a: a, b: b, c: c)),
                     _ => throw new CliError($"unknown PNG row filter {filter}."),
                 };
@@ -219,7 +240,7 @@ public sealed class Png
 
             for (int x = 0; x < width; x++)
             {
-                int source = x * channels, target = (y * width + x) * 4;
+                int source = x * channels, target = ((y * width) + x) * 4;
                 rgba[target] = current[source];
                 rgba[target + 1] = current[source + 1];
                 rgba[target + 2] = current[source + 2];
@@ -251,20 +272,21 @@ public sealed class Png
     /// </summary>
     public Png Resized(int size)
     {
-        var output = new byte[size * size * 4];
+        byte[] output = new byte[size * size * 4];
         double scaleX = (double)Width / size, scaleY = (double)Height / size;
         for (int y = 0; y < size; y++)
         {
             int y0 = (int)(y * scaleY), y1 = Math.Max(val1: y0 + 1, val2: (int)((y + 1) * scaleY));
             for (int x = 0; x < size; x++)
             {
-                int x0 = (int)(x * scaleX), x1 = Math.Max(val1: x0 + 1, val2: (int)((x + 1) * scaleX));
+                int x0 = (int)(x * scaleX),
+                    x1 = Math.Max(val1: x0 + 1, val2: (int)((x + 1) * scaleX));
                 double r = 0, g = 0, b = 0, a = 0;
                 int count = 0;
                 for (int sy = y0; sy < Math.Min(val1: y1, val2: Height); sy++)
                 for (int sx = x0; sx < Math.Min(val1: x1, val2: Width); sx++)
                 {
-                    int at = (sy * Width + sx) * 4;
+                    int at = ((sy * Width) + sx) * 4;
                     double alpha = Pixels[at + 3] / 255.0;
                     r += Pixels[at] * alpha;
                     g += Pixels[at + 1] * alpha;
@@ -273,7 +295,7 @@ public sealed class Png
                     count++;
                 }
 
-                int target = (y * size + x) * 4;
+                int target = ((y * size) + x) * 4;
                 if (count == 0) continue;
                 double alphaAverage = a / count;
                 double unpremultiply = alphaAverage <= 0 ? 0 : 255.0 / alphaAverage / count;
@@ -287,7 +309,8 @@ public sealed class Png
         return new Png(width: size, height: size, pixels: output);
     }
 
-    private static byte Clamp(double value) => (byte)Math.Clamp(value: Math.Round(value), min: 0, max: 255);
+    private static byte Clamp(double value) =>
+        (byte)Math.Clamp(value: Math.Round(value), min: 0, max: 255);
 
     // ── encode ────────────────────────────────────────────────────────────────
 
@@ -297,28 +320,32 @@ public sealed class Png
     /// </summary>
     public void Save(string path)
     {
-        var raw = new byte[(Width * 4 + 1) * Height];
+        byte[] raw = new byte[((Width * 4) + 1) * Height];
         for (int y = 0; y < Height; y++)
         {
-            raw[y * (Width * 4 + 1)] = 0;
+            raw[y * ((Width * 4) + 1)] = 0;
             Array.Copy(
                 sourceArray: Pixels,
                 sourceIndex: y * Width * 4,
                 destinationArray: raw,
-                destinationIndex: y * (Width * 4 + 1) + 1,
+                destinationIndex: (y * ((Width * 4) + 1)) + 1,
                 length: Width * 4
             );
         }
 
         var compressed = new MemoryStream();
-        using (var deflate = new ZLibStream(stream: compressed, compressionLevel: CompressionLevel.Optimal, leaveOpen: true))
+        using (var deflate = new ZLibStream(
+                   stream: compressed,
+                   compressionLevel: CompressionLevel.Optimal,
+                   leaveOpen: true
+               ))
             deflate.Write(buffer: raw, offset: 0, count: raw.Length);
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         using var file = File.Create(path);
         file.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
 
-        var header = new byte[13];
+        byte[] header = new byte[13];
         BinaryPrimitives.WriteInt32BigEndian(destination: header, value: Width);
         BinaryPrimitives.WriteInt32BigEndian(destination: header.AsSpan(4), value: Height);
         header[8] = 8; // bit depth

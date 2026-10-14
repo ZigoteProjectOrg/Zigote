@@ -69,7 +69,7 @@ public class JsonChannelTests
         try
         {
             var request = channel.Request(
-                new ShareArgs(Text: "dialog", Count: 1),
+                args: new ShareArgs(Text: "dialog", Count: 1),
                 cancellation: TestContext.Current.CancellationToken
             );
             PlatformChannel.Dispatch();
@@ -95,7 +95,7 @@ public class JsonChannelTests
         try
         {
             var request = channel.Request(
-                new ShareArgs(Text: "x", Count: 0),
+                args: new ShareArgs(Text: "x", Count: 0),
                 cancellation: TestContext.Current.CancellationToken
             );
             PlatformChannel.Dispatch();

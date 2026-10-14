@@ -587,7 +587,8 @@ public class RichText : LeafWidget
         while (lo < hi)
         {
             int mid = (lo + hi + 1) / 2;
-            if (SpanWidth(s: span, text: text.AsSpan(start: 0, length: mid)) + ellipsisW <= budget) lo = mid;
+            if (SpanWidth(s: span, text: text.AsSpan(start: 0, length: mid)) + ellipsisW <=
+                budget) lo = mid;
             else hi = mid - 1;
         }
 

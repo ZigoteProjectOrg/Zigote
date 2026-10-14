@@ -26,37 +26,63 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     private const string Ns = "Zigote.Http";
 
     private static readonly DiagnosticDescriptor UnboundPlaceholder = new(
-        "ZHTTP001", "Route placeholder is not bound",
-        "Route '{0}' has no parameter bound to '{{{1}}}'", "Zigote.Http", DiagnosticSeverity.Error, true);
+        id: "ZHTTP001",
+        title: "Route placeholder is not bound",
+        messageFormat: "Route '{0}' has no parameter bound to '{{{1}}}'",
+        category: "Zigote.Http",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     private static readonly DiagnosticDescriptor DuplicateBinding = new(
-        "ZHTTP002", "Route placeholder is bound twice",
-        "Route '{0}' binds '{{{1}}}' more than once", "Zigote.Http", DiagnosticSeverity.Error, true);
+        id: "ZHTTP002",
+        title: "Route placeholder is bound twice",
+        messageFormat: "Route '{0}' binds '{{{1}}}' more than once",
+        category: "Zigote.Http",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     private static readonly DiagnosticDescriptor NonReplayableBody = new(
-        "ZHTTP003", "Retryable request has a non-replayable body",
+        id: "ZHTTP003",
+        title: "Retryable request has a non-replayable body",
+        messageFormat:
         "'{0}' sends a Stream body on a retryable verb, and a stream cannot be sent twice",
-        "Zigote.Http", DiagnosticSeverity.Error, true);
+        category: "Zigote.Http",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     private static readonly DiagnosticDescriptor MissingVerb = new(
-        "ZHTTP004", "Method has no verb attribute",
-        "'{0}' is on an [HttpApi] interface but carries no verb attribute", "Zigote.Http",
-        DiagnosticSeverity.Error, true);
+        id: "ZHTTP004",
+        title: "Method has no verb attribute",
+        messageFormat: "'{0}' is on an [HttpApi] interface but carries no verb attribute",
+        category: "Zigote.Http",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     private static readonly DiagnosticDescriptor UnsupportedReturn = new(
-        "ZHTTP005", "Unsupported return type",
+        id: "ZHTTP005",
+        title: "Unsupported return type",
+        messageFormat:
         "'{0}' must return Task<T> or ValueTask<T> where T is HttpResult of a payload type, HttpResponse, byte[] or string",
-        "Zigote.Http", DiagnosticSeverity.Error, true);
+        category: "Zigote.Http",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var apis = context.SyntaxProvider.ForAttributeWithMetadataName(
-            $"{Ns}.HttpApiAttribute",
-            static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax,
-            static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol);
+            fullyQualifiedMetadataName: $"{Ns}.HttpApiAttribute",
+            predicate: static (node, _) =>
+                node is Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax,
+            transform: static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol
+        );
 
-        context.RegisterSourceOutput(apis, Emit);
+        context.RegisterSourceOutput(source: apis, action: Emit);
     }
 
     private static void Emit(SourceProductionContext context, INamedTypeSymbol api)
@@ -66,12 +92,15 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         {
             if (attribute.AttributeClass?.Name != "HttpApiAttribute") continue;
             foreach (var named in attribute.NamedArguments)
+            {
                 if (named.Key == "BasePath" && named.Value.Value is string value)
                     basePath = value.Trim('/');
+            }
         }
 
         string interfaceName = api.Name;
-        string className = (interfaceName.Length > 1 && interfaceName[0] == 'I' && char.IsUpper(interfaceName[1])
+        string className = (interfaceName.Length > 1 && interfaceName[0] == 'I' &&
+                            char.IsUpper(interfaceName[1])
             ? interfaceName.Substring(1)
             : interfaceName) + "Client";
 
@@ -81,16 +110,27 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         sb.AppendLine("using Zigote.Http;"); // the fluent transforms are extension methods
         sb.AppendLine();
         bool global = api.ContainingNamespace.IsGlobalNamespace;
-        if (!global) sb.AppendLine($"namespace {api.ContainingNamespace.ToDisplayString()};").AppendLine();
+        if (!global)
+            sb.AppendLine($"namespace {api.ContainingNamespace.ToDisplayString()};").AppendLine();
 
-        sb.AppendLine($"/// <summary>Generated client for <see cref=\"{interfaceName}\"/>.</summary>");
-        sb.AppendLine($"{Accessibility(api)} sealed partial class {className} : {api.ToDisplayString()}");
+        sb.AppendLine(
+            $"/// <summary>Generated client for <see cref=\"{interfaceName}\"/>.</summary>"
+        );
+        sb.AppendLine(
+            $"{Accessibility(api)} sealed partial class {className} : {api.ToDisplayString()}"
+        );
         sb.AppendLine("{");
         sb.AppendLine("    private readonly global::Zigote.Http.HttpRunner _runner;");
-        sb.AppendLine("    private readonly global::System.Text.Json.Serialization.JsonSerializerContext? _json;");
+        sb.AppendLine(
+            "    private readonly global::System.Text.Json.Serialization.JsonSerializerContext? _json;"
+        );
         sb.AppendLine();
-        sb.AppendLine($"    /// <summary>A client over <paramref name=\"runner\"/>. <paramref name=\"json\"/> supplies the contracts for any JSON payload on this interface.</summary>");
-        sb.AppendLine($"    public {className}(global::Zigote.Http.HttpRunner runner, global::System.Text.Json.Serialization.JsonSerializerContext? json = null)");
+        sb.AppendLine(
+            $"    /// <summary>A client over <paramref name=\"runner\"/>. <paramref name=\"json\"/> supplies the contracts for any JSON payload on this interface.</summary>"
+        );
+        sb.AppendLine(
+            $"    public {className}(global::Zigote.Http.HttpRunner runner, global::System.Text.Json.Serialization.JsonSerializerContext? json = null)"
+        );
         sb.AppendLine("    {");
         sb.AppendLine("        _runner = runner;");
         sb.AppendLine("        _json = json;");
@@ -98,33 +138,49 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
 
         foreach (var member in api.GetMembers())
         {
-            if (member is not IMethodSymbol method || method.MethodKind != MethodKind.Ordinary) continue;
-            EmitMethod(context, sb, method, basePath);
+            if (member is not IMethodSymbol method ||
+                method.MethodKind != MethodKind.Ordinary) continue;
+            EmitMethod(
+                context: context,
+                sb: sb,
+                method: method,
+                basePath: basePath
+            );
         }
 
         sb.AppendLine();
-        sb.AppendLine("    private global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> TypeInfo<T>()");
+        sb.AppendLine(
+            "    private global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> TypeInfo<T>()"
+        );
         sb.AppendLine("    {");
-        sb.AppendLine("        var info = _json?.GetTypeInfo(typeof(T)) as global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>;");
+        sb.AppendLine(
+            "        var info = _json?.GetTypeInfo(typeof(T)) as global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>;"
+        );
         sb.AppendLine("        return info ?? throw new global::System.InvalidOperationException(");
-        sb.AppendLine("            $\"No JsonTypeInfo for {typeof(T)}. Pass a JsonSerializerContext that declares [JsonSerializable(typeof({typeof(T).Name}))].\");");
+        sb.AppendLine(
+            "            $\"No JsonTypeInfo for {typeof(T)}. Pass a JsonSerializerContext that declares [JsonSerializable(typeof({typeof(T).Name}))].\");"
+        );
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        context.AddSource($"{className}.g.cs", sb.ToString());
+        context.AddSource(hintName: $"{className}.g.cs", source: sb.ToString());
     }
 
     private static void EmitMethod(
         SourceProductionContext context, StringBuilder sb, IMethodSymbol method, string basePath)
     {
-        var verb = VerbOf(method, out string template);
+        string? verb = VerbOf(method: method, template: out string template);
         if (verb is null)
         {
-            context.ReportDiagnostic(Diagnostic.Create(MissingVerb, Location(method), method.Name));
+            context.ReportDiagnostic(
+                Diagnostic.Create(descriptor: MissingVerb, location: Location(method), method.Name)
+            );
             return;
         }
 
-        string route = basePath.Length == 0 ? template.TrimStart('/') : $"{basePath}/{template.TrimStart('/')}";
+        string route = basePath.Length == 0
+            ? template.TrimStart('/')
+            : $"{basePath}/{template.TrimStart('/')}";
         var placeholders = Placeholders(template);
 
         // Bind parameters before writing anything: a diagnostic is worth more than half a method.
@@ -143,23 +199,33 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (HasAttribute(parameter, "BodyAttribute"))
+            if (HasAttribute(symbol: parameter, name: "BodyAttribute"))
             {
-                bindings.Add(BodyBinding(parameter, ref hasStreamBody));
+                bindings.Add(BodyBinding(parameter: parameter, hasStreamBody: ref hasStreamBody));
                 continue;
             }
 
-            if (AttributeArgument(parameter, "HeaderAttribute") is { } headerName)
+            if (AttributeArgument(symbol: parameter, name: "HeaderAttribute") is { } headerName)
             {
                 bindings.Add($".WithHeader(\"{headerName}\", {Text(parameter)})");
                 continue;
             }
 
-            if (placeholders.Contains(name) && !HasAttribute(parameter, "QueryAttribute"))
+            if (placeholders.Contains(name) && !HasAttribute(
+                    symbol: parameter,
+                    name: "QueryAttribute"
+                ))
             {
                 if (!bound.Add(name))
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(DuplicateBinding, Location(method), route, name));
+                    context.ReportDiagnostic(
+                        Diagnostic.Create(
+                            descriptor: DuplicateBinding,
+                            location: Location(method),
+                            route,
+                            name
+                        )
+                    );
                     return;
                 }
 
@@ -167,7 +233,7 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
                 continue;
             }
 
-            string queryName = AttributeArgument(parameter, "QueryAttribute") ?? name;
+            string queryName = AttributeArgument(symbol: parameter, name: "QueryAttribute") ?? name;
 
             // A sequence parameter repeats the pair — ?tag=a&tag=b — which is what every query
             // API on earth means by "a list". Emitted as a loop after the chain.
@@ -176,49 +242,82 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
                 string guard = parameter.NullableAnnotation == NullableAnnotation.Annotated
                     ? $"if ({name} is not null) "
                     : "";
-                loops.Add($"{guard}foreach (var v in {name}) " +
-                          $"spec = spec.WithQuery(\"{queryName}\", {ElementText(element)});");
+                loops.Add(
+                    $"{guard}foreach (var v in {name}) " +
+                    $"spec = spec.WithQuery(\"{queryName}\", {ElementText(element)});"
+                );
                 continue;
             }
 
-            bindings.Add(parameter.NullableAnnotation == NullableAnnotation.Annotated
-                ? $".WithQueryIf(\"{queryName}\", {Text(parameter)})"
-                : $".WithQuery(\"{queryName}\", {Text(parameter)})");
+            bindings.Add(
+                parameter.NullableAnnotation == NullableAnnotation.Annotated
+                    ? $".WithQueryIf(\"{queryName}\", {Text(parameter)})"
+                    : $".WithQuery(\"{queryName}\", {Text(parameter)})"
+            );
         }
 
         foreach (string placeholder in placeholders)
+        {
             if (!bound.Contains(placeholder))
             {
-                context.ReportDiagnostic(Diagnostic.Create(UnboundPlaceholder, Location(method), route, placeholder));
+                context.ReportDiagnostic(
+                    Diagnostic.Create(
+                        descriptor: UnboundPlaceholder,
+                        location: Location(method),
+                        route,
+                        placeholder
+                    )
+                );
                 return;
             }
+        }
 
-        bool idempotent = HasAttribute(method, "IdempotentAttribute");
+        bool idempotent = HasAttribute(symbol: method, name: "IdempotentAttribute");
         if (hasStreamBody && (idempotent || verb is "Put" or "Delete"))
         {
-            context.ReportDiagnostic(Diagnostic.Create(NonReplayableBody, Location(method), method.Name));
+            context.ReportDiagnostic(
+                Diagnostic.Create(
+                    descriptor: NonReplayableBody,
+                    location: Location(method),
+                    method.Name
+                )
+            );
             return;
         }
 
-        if (HasAttribute(method, "NoCacheAttribute")) bindings.Add(".NoCache()");
+        if (HasAttribute(symbol: method, name: "NoCacheAttribute")) bindings.Add(".NoCache()");
         if (idempotent) bindings.Add(".Idempotent()");
-        if (HasAttribute(method, "NoRetryAttribute")) bindings.Add(".NoRetry()");
-        if (HasAttribute(method, "StreamingAttribute")) bindings.Add(".Streaming()");
+        if (HasAttribute(symbol: method, name: "NoRetryAttribute")) bindings.Add(".NoRetry()");
+        if (HasAttribute(symbol: method, name: "StreamingAttribute")) bindings.Add(".Streaming()");
         if (DeadlineSeconds(method) is { } seconds)
-            bindings.Add($".Deadline(global::System.TimeSpan.FromSeconds({seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}))");
+            bindings.Add(
+                $".Deadline(global::System.TimeSpan.FromSeconds({seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}))"
+            );
 
-        if (!Unwrap(method.ReturnType, out var payload, out bool resultShaped))
+        if (!Unwrap(
+                returnType: method.ReturnType,
+                payload: out var payload,
+                resultShaped: out bool resultShaped
+            ))
         {
-            context.ReportDiagnostic(Diagnostic.Create(UnsupportedReturn, Location(method), method.Name));
+            context.ReportDiagnostic(
+                Diagnostic.Create(
+                    descriptor: UnsupportedReturn,
+                    location: Location(method),
+                    method.Name
+                )
+            );
             return;
         }
 
-        string call = CallFor(payload!, cancellation ?? "default");
-        string signature = string.Join(", ", method.Parameters.Select(Declare));
+        string call = CallFor(payload: payload!, ct: cancellation ?? "default");
+        string signature = string.Join(separator: ", ", values: method.Parameters.Select(Declare));
 
         sb.AppendLine();
         sb.AppendLine($"    /// <inheritdoc />");
-        sb.AppendLine($"    public async {method.ReturnType.ToDisplayString()} {method.Name}({signature})");
+        sb.AppendLine(
+            $"    public async {method.ReturnType.ToDisplayString()} {method.Name}({signature})"
+        );
         sb.AppendLine("    {");
         sb.AppendLine($"        var spec = global::Zigote.Http.HttpRequest.{verb}(\"{route}\")");
         foreach (string binding in bindings) sb.AppendLine($"            {binding}");
@@ -229,13 +328,13 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
     }
 
-    private static string CallFor(ITypeSymbol payload, string ct) => payload.ToDisplayString() switch
-    {
-        "byte[]" => $"BytesAsync(spec, {ct})",
-        "string" => $"TextAsync(spec, {ct})",
-        "Zigote.Http.HttpResponse" => $"SendAsync(spec, {ct})",
-        _ => $"JsonAsync(spec, TypeInfo<{payload.ToDisplayString()}>(), {ct})"
-    };
+    private static string CallFor(ITypeSymbol payload, string ct) =>
+        payload.ToDisplayString() switch {
+            "byte[]" => $"BytesAsync(spec, {ct})",
+            "string" => $"TextAsync(spec, {ct})",
+            "Zigote.Http.HttpResponse" => $"SendAsync(spec, {ct})",
+            _ => $"JsonAsync(spec, TypeInfo<{payload.ToDisplayString()}>(), {ct})",
+        };
 
     private static string BodyBinding(IParameterSymbol parameter, ref bool hasStreamBody)
     {
@@ -260,12 +359,18 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     private static ITypeSymbol? ElementType(ITypeSymbol type)
     {
         if (type.SpecialType == SpecialType.System_String) return null;
-        if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte }) return null;
+        if (type is IArrayTypeSymbol {
+                ElementType.SpecialType: SpecialType.System_Byte,
+            }) return null;
         if (type is IArrayTypeSymbol array) return array.ElementType;
 
         foreach (var iface in type.AllInterfaces)
-            if (iface.ConstructedFrom.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
+        {
+            if (iface.ConstructedFrom.ToDisplayString() ==
+                "System.Collections.Generic.IEnumerable<T>")
                 return iface.TypeArguments[0];
+        }
+
         return null;
     }
 
@@ -273,7 +378,8 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     private static string ElementText(ITypeSymbol element)
     {
         if (element.SpecialType == SpecialType.System_String) return "v";
-        bool formattable = element.AllInterfaces.Any(i => i.ToDisplayString() == "System.IFormattable");
+        bool formattable =
+            element.AllInterfaces.Any(i => i.ToDisplayString() == "System.IFormattable");
         return formattable
             ? "v.ToString(null, global::System.Globalization.CultureInfo.InvariantCulture)"
             : "v?.ToString() ?? string.Empty";
@@ -283,10 +389,13 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     private static double? DeadlineSeconds(IMethodSymbol method)
     {
         foreach (var attribute in method.GetAttributes())
+        {
             if (attribute.AttributeClass?.Name == "DeadlineAttribute" &&
                 attribute.ConstructorArguments.Length > 0 &&
                 attribute.ConstructorArguments[0].Value is double seconds)
                 return seconds;
+        }
+
         return null;
     }
 
@@ -295,21 +404,25 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     {
         if (parameter.Type.SpecialType == SpecialType.System_String) return parameter.Name;
 
-        bool formattable = parameter.Type.AllInterfaces.Any(i => i.ToDisplayString() == "System.IFormattable");
+        bool formattable =
+            parameter.Type.AllInterfaces.Any(i => i.ToDisplayString() == "System.IFormattable");
         return formattable
             ? $"{parameter.Name}.ToString(null, global::System.Globalization.CultureInfo.InvariantCulture)"
             : $"{parameter.Name}?.ToString() ?? string.Empty";
     }
 
     /// <summary>Peels <c>Task</c>/<c>ValueTask</c> and then <c>HttpResult</c> off the declared return type.</summary>
-    private static bool Unwrap(ITypeSymbol returnType, out ITypeSymbol? payload, out bool resultShaped)
+    private static bool Unwrap(ITypeSymbol returnType, out ITypeSymbol? payload,
+        out bool resultShaped)
     {
         payload = null;
         resultShaped = false;
 
-        if (returnType is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return false;
+        if (returnType is not INamedTypeSymbol named || named.TypeArguments.Length != 1)
+            return false;
         string outer = named.ConstructedFrom.ToDisplayString();
-        if (outer is not ("System.Threading.Tasks.Task<TResult>" or "System.Threading.Tasks.ValueTask<TResult>"))
+        if (outer is not ("System.Threading.Tasks.Task<TResult>"
+            or "System.Threading.Tasks.ValueTask<TResult>"))
             return false;
 
         var inner = named.TypeArguments[0];
@@ -320,9 +433,7 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
             payload = result.TypeArguments[0];
         }
         else
-        {
             payload = inner;
-        }
 
         // Stream is refused on purpose: who closes it, and what happens when the deadline fires
         // mid-read, are questions HttpResponse answers and a bare Stream does not.
@@ -343,18 +454,18 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         foreach (var attribute in method.GetAttributes())
         {
             string? name = attribute.AttributeClass?.Name;
-            string? verb = name switch
-            {
+            string? verb = name switch {
                 "GetAttribute" => "Get",
                 "HeadAttribute" => "Head",
                 "PostAttribute" => "Post",
                 "PutAttribute" => "Put",
                 "PatchAttribute" => "Patch",
                 "DeleteAttribute" => "Delete",
-                _ => null
+                _ => null,
             };
             if (verb is null) continue;
-            if (attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is string t)
+            if (attribute.ConstructorArguments.Length > 0 &&
+                attribute.ConstructorArguments[0].Value is string t)
                 template = t;
             return verb;
         }
@@ -367,11 +478,11 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         var names = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < template.Length;)
         {
-            int open = template.IndexOf('{', i);
+            int open = template.IndexOf(value: '{', startIndex: i);
             if (open < 0) break;
-            int close = template.IndexOf('}', open);
+            int close = template.IndexOf(value: '}', startIndex: open);
             if (close < 0) break;
-            names.Add(template.Substring(open + 1, close - open - 1));
+            names.Add(template.Substring(startIndex: open + 1, length: close - open - 1));
             i = close + 1;
         }
 
@@ -381,8 +492,11 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     private static bool HasAttribute(ISymbol symbol, string name)
     {
         foreach (var attribute in symbol.GetAttributes())
+        {
             if (attribute.AttributeClass?.Name == name)
                 return true;
+        }
+
         return false;
     }
 
@@ -391,7 +505,8 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
         foreach (var attribute in symbol.GetAttributes())
         {
             if (attribute.AttributeClass?.Name != name) continue;
-            if (attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is string value)
+            if (attribute.ConstructorArguments.Length > 0 &&
+                attribute.ConstructorArguments[0].Value is string value)
                 return value;
             return null;
         }
@@ -400,7 +515,9 @@ public sealed class HttpApiGenerator : IIncrementalGenerator
     }
 
     private static string Accessibility(INamedTypeSymbol api) =>
-        api.DeclaredAccessibility == Microsoft.CodeAnalysis.Accessibility.Public ? "public" : "internal";
+        api.DeclaredAccessibility == Microsoft.CodeAnalysis.Accessibility.Public
+            ? "public"
+            : "internal";
 
     private static Location? Location(ISymbol symbol) =>
         symbol.Locations.Length > 0 ? symbol.Locations[0] : null;

@@ -68,7 +68,13 @@ public sealed unsafe class NativeWindow : IDisposable
     public void SetLayerMargin(int top, int right, int bottom, int left)
     {
         if (_window == 0 || !IsLayer) return;
-        NativeEngine.WindowLayerSetMargin(windowHandle: _window, top: top, right: right, bottom: bottom, left: left);
+        NativeEngine.WindowLayerSetMargin(
+            windowHandle: _window,
+            top: top,
+            right: right,
+            bottom: bottom,
+            left: left
+        );
     }
 
     /// <summary>
@@ -79,16 +85,23 @@ public sealed unsafe class NativeWindow : IDisposable
     public void SetLayerInputRects(ReadOnlySpan<(int X, int Y, int W, int H)> rects)
     {
         if (_window == 0 || !IsLayer) return;
-        Span<int> flat = rects.Length <= 64 ? stackalloc int[rects.Length * 4] : new int[rects.Length * 4];
+        var flat = rects.Length <= 64
+            ? stackalloc int[rects.Length * 4]
+            : new int[rects.Length * 4];
         for (int i = 0; i < rects.Length; i++)
         {
             flat[i * 4] = rects[i].X;
-            flat[i * 4 + 1] = rects[i].Y;
-            flat[i * 4 + 2] = rects[i].W;
-            flat[i * 4 + 3] = rects[i].H;
+            flat[(i * 4) + 1] = rects[i].Y;
+            flat[(i * 4) + 2] = rects[i].W;
+            flat[(i * 4) + 3] = rects[i].H;
         }
+
         fixed (int* p = flat)
-            NativeEngine.WindowLayerSetInputRects(windowHandle: _window, rects: p, count: (uint)rects.Length);
+            NativeEngine.WindowLayerSetInputRects(
+                windowHandle: _window,
+                rects: p,
+                count: (uint)rects.Length
+            );
     }
 
     public void Dispose()

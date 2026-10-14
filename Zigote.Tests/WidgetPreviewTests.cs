@@ -89,7 +89,10 @@ public class WidgetPreviewTests
 
         Assert.Collection(
             collection: described.Parameters,
-            p => Assert.Equal(expected: ("title", "string", "Card"), actual: (p.Name, p.Kind, p.Value)),
+            p => Assert.Equal(
+                expected: ("title", "string", "Card"),
+                actual: (p.Name, p.Kind, p.Value)
+            ),
             p => Assert.Equal(expected: ("count", "int", "1"), actual: (p.Name, p.Kind, p.Value)),
             p =>
             {
@@ -187,7 +190,12 @@ internal sealed class PreviewTwoWays : Center
     public string Marker { get; }
 }
 
-[Preview("Sample card", Width = 412, Height = 915, Theme = "dark")]
+[Preview(
+    "Sample card",
+    Width = 412,
+    Height = 915,
+    Theme = "dark"
+)]
 internal sealed class PreviewParameterised(
     string title = "Card",
     int count = 1,

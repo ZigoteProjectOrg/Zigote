@@ -51,9 +51,7 @@ public sealed class PreferencesProviderTests : IDisposable
     {
         var backing = new InMemoryKeyValueStore();
         using var store = new PreferenceStore(backing);
-        var editor = new EditorTestPrefs(store);
-
-        editor.ShowGrid.Value = false;
+        var editor = new EditorTestPrefs(store) { ShowGrid = { Value = false } };
 
         Assert.Equal(expected: "editor.showGrid", actual: editor.ShowGrid.Key);
         Assert.True(backing.Contains("editor.showGrid"));
@@ -209,9 +207,10 @@ public sealed class PreferencesProviderTests : IDisposable
 
         using (var store = new PreferenceStore(new SqliteKeyValueStore(dbPath)))
         {
-            var editor = new EditorTestPrefs(store);
-            editor.UiScale.Value = 1.75;
-            editor.Theme.Value = PrefTheme.Light;
+            var editor = new EditorTestPrefs(store) {
+                UiScale = { Value = 1.75 },
+                Theme = { Value = PrefTheme.Light },
+            };
             editor.ShowGrid.Reset(); // never set — stays absent
         }
 

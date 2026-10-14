@@ -27,10 +27,9 @@ public partial class App
             // window it has focused (its launcher, a menu). Only keyboard-shaped events, only from
             // the main window, only when a redirect is set.
             if (KeyboardRedirectWindowId != 0 && (evt.WindowId == 0 || evt.WindowId == mainId)
-                && evt is KeyEvent or TextInputEvent or TextCompositionEvent)
-            {
+                                              && evt is KeyEvent or TextInputEvent
+                                                  or TextCompositionEvent)
                 evt.WindowId = KeyboardRedirectWindowId;
-            }
             App? target = null;
             if (evt.WindowId != 0 && evt.WindowId != mainId)
             {
@@ -75,7 +74,12 @@ public partial class App
         int n = _secondaryWindows.Count;
         if (n == 0) return;
         if (_pumpScratch is null || _pumpScratch.Length < n) _pumpScratch = new App[n];
-        _secondaryWindows.CopyTo(0, _pumpScratch, 0, n);
+        _secondaryWindows.CopyTo(
+            index: 0,
+            array: _pumpScratch,
+            arrayIndex: 0,
+            count: n
+        );
         for (int i = 0; i < n; i++)
         {
             var w = _pumpScratch[i];
@@ -258,7 +262,7 @@ public partial class App
                 // One bulk sleep to ~2 ms before the deadline instead of repeated Sleep(1) wakeups
                 // (a 144 Hz cap on an idle-ish frame is ~5 wakeups saved), then the short spin below
                 // absorbs sleep overshoot. Energy: fewer timer interrupts, same landing accuracy.
-                Thread.Sleep((int)Math.Max(val1: 1, val2: remaining / oneMs - 2));
+                Thread.Sleep((int)Math.Max(val1: 1, val2: (remaining / oneMs) - 2));
             else Thread.SpinWait(64);
         }
     }

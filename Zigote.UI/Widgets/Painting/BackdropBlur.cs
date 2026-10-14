@@ -111,65 +111,65 @@ public static class BackdropBlur
     /// </summary>
     private static readonly string Source =
         $$"""
-        @group(0) @binding(0) var backdrop: texture_2d<f32>;
-        @group(0) @binding(1) var backdrop_sampler: sampler;
+          @group(0) @binding(0) var backdrop: texture_2d<f32>;
+          @group(0) @binding(1) var backdrop_sampler: sampler;
 
-        struct VertexOut {
-          @builtin(position) position: vec4<f32>,
-          @location(0) uv: vec2<f32>,
-          @location(1) params_a: vec4<f32>,
-          @location(2) params_b: vec4<f32>,
-        };
+          struct VertexOut {
+            @builtin(position) position: vec4<f32>,
+            @location(0) uv: vec2<f32>,
+            @location(1) params_a: vec4<f32>,
+            @location(2) params_b: vec4<f32>,
+          };
 
-        @vertex
-        fn vs_main(
-          @location(0) position: vec2<f32>,
-          @location(1) uv: vec2<f32>,
-          @location(2) params_a: vec4<f32>,
-          @location(3) params_b: vec4<f32>,
-        ) -> VertexOut {
-          var out: VertexOut;
-          out.position = vec4<f32>(position, 0.0, 1.0);
-          out.uv = uv;
-          out.params_a = params_a;
-          out.params_b = params_b;
-          return out;
-        }
-
-        @fragment
-        fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-          let reach  = max(in.params_a.x, 0.5);
-          let corner = in.params_a.y;
-          let rect   = vec4<f32>(in.params_a.z, in.params_a.w, in.params_b.x, in.params_b.y);
-
-          // Rounded-rect coverage, in the same analytic form the shape and glass shaders use, so a
-          // blurred backdrop under a rounded panel does not square off its corners.
-          let half_size = rect.zw * 0.5;
-          let local = in.position.xy - (rect.xy + half_size);
-          let q = abs(local) - half_size + vec2<f32>(corner);
-          let sd = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - corner;
-          let aa = max(fwidth(sd), 0.6);
-          let coverage = 1.0 - smoothstep(-aa, aa, sd);
-          if (coverage < 0.002) { discard; }
-
-          // The spiral is rotated per pixel by interleaved gradient noise: a shared tap pattern
-          // aliases into smeary streaks at wide radii, a decorrelated one reads as smooth blur
-          // with fine grain. Screen-position hash only, so the pattern never shimmers.
-          let ign = fract(52.9829189 * fract(dot(in.position.xy, vec2<f32>(0.06711056, 0.00583715))));
-          let spin = ign * 6.2831853;
-          let inv_dims = 1.0 / vec2<f32>(textureDimensions(backdrop));
-          var acc = textureSampleLevel(backdrop, backdrop_sampler, in.uv, 0.0);
-          var w_sum = 1.0;
-          for (var i = 0; i < {{Taps}}; i++) {
-            let u = (f32(i) + 0.5) / f32({{Taps}});
-            let angle = f32(i) * 2.39996323 + spin;
-            let offset = vec2<f32>(cos(angle), sin(angle)) * (sqrt(u) * reach) * inv_dims;
-            let w = exp(-2.0 * u);
-            acc += textureSampleLevel(backdrop, backdrop_sampler, in.uv + offset, 0.0) * w;
-            w_sum += w;
+          @vertex
+          fn vs_main(
+            @location(0) position: vec2<f32>,
+            @location(1) uv: vec2<f32>,
+            @location(2) params_a: vec4<f32>,
+            @location(3) params_b: vec4<f32>,
+          ) -> VertexOut {
+            var out: VertexOut;
+            out.position = vec4<f32>(position, 0.0, 1.0);
+            out.uv = uv;
+            out.params_a = params_a;
+            out.params_b = params_b;
+            return out;
           }
 
-          return vec4<f32>((acc / w_sum).rgb, coverage);
-        }
-        """;
+          @fragment
+          fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+            let reach  = max(in.params_a.x, 0.5);
+            let corner = in.params_a.y;
+            let rect   = vec4<f32>(in.params_a.z, in.params_a.w, in.params_b.x, in.params_b.y);
+
+            // Rounded-rect coverage, in the same analytic form the shape and glass shaders use, so a
+            // blurred backdrop under a rounded panel does not square off its corners.
+            let half_size = rect.zw * 0.5;
+            let local = in.position.xy - (rect.xy + half_size);
+            let q = abs(local) - half_size + vec2<f32>(corner);
+            let sd = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - corner;
+            let aa = max(fwidth(sd), 0.6);
+            let coverage = 1.0 - smoothstep(-aa, aa, sd);
+            if (coverage < 0.002) { discard; }
+
+            // The spiral is rotated per pixel by interleaved gradient noise: a shared tap pattern
+            // aliases into smeary streaks at wide radii, a decorrelated one reads as smooth blur
+            // with fine grain. Screen-position hash only, so the pattern never shimmers.
+            let ign = fract(52.9829189 * fract(dot(in.position.xy, vec2<f32>(0.06711056, 0.00583715))));
+            let spin = ign * 6.2831853;
+            let inv_dims = 1.0 / vec2<f32>(textureDimensions(backdrop));
+            var acc = textureSampleLevel(backdrop, backdrop_sampler, in.uv, 0.0);
+            var w_sum = 1.0;
+            for (var i = 0; i < {{Taps}}; i++) {
+              let u = (f32(i) + 0.5) / f32({{Taps}});
+              let angle = f32(i) * 2.39996323 + spin;
+              let offset = vec2<f32>(cos(angle), sin(angle)) * (sqrt(u) * reach) * inv_dims;
+              let w = exp(-2.0 * u);
+              acc += textureSampleLevel(backdrop, backdrop_sampler, in.uv + offset, 0.0) * w;
+              w_sum += w;
+            }
+
+            return vec4<f32>((acc / w_sum).rgb, coverage);
+          }
+          """;
 }

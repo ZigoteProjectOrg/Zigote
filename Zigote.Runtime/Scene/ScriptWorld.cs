@@ -169,7 +169,7 @@ public sealed class ScriptWorld : IDisposable
         // happen here — World.Destroy/SetParent are deferred to the end of the tick.
         for (int n = 0; n < _update.Count; n++)
         {
-            (var node, var list) = _update[n];
+            var (node, list) = _update[n];
             for (int i = 0; i < list.Count; i++)
             {
                 var comp = list[i];

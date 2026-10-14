@@ -5,7 +5,6 @@ namespace Zigote.Core.Native;
 
 // PaintCommandKind is superseded by the generated ZgPaintOp enum (from abi.zig).
 
-
 /// <summary>
 ///     Discriminant values for <see cref="ZgEvent.Kind" />.
 ///     Must match the EVT_* constants in src/ffi/root.zig.
@@ -79,7 +78,6 @@ public enum ModifierKeys : byte
 /// </summary>
 public unsafe partial struct ZgEvent
 {
-
     // Aliases used by text_editing events (UTF-8 byte offsets from SDL).
     [FieldOffset(24)] public uint CompositionStart;
     [FieldOffset(28)] public uint CompositionLength;
@@ -94,7 +92,6 @@ public unsafe partial struct ZgEvent
     // text_input / text_editing: byte range of the payload in the poll text buffer.
 
     /// <summary>SDL window id the event belongs to; 0 = unknown → treated as the main window.</summary>
-
     /// <summary>
     ///     Decode this event's text payload from the poll text buffer base pointer
     ///     (<c>zigote_poll_text_ptr</c>). Empty when the event carries no text.
@@ -109,26 +106,20 @@ public unsafe partial struct ZgEvent
 /// <summary>
 ///     Result of <see cref="NativeEngine.MeasureText" />.
 /// </summary>
-public unsafe partial struct ZgSize
-{
-}
+public unsafe partial struct ZgSize { }
 
 /// <summary>
 ///     One glyph quad for <c>PaintCommandKind.GlyphRun</c>.
 ///     Screen rect in logical pixels; atlas UVs in [0,1].
 ///     8 × 4 bytes = 32 bytes total. Must match <c>GlyphRunQuad</c> in ffi/root.zig.
 /// </summary>
-public unsafe partial struct ZgGlyphRunQuad
-{
-}
+public unsafe partial struct ZgGlyphRunQuad { }
 
 /// <summary>
 ///     ABI compatibility info returned by <c>zigote_get_renderer_abi_info</c>.
 ///     Mirrors <c>ZgAbiInfo</c> in src/ffi/root.zig. Total size: 20 bytes.
 /// </summary>
-public unsafe partial struct ZgAbiInfo
-{
-}
+public unsafe partial struct ZgAbiInfo { }
 
 /// <summary>
 ///     Runtime renderer capabilities returned by <c>zigote_get_renderer_caps</c> (called after
@@ -190,7 +181,6 @@ public enum ZgGpuDeviceType : uint
 /// </summary>
 public unsafe partial struct ZgRenderSettings3D
 {
-
     /// <summary>
     ///     Renderer Diagnostic Mode (0/1): forces a stable PBR baseline — all stylised post
     ///     effects off, neutral grade, low ambient, single directional light. For inspecting bugs.
@@ -305,14 +295,10 @@ public enum DebugView
 ///     The path fields are pointers to UTF-8, null-terminated strings (or <see cref="IntPtr.Zero" />
 ///     to skip that map). Layout MUST match <c>ZgTextureLoadItem</c> in src/ffi/root.zig.
 /// </summary>
-public unsafe partial struct ZgTextureLoadItem
-{
-}
+public unsafe partial struct ZgTextureLoadItem { }
 
 /// <summary>
 ///     Per-frame engine statistics for the debug overlay/profiler. Mirrors <c>ZgEngineStats</c> in
 ///     src/ffi/root.zig — field order MUST match.
 /// </summary>
-public unsafe partial struct ZgEngineStats
-{
-}
+public unsafe partial struct ZgEngineStats { }

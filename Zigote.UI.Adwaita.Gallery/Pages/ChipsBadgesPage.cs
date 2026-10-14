@@ -6,7 +6,8 @@ namespace AdwaitaGallery.Pages;
 /// </summary>
 public sealed class ChipsBadgesPage : ComposedWidget
 {
-    private static readonly string[] Filters = ["All", "Unread", "Flagged", "Attachments", "Drafts"];
+    private static readonly string[] Filters =
+        ["All", "Unread", "Flagged", "Attachments", "Drafts"];
 
     private readonly Signal<int> _filter = new(0);
     private readonly Signal<int> _unread = new(3);
@@ -55,10 +56,14 @@ public sealed class ChipsBadgesPage : ComposedWidget
                     "A badge counts something on the widget under it. It hides at zero, is a " +
                     "circle for one digit and stretches into a pill past that.",
                     child: Demo.Specimen(
-                        new Watch(() => new Row(spacing: Spacing.Xxl, mainAxisSize: MainAxisSize.Min) {
+                        new Watch(() =>
+                            new Row(spacing: Spacing.Xxl, mainAxisSize: MainAxisSize.Min) {
                                 Children = {
                                     new AdwBadge(
-                                        child: Demo.IconButton(icon: MaterialIcons.Mail, onPressed: () => { }),
+                                        child: Demo.IconButton(
+                                            icon: MaterialIcons.Mail,
+                                            onPressed: () => { }
+                                        ),
                                         count: _unread.Value
                                     ),
                                     new AdwBadge(
@@ -69,7 +74,10 @@ public sealed class ChipsBadgesPage : ComposedWidget
                                         count: _unread.Value * 14
                                     ),
                                     new AdwBadge(
-                                        child: Demo.IconButton(icon: MaterialIcons.Error, onPressed: () => { }),
+                                        child: Demo.IconButton(
+                                            icon: MaterialIcons.Error,
+                                            onPressed: () => { }
+                                        ),
                                         count: _unread.Value
                                     ) { Color = theme.Danger },
                                 },
