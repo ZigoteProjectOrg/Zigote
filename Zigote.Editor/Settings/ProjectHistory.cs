@@ -18,7 +18,7 @@ public sealed class ProjectHistory : PreferencesProvider
     {
         Recent = Register(
             key: "recent",
-            defaultValue: Array.Empty<string>(),
+            defaultValue: [],
             comparer: OrdinalArrayComparer.Instance
         );
         Last = Register<string?>(key: "last", defaultValue: null);
@@ -42,7 +42,7 @@ public sealed class ProjectHistory : PreferencesProvider
     public void Forget(string projectPath)
     {
         string full = Path.GetFullPath(projectPath);
-        Recent.Update(list => list.Where(p => !PathEquals(a: p, b: full)).ToArray());
+        Recent.Update(list => [.. list.Where(p => !PathEquals(a: p, b: full))]);
         if (Last.Peek() is { } last && PathEquals(a: last, b: full)) Last.Value = null;
     }
 
@@ -55,7 +55,7 @@ public sealed class ProjectHistory : PreferencesProvider
         result.AddRange(list.Where(p => !PathEquals(a: p, b: full)));
         if (result.Count > MaxRecent)
             result.RemoveRange(index: MaxRecent, count: result.Count - MaxRecent);
-        return result.ToArray();
+        return [.. result];
     }
 
     private static bool PathEquals(string a, string b)

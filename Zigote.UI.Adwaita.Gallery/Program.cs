@@ -24,10 +24,11 @@ public static class Program
         if (flattened.Length != GalleryRegistry.Entries.Length)
             failures.Add("Entries is not the flattening of Sections");
 
-        string[] sidebarTitles = GalleryRegistry.SidebarSections()
-            .SelectMany(s => s.Items)
-            .Select(i => i.Title)
-            .ToArray();
+        string[] sidebarTitles = [
+            .. GalleryRegistry.SidebarSections()
+                .SelectMany(s => s.Items)
+                .Select(i => i.Title),
+        ];
         if (!sidebarTitles.SequenceEqual(GalleryRegistry.Entries.Select(e => e.Title)))
             failures.Add("Sidebar row order does not match the Entries index space");
 

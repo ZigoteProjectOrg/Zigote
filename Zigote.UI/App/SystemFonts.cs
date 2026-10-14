@@ -117,12 +117,13 @@ public static class SystemFonts
             // Bounded so a wedged fontconfig cannot hold up the whole application start.
             if (!Task.WaitAll(tasks: queries, timeout: TimeSpan.FromSeconds(2))) return [];
 
-            return queries
-                .Select(query => query.Result)
-                .Where(path => path is not null && SafeExists(path))
-                .Select(path => path!)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            return [
+                .. queries
+                    .Select(query => query.Result)
+                    .Where(path => path is not null && SafeExists(path))
+                    .Select(path => path!)
+                    .Distinct(StringComparer.Ordinal),
+            ];
         }
         catch (Exception)
         {

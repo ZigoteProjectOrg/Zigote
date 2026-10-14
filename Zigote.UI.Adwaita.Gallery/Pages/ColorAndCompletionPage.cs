@@ -157,13 +157,14 @@ public sealed class ColorAndCompletionPage : ComposedWidget
     private static IReadOnlyList<(string Value, string Display)> Suggest(string typed)
     {
         string q = typed.Trim();
-        return Assets
-            .Where(a => q.Length == 0 || a.Contains(
-                    value: q,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
+        return [
+            .. Assets
+                .Where(a => q.Length == 0 || a.Contains(
+                        value: q,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
                 )
-            )
-            .Select(a => (a, Path.GetFileName(a)))
-            .ToList();
+                .Select(a => (a, Path.GetFileName(a))),
+        ];
     }
 }

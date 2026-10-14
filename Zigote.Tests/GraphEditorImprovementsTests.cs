@@ -1,7 +1,8 @@
 using Xunit;
 using Zigote.Core;
-using Zigote.Graphs.Core;
+using Zigote.Core.Paint;
 using Zigote.Graphs.Commands;
+using Zigote.Graphs.Core;
 using Zigote.Graphs.Editor;
 using Zigote.Graphs.Registry;
 using Zigote.UI.Theme;
@@ -11,27 +12,6 @@ namespace Zigote.Tests;
 
 public class GraphEditorImprovementsTests
 {
-    private sealed class Domain(params NodeDefinition[] definitions) : IGraphDomain
-    {
-        public string Id => "test";
-        public string DisplayName => "Test";
-        public IReadOnlyList<string> SupportedSchemas => [];
-        public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions() => [];
-        public IReadOnlyList<NodeDefinition> GetNodeDefinitions() => definitions;
-
-        public bool CanCreateEdge(GraphDocument graph, GraphPinEndpoint from, GraphPinEndpoint to,
-            out string? reason)
-        {
-            reason = null;
-            return true;
-        }
-
-        public GraphValidationResult Validate(GraphDocument graph) => GraphValidationResult.Ok;
-
-        public GraphCompileResult Compile(GraphDocument graph, GraphCompileContext context) =>
-            new() { Success = true };
-    }
-
     private static GraphEditorState CreateState(NodeDefinition definition)
     {
         var registry = new GraphDomainRegistry();
@@ -277,13 +257,15 @@ public class GraphEditorImprovementsTests
         var registry = new GraphDomainRegistry();
         registry.RegisterDomain(
             new Domain(
-                Enumerable.Range(start: 0, count: 15).Select(i => new NodeDefinition {
-                        Id = $"node{i:D2}",
-                        DomainId = "test",
-                        DisplayName = $"Node {i:D2}",
-                        Category = "Test",
-                    }
-                ).ToArray()
+                [
+                    .. Enumerable.Range(start: 0, count: 15).Select(i => new NodeDefinition {
+                            Id = $"node{i:D2}",
+                            DomainId = "test",
+                            DisplayName = $"Node {i:D2}",
+                            Category = "Test",
+                        }
+                    ),
+                ]
             )
         );
         var menu = new GraphSearchMenu(
@@ -328,10 +310,31 @@ public class GraphEditorImprovementsTests
         Assert.False(menu.IsVisible);
     }
 
+    private sealed class Domain(params NodeDefinition[] definitions) : IGraphDomain
+    {
+        public string Id => "test";
+        public string DisplayName => "Test";
+        public IReadOnlyList<string> SupportedSchemas => [];
+        public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions() => [];
+        public IReadOnlyList<NodeDefinition> GetNodeDefinitions() => definitions;
+
+        public bool CanCreateEdge(GraphDocument graph, GraphPinEndpoint from, GraphPinEndpoint to,
+            out string? reason)
+        {
+            reason = null;
+            return true;
+        }
+
+        public GraphValidationResult Validate(GraphDocument graph) => GraphValidationResult.Ok;
+
+        public GraphCompileResult Compile(GraphDocument graph, GraphCompileContext context) =>
+            new() { Success = true };
+    }
+
     private sealed class Box : Widget
     {
-        public override void Paint(Core.Paint.PaintList paint) { }
         private Size _size;
+        public override void Paint(PaintList paint) { }
 
         public override Size Measure(Constraints c) =>
             _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));

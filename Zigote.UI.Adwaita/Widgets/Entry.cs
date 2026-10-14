@@ -1,5 +1,4 @@
 using Zigote.Core.Events;
-using Zigote.UI.Adwaita;
 
 namespace Zigote.UI.Adwaita;
 
@@ -104,15 +103,15 @@ public class AdwEntry : Widget
     /// <summary>Horizontal space reserved after the text (trailing button area).</summary>
     protected virtual float TrailingInset => 0f;
 
+    /// <summary>The editable inside the box — what a host focuses when this entry is not mounted yet.</summary>
+    internal Widget Editable => Field;
+
     /// <summary>
     ///     Put the caret in this entry — the target of a Ctrl+F, a search bar revealing itself, or a
     ///     form focusing its first field. The editable widget is the inner field, so focusing the
     ///     entry itself would leave the caret nowhere. No-op while unmounted.
     /// </summary>
     public void Focus() => Owner?.RequestFocus(Field);
-
-    /// <summary>The editable inside the box — what a host focuses when this entry is not mounted yet.</summary>
-    internal Widget Editable => Field;
 
     /// <summary>Called whenever the text changes (edit, external set, clear).</summary>
     protected virtual void OnTextChanged() { }
@@ -196,7 +195,7 @@ public class AdwEntry : Widget
 
     // Keep Tab traversal off the inner field while disabled.
     public override IEnumerable<Widget> GetVisibleChildren() =>
-        Enabled ? GetChildren() : Array.Empty<Widget>();
+        Enabled ? GetChildren() : [];
 
     public override int DebugStateHash() => HashCode.Combine(
         value1: Field.Text,

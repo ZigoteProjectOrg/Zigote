@@ -1,13 +1,12 @@
-using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Xunit.Sdk;
 using Zigote.Core;
-using Zigote.Core.Native;
 using Zigote.Core.Paint;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 
 namespace Zigote.Tests;
 
@@ -33,7 +32,7 @@ public class CompositionWidgetTests
     }
 
     private static List<PaintCommandKind> Kinds(PaintList p) =>
-        p.DebugCommands.Select(c => (PaintCommandKind)c.Kind).ToList();
+        [.. p.DebugCommands.Select(c => c.Kind)];
 
     private static Offset Center(Widget w) => new(
         x: w.Bounds.X + (w.Bounds.Width / 2f),
@@ -44,7 +43,7 @@ public class CompositionWidgetTests
     {
         foreach (var c in p.DebugCommands)
         {
-            if ((PaintCommandKind)c.Kind == PaintCommandKind.Rect)
+            if (c.Kind == PaintCommandKind.Rect)
                 return (c.ColorR, c.ColorG, c.ColorB, c.ColorA);
         }
 

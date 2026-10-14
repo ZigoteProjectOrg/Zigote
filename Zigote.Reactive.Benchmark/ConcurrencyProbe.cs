@@ -3,7 +3,6 @@ using R3;
 using Zigote.Core.State;
 using SdSignals = SignalsDotnet.Signal;
 using ZComputeds = Zigote.Core.State.Computed;
-using ZExt = Zigote.Core.State.ReactiveExtensions;
 
 /// <summary>
 ///     Correctness under concurrency, head to head. The benchmark pairs in
@@ -103,16 +102,23 @@ public static class ConcurrencyProbe
             via: "Signal<T>.Update"
         );
 
-        string[] candidates = typeof(SignalsDotnet.Signal<int>)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Select(m => m.Name)
-            .Where(n =>
-                n.Contains(value: "Update", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                n.Contains(value: "Mutate", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                n.Contains(value: "Modify", comparisonType: StringComparison.OrdinalIgnoreCase)
-            )
-            .Distinct()
-            .ToArray();
+        string[] candidates = [
+            .. typeof(SignalsDotnet.Signal<int>)
+                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Select(m => m.Name)
+                .Where(n =>
+                    n.Contains(
+                        value: "Update",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    ) ||
+                    n.Contains(
+                        value: "Mutate",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    ) ||
+                    n.Contains(value: "Modify", comparisonType: StringComparison.OrdinalIgnoreCase)
+                )
+                .Distinct(),
+        ];
 
         Console.WriteLine(
             candidates.Length == 0
@@ -137,7 +143,7 @@ public static class ConcurrencyProbe
     {
         var z = new Signal<int>(0);
         using var zc = ZComputeds.From(() => z.Value * 2);
-        using var zLive = ZExt.Observe(source: zc, onChanged: () => { });
+        using var zLive = zc.Observe(onChanged: () => { });
         var zErr = Run(t =>
             {
                 for (int i = 0; i < PerThread; i++) z.Value = (t << 20) | i;
@@ -176,7 +182,7 @@ public static class ConcurrencyProbe
                 for (int i = 0; i < 5_000; i++)
                 {
                     var c = ZComputeds.From(() => z.Value + 1);
-                    var obs = ZExt.Observe(source: c, onChanged: () => { });
+                    var obs = c.Observe(onChanged: () => { });
                     _ = c.Value;
                     obs.Dispose();
                     c.Dispose();
@@ -226,7 +232,7 @@ public static class ConcurrencyProbe
         );
         for (long i = 1; i <= 300_000; i++) s.Value = new Pair(A: i, B: i);
         Volatile.Write(location: ref stop, value: true);
-        Task.WaitAll(tasks: readers.ToArray(), timeout: Budget);
+        Task.WaitAll(tasks: [.. readers], timeout: Budget);
         return torn;
     }
 
@@ -245,7 +251,7 @@ public static class ConcurrencyProbe
         );
         for (long i = 1; i <= 300_000; i++) s.Value = new Pair(A: i, B: i);
         Volatile.Write(location: ref stop, value: true);
-        Task.WaitAll(tasks: readers.ToArray(), timeout: Budget);
+        Task.WaitAll(tasks: [.. readers], timeout: Budget);
         return torn;
     }
 

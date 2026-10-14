@@ -72,13 +72,15 @@ public class VideoPlayerTests
     [Fact]
     public void Video_Args_Emit_Fixed_Rate_Rgba_From_The_Seek_Point()
     {
-        string[] args = FFmpeg.VideoArgs(
-            source: "/tmp/a b.mp4",
-            startSeconds: 12.5,
-            fps: 25,
-            speed: 1.0,
-            maxHeight: 0
-        ).ToArray();
+        string[] args = [
+            .. FFmpeg.VideoArgs(
+                source: "/tmp/a b.mp4",
+                startSeconds: 12.5,
+                fps: 25,
+                speed: 1.0,
+                maxHeight: 0
+            ),
+        ];
 
         // The path is one element, not a quoted fragment — a space in it is not a parsing question.
         Assert.Contains(expected: "/tmp/a b.mp4", collection: args);
@@ -104,13 +106,15 @@ public class VideoPlayerTests
     [Fact]
     public void Video_Args_Scale_And_Retime_Only_When_Asked()
     {
-        string[] args = FFmpeg.VideoArgs(
-            source: "in.mkv",
-            startSeconds: 0,
-            fps: 30,
-            speed: 2.0,
-            maxHeight: 720
-        ).ToArray();
+        string[] args = [
+            .. FFmpeg.VideoArgs(
+                source: "in.mkv",
+                startSeconds: 0,
+                fps: 30,
+                speed: 2.0,
+                maxHeight: 720
+            ),
+        ];
         string filters = args[Array.IndexOf(array: args, value: "-vf") + 1];
 
         Assert.Contains(expectedSubstring: "setpts=PTS/2", actualString: filters);
@@ -406,20 +410,24 @@ public class VideoPlayerTests
     [Fact]
     public void Network_Sources_Get_Reconnect_Options_And_Local_Ones_Do_Not()
     {
-        string[] net = FFmpeg.VideoArgs(
-            source: "https://cdn.example/clip.mp4",
-            startSeconds: 0,
-            fps: 30,
-            speed: 1.0,
-            maxHeight: 0
-        ).ToArray();
-        string[] local = FFmpeg.VideoArgs(
-            source: "/media/clip.mp4",
-            startSeconds: 0,
-            fps: 30,
-            speed: 1.0,
-            maxHeight: 0
-        ).ToArray();
+        string[] net = [
+            .. FFmpeg.VideoArgs(
+                source: "https://cdn.example/clip.mp4",
+                startSeconds: 0,
+                fps: 30,
+                speed: 1.0,
+                maxHeight: 0
+            ),
+        ];
+        string[] local = [
+            .. FFmpeg.VideoArgs(
+                source: "/media/clip.mp4",
+                startSeconds: 0,
+                fps: 30,
+                speed: 1.0,
+                maxHeight: 0
+            ),
+        ];
 
         // Without these a momentary 5xx from a CDN edge ends the read, and the player reports a
         // finished video rather than a hiccup.
@@ -462,24 +470,28 @@ public class VideoPlayerTests
         // A multi-variant HLS master exposes every rendition as a stream and ffmpeg's default pick
         // is the largest — a different size than ParseProbe measured off the first one, which would
         // make the reader slice the raw pipe at the wrong frame boundary.
-        string[] video = FFmpeg.VideoArgs(
-            source: "https://host/master.m3u8",
-            startSeconds: 0,
-            fps: 30,
-            speed: 1.0,
-            maxHeight: 0
-        ).ToArray();
+        string[] video = [
+            .. FFmpeg.VideoArgs(
+                source: "https://host/master.m3u8",
+                startSeconds: 0,
+                fps: 30,
+                speed: 1.0,
+                maxHeight: 0
+            ),
+        ];
         Assert.Equal(
             expected: "0:v:0",
             actual: video[Array.IndexOf(array: video, value: "-map") + 1]
         );
 
         // Optional, so a video-only source produces silence instead of failing the pipe.
-        string[] audio = FFmpeg.AudioArgs(
-            source: "https://host/master.m3u8",
-            startSeconds: 0,
-            speed: 1.0
-        ).ToArray();
+        string[] audio = [
+            .. FFmpeg.AudioArgs(
+                source: "https://host/master.m3u8",
+                startSeconds: 0,
+                speed: 1.0
+            ),
+        ];
         Assert.Equal(
             expected: "0:a:0?",
             actual: audio[Array.IndexOf(array: audio, value: "-map") + 1]
@@ -646,7 +658,7 @@ public class VideoPlayerTests
                     userMessage: "no PCM reached the mixer"
                 );
 
-                byte[] head = mixer.PushedBytes.Take(12).ToArray();
+                byte[] head = [.. mixer.PushedBytes.Take(12)];
                 Assert.Equal(
                     expected: "RIFF",
                     actual: Encoding.ASCII.GetString(bytes: head, index: 0, count: 4)

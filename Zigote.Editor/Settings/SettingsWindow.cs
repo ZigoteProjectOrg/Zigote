@@ -147,7 +147,7 @@ public sealed class SettingsWindow : Widget
         {
             string section = _sections[_selected];
             page.Groups.Add(
-                Group(title: section, rows: rows.Where(r => r.Section == section).ToList())
+                Group(title: section, rows: [.. rows.Where(r => r.Section == section)])
             );
         }
 

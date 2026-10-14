@@ -56,7 +56,7 @@ public sealed class AnimationChannel
             return wide;
         }
 
-        return dst[..n].ToArray();
+        return [.. dst[..n]];
     }
 
     /// <summary>
@@ -209,6 +209,8 @@ public sealed class AnimationClip
 /// </summary>
 public sealed class AnimationPlayer
 {
+    // Reused per-frame pose buffer — see AnimationClip.SampleInto.
+    private readonly Dictionary<string, AnimationClip.TargetPose> _poseScratch = new();
     public AnimationClip? Clip { get; set; }
     public float Time { get; private set; }
     public bool Playing { get; private set; }
@@ -234,9 +236,6 @@ public sealed class AnimationPlayer
         Time += dt * Speed;
         if (dur > 0f && Time > dur) Time = Loop ? Time % dur : dur;
     }
-
-    // Reused per-frame pose buffer — see AnimationClip.SampleInto.
-    private readonly Dictionary<string, AnimationClip.TargetPose> _poseScratch = new();
 
     /// <summary>Apply the current pose to a node subtree, matching channels to nodes by name.</summary>
     public void ApplyTo(SceneNode root)

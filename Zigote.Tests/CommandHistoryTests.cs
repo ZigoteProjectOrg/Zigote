@@ -9,7 +9,7 @@ public class CommandHistoryTests
     [Fact]
     public void Execute_AppliesAndEnablesUndo()
     {
-        int[] cell = new[] { 0 };
+        int[] cell = [0];
         var h = new CommandHistory();
         h.Execute(new AddCommand(cell: cell, delta: 5));
         Assert.Equal(expected: 5, actual: cell[0]);
@@ -20,7 +20,7 @@ public class CommandHistoryTests
     [Fact]
     public void Undo_Then_Redo_RestoresState()
     {
-        int[] cell = new[] { 0 };
+        int[] cell = [0];
         var h = new CommandHistory();
         h.Execute(new AddCommand(cell: cell, delta: 5));
         h.Execute(new AddCommand(cell: cell, delta: 3));
@@ -38,7 +38,7 @@ public class CommandHistoryTests
     [Fact]
     public void Execute_AfterUndo_ClearsRedoStack()
     {
-        int[] cell = new[] { 0 };
+        int[] cell = [0];
         var h = new CommandHistory();
         h.Execute(new AddCommand(cell: cell, delta: 5));
         h.Undo();
@@ -62,7 +62,7 @@ public class CommandHistoryTests
     [Fact]
     public void Clear_DropsBothStacks()
     {
-        int[] cell = new[] { 0 };
+        int[] cell = [0];
         var h = new CommandHistory();
         h.Execute(new AddCommand(cell: cell, delta: 1));
         h.Undo();

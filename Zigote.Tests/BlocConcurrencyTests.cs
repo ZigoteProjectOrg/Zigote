@@ -286,7 +286,7 @@ file sealed class TallyBloc() : SyncBloc<Tagged, TallyState>(new TallyState(0))
         get
         {
             lock (_seen)
-                return _seen.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => g.Key).ToArray();
+                return [.. _seen.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => g.Key)];
         }
     }
 
@@ -303,9 +303,10 @@ file sealed class TallyBloc() : SyncBloc<Tagged, TallyState>(new TallyState(0))
     {
         lock (_seen)
         {
-            return _seen.GroupBy(t => t.Producer)
-                .Select(g => (g.Key, g.Select(t => t.Sequence).ToList()))
-                .ToArray();
+            return [
+                .. _seen.GroupBy(t => t.Producer)
+                    .Select(g => (g.Key, g.Select(t => t.Sequence).ToList())),
+            ];
         }
     }
 

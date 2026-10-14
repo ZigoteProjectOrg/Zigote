@@ -62,7 +62,7 @@ public sealed class DynamicTextureAtlas : IDisposable
         if (width <= 0 || height <= 0 || width > _maxSize || height > _maxSize) return null;
         if (rgba.Length < width * height * 4) return null;
 
-        var entry = new Entry(rgba: rgba.ToArray(), w: width, h: height);
+        var entry = new Entry(rgba: [.. rgba], w: width, h: height);
 
         // Fast path: append at the running cursor. This continues exactly the layout a full repack
         // would produce, so a same-size repack could never fit what the cursor can't — grow instead.

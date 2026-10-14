@@ -15,7 +15,7 @@ public static class LocaleResolution
     /// <summary>Resolve a single preferred locale against the supported set.</summary>
     public static Locale
         Resolve(Locale preferred, IReadOnlyList<Locale> supported, Locale fallback) => Resolve(
-        preferred: new[] { preferred },
+        preferred: [preferred],
         supported: supported,
         fallback: fallback
     );

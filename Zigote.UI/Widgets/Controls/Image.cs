@@ -54,14 +54,6 @@ public sealed class Image : Widget, IDisposable
     private static readonly SemaphoreSlim LoadGate =
         new(initialCount: MaxInFlightLoads, maxCount: MaxInFlightLoads);
 
-    private bool _disposed;
-
-    private CancellationTokenSource? _loadCts;
-    private Size _size;
-    private uint _texHeight;
-    private uint _texWidth;
-    private ulong _textureHandle;
-
     /// <summary>
     ///     An empty image — nothing is painted until a texture arrives (see <see cref="LoadAsync" />
     ///     ).
@@ -69,10 +61,19 @@ public sealed class Image : Widget, IDisposable
     // The source the texture came from, kept so an unmounted image can drop its texture and
     // come back from it on remount. Null for images loaded through LoadAsync or an engine handle,
     // which keep their texture across unmounts as before.
-    private string? _sourcePath;
+    private readonly string? _sourcePath;
+
+    private bool _borrowed;
+
+    private bool _disposed;
+
+    private CancellationTokenSource? _loadCts;
+    private Size _size;
 
     private byte[]? _sourceBytes;
     private uint _sourceMaxDim;
+    private uint _texHeight;
+    private uint _texWidth;
 
     public Image() { }
 
@@ -83,80 +84,12 @@ public sealed class Image : Widget, IDisposable
         LoadFromSource();
     }
 
-    private void LoadFromSource()
-    {
-        if (_sourcePath is { } path)
-        {
-            if (_sourceMaxDim == 0)
-            {
-                _textureHandle = ZigoteEngine.LoadTexture(
-                    path: path,
-                    outW: out _texWidth,
-                    outH: out _texHeight
-                );
-                return;
-            }
-
-            // No scaled file entry point on the engine: read here and go through the memory path,
-            // which does the downsample during decode.
-            _textureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
-                data: File.ReadAllBytes(path),
-                maxDim: _sourceMaxDim,
-                outW: out _texWidth,
-                outH: out _texHeight
-            );
-        }
-        else if (_sourceBytes is { } bytes)
-        {
-            _textureHandle = _sourceMaxDim == 0
-                ? ZigoteEngine.LoadTextureFromMemory(
-                    data: bytes,
-                    outW: out _texWidth,
-                    outH: out _texHeight
-                )
-                : ZigoteEngine.LoadTextureFromMemoryScaled(
-                    data: bytes,
-                    maxDim: _sourceMaxDim,
-                    outW: out _texWidth,
-                    outH: out _texHeight
-                );
-        }
-    }
-
-    /// <summary>
-    ///     A texture is GPU memory plus a CPU copy; an image that left the tree (a rebuilt Watch,
-    ///     a closed window) would otherwise hold it until someone remembered to Dispose it — the
-    ///     leak a long-running shell finds first. Released here when the source is known, and
-    ///     reloaded from it on the next mount.
-    /// </summary>
-    protected override void OnUnmount()
-    {
-        if (_borrowed || (_sourcePath is null && _sourceBytes is null)) return;
-        _loadCts?.Cancel();
-        ClearTexture();
-    }
-
-    protected override void OnMount()
-    {
-        if (_textureHandle == 0 && !_disposed &&
-            (_sourcePath is not null || _sourceBytes is not null)) LoadFromSource();
-    }
-
     private Image(ulong handle, uint width, uint height)
     {
-        _textureHandle = handle;
+        TextureHandle = handle;
         _texWidth = width;
         _texHeight = height;
     }
-
-    /// <summary>
-    ///     Wrap an already-uploaded engine texture (e.g. the compositor backdrop). The caller owns
-    ///     the handle and its lifetime — this Image does not release it on unmount or dispose.
-    /// </summary>
-    public static Image FromTextureHandle(ulong handle, uint width, uint height) =>
-        new(handle: handle, width: width, height: height) { _borrowed = true };
-
-    private bool _borrowed;
 
     /// <summary>
     ///     Accessible description of the image. <c>null</c> (the default) marks the image as decorative,
@@ -172,14 +105,14 @@ public sealed class Image : Widget, IDisposable
     public Size? PlaceholderSize { get; set; }
 
     /// <summary>True once a texture is loaded and paintable.</summary>
-    public bool HasTexture => _textureHandle != 0;
+    public bool HasTexture => TextureHandle != 0;
 
     /// <summary>
     ///     The texture this image paints, 0 when it has none — for a transition that draws the same
     ///     picture somewhere else for a moment (<c>PaintList.AddImage</c> with it as the cache key).
     ///     Still owned here: valid only while this image keeps it.
     /// </summary>
-    public ulong TextureHandle => _textureHandle;
+    public ulong TextureHandle { get; private set; }
 
     /// <summary>
     ///     Runs on the UI thread once a <see cref="LoadAsync" /> texture is in place — the hook a
@@ -210,7 +143,7 @@ public sealed class Image : Widget, IDisposable
     {
         if (_borrowed)
         {
-            _textureHandle = 0;
+            TextureHandle = 0;
             return;
         }
 
@@ -220,6 +153,72 @@ public sealed class Image : Widget, IDisposable
         _loadCts = null;
         ClearTexture();
     }
+
+    private void LoadFromSource()
+    {
+        if (_sourcePath is { } path)
+        {
+            if (_sourceMaxDim == 0)
+            {
+                TextureHandle = ZigoteEngine.LoadTexture(
+                    path: path,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                );
+                return;
+            }
+
+            // No scaled file entry point on the engine: read here and go through the memory path,
+            // which does the downsample during decode.
+            TextureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
+                data: File.ReadAllBytes(path),
+                maxDim: _sourceMaxDim,
+                outW: out _texWidth,
+                outH: out _texHeight
+            );
+        }
+        else if (_sourceBytes is { } bytes)
+        {
+            TextureHandle = _sourceMaxDim == 0
+                ? ZigoteEngine.LoadTextureFromMemory(
+                    data: bytes,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                )
+                : ZigoteEngine.LoadTextureFromMemoryScaled(
+                    data: bytes,
+                    maxDim: _sourceMaxDim,
+                    outW: out _texWidth,
+                    outH: out _texHeight
+                );
+        }
+    }
+
+    /// <summary>
+    ///     A texture is GPU memory plus a CPU copy; an image that left the tree (a rebuilt Watch,
+    ///     a closed window) would otherwise hold it until someone remembered to Dispose it — the
+    ///     leak a long-running shell finds first. Released here when the source is known, and
+    ///     reloaded from it on the next mount.
+    /// </summary>
+    protected override void OnUnmount()
+    {
+        if (_borrowed || (_sourcePath is null && _sourceBytes is null)) return;
+        _loadCts?.Cancel();
+        ClearTexture();
+    }
+
+    protected override void OnMount()
+    {
+        if (TextureHandle == 0 && !_disposed &&
+            (_sourcePath is not null || _sourceBytes is not null)) LoadFromSource();
+    }
+
+    /// <summary>
+    ///     Wrap an already-uploaded engine texture (e.g. the compositor backdrop). The caller owns
+    ///     the handle and its lifetime — this Image does not release it on unmount or dispose.
+    /// </summary>
+    public static Image FromTextureHandle(ulong handle, uint width, uint height) =>
+        new(handle: handle, width: width, height: height) { _borrowed = true };
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
@@ -253,7 +252,7 @@ public sealed class Image : Widget, IDisposable
     public static Image FromBytes(ReadOnlySpan<byte> data, uint maxDim = 0)
     {
         var image = new Image {
-            _sourceBytes = data.ToArray(),
+            _sourceBytes = [.. data],
             _sourceMaxDim = maxDim,
         };
         image.LoadFromSource();
@@ -436,10 +435,10 @@ public sealed class Image : Widget, IDisposable
     /// </summary>
     public void SetTexture(ulong textureHandle, uint width, uint height)
     {
-        if (textureHandle == _textureHandle) return;
-        if (_textureHandle != 0) ZigoteEngine.ReleaseTexture(_textureHandle);
+        if (textureHandle == TextureHandle) return;
+        if (TextureHandle != 0) ZigoteEngine.ReleaseTexture(TextureHandle);
 
-        _textureHandle = textureHandle;
+        TextureHandle = textureHandle;
         _texWidth = width;
         _texHeight = height;
         MarkNeedsLayout();
@@ -456,8 +455,8 @@ public sealed class Image : Widget, IDisposable
     /// </summary>
     public void ForgetTexture()
     {
-        if (_textureHandle == 0) return;
-        _textureHandle = 0;
+        if (TextureHandle == 0) return;
+        TextureHandle = 0;
         _texWidth = _texHeight = 0;
         MarkNeedsLayout();
     }
@@ -465,16 +464,16 @@ public sealed class Image : Widget, IDisposable
     /// <summary>Release the current texture and paint nothing. UI thread only.</summary>
     public void ClearTexture()
     {
-        if (_textureHandle == 0) return;
-        ZigoteEngine.ReleaseTexture(_textureHandle);
-        _textureHandle = 0;
+        if (TextureHandle == 0) return;
+        ZigoteEngine.ReleaseTexture(TextureHandle);
+        TextureHandle = 0;
         _texWidth = _texHeight = 0;
         MarkNeedsLayout();
     }
 
     public override Size Measure(Constraints c)
     {
-        if (_textureHandle == 0 || _texWidth == 0 || _texHeight == 0)
+        if (TextureHandle == 0 || _texWidth == 0 || _texHeight == 0)
         {
             _size = c.Constrain(PlaceholderSize ?? Size.Zero);
             return _size;
@@ -512,14 +511,14 @@ public sealed class Image : Widget, IDisposable
 
     public override void Paint(PaintList paint)
     {
-        if (_textureHandle != 0)
+        if (TextureHandle != 0)
         {
             paint.AddImage(
                 bounds: Bounds,
                 pixelWidth: (int)_texWidth,
                 pixelHeight: (int)_texHeight,
                 pixels: null,
-                cacheKey: _textureHandle
+                cacheKey: TextureHandle
             );
         }
     }

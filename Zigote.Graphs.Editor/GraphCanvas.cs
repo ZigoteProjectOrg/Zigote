@@ -1,9 +1,11 @@
+using System.Globalization;
 using Zigote.Core;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
 using Zigote.Graphs.Commands;
 using Zigote.Graphs.Core;
 using Zigote.Graphs.Registry;
+using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -35,11 +37,27 @@ public sealed class GraphCanvas : Widget
     private const float ZoomLodFull = 0.45f; // below: skip property rows and pin labels
     private const float ZoomLodMin = 0.22f; // below: skip pins too; only header + name
 
+    private const float PanPerScroll = 40f; // the ScrollView's speed, so the canvas feels the same
+
+    // Copied nodes. Process-wide so a copy in one graph pastes into another of the same domain.
+    private static Snapshot? _clipboard;
+    private readonly Dictionary<Guid, (float X, float Y)> _dragOrigins = [];
+    private readonly HashSet<Guid> _invalidEdges = [];
+
     // ── State ─────────────────────────────────────────────────────────────────
 
     private readonly GraphEditorState _state;
     private readonly ThemeData _theme;
+    private float _autoPanX, _autoPanY, _autoZoom;
+
+    // Marquee: what was selected before it started (kept when Shift/Ctrl extends the selection).
+    private Guid[] _boxBase = [];
     private float _boxStartX, _boxStartY, _boxEndX, _boxEndY;
+
+    // A plain press on one node of a multi-selection keeps the group for a drag; if no drag
+    // follows, the release narrows the selection to that node.
+    private Guid? _collapseOnRelease;
+    private string? _connectionError;
 
     // While dragging a wire: the pin currently under the cursor + whether it's a legal target, and the
     // nearest compatible pin the wire snaps to (green beacons mark all valid targets, red marks invalid).
@@ -57,22 +75,25 @@ public sealed class GraphCanvas : Widget
     private float _dragPinWorldX, _dragPinWorldY;
     private GraphPinEndpoint? _dragSnapPin;
     private float _editDragStartX, _editDragStartFloat;
-    private PropEditTarget? _editingProp;
-    private GraphValue _editOriginalValue = GraphValue.Null();
-    private InlineTextField? _textEditor;
-    private string? _textError;
-    private PropEditTarget? _textTarget;
-    private Offset _editPress;
     private bool _editMoved;
+    private GraphValue _editOriginalValue = GraphValue.Null();
+    private Offset _editPress;
+    private PropEditTarget? _editingProp;
+
+    private Size _framedSize;
 
     // Edge hover
     private Guid? _hoveredEdgeId;
+
+    // While one unconnected node is dragged over a cable: where releasing would splice it in.
+    private (GraphEdge Edge, string In, string Out)? _insert;
 
     // Box selection
     private bool _isBoxSelecting;
 
     // RMB pan + context menu
     private bool _isPanning;
+    private Modifiers _modifiers;
     private float _mousePinWorldX, _mousePinWorldY;
 
     // Mouse tracking (screen coords) — used for zoom-toward-cursor
@@ -88,42 +109,23 @@ public sealed class GraphCanvas : Widget
 
     // Pan/zoom
     private float _panX, _panY;
+    private int _pasteCount;
+
+    // The existing cable being re-plugged: picked up by dragging from its input end.
+    private GraphEdge? _rerouteEdge;
 
     // Node resize (2-axis)
     private Guid? _resizeNodeId;
     private float _resizeStartWorldX, _resizeStartWidth;
     private float _resizeStartWorldY, _resizeStartHeight;
     private Size _size;
-    private float _zoom = 1f;
-    private Modifiers _modifiers;
-    private string? _connectionError;
-    private readonly HashSet<Guid> _invalidEdges = [];
-
-    // Marquee: what was selected before it started (kept when Shift/Ctrl extends the selection).
-    private Guid[] _boxBase = [];
-
-    // A plain press on one node of a multi-selection keeps the group for a drag; if no drag
-    // follows, the release narrows the selection to that node.
-    private Guid? _collapseOnRelease;
-
-    // The existing cable being re-plugged: picked up by dragging from its input end.
-    private GraphEdge? _rerouteEdge;
-
-    // While one unconnected node is dragged over a cable: where releasing would splice it in.
-    private (GraphEdge Edge, string In, string Out)? _insert;
-
-    /// <summary>Stands in for <c>App.CurrentScrollPrecise</c> when the canvas has no app (tests).</summary>
-    public bool PreciseScroll { get; set; }
+    private InlineTextField? _textEditor;
+    private string? _textError;
+    private PropEditTarget? _textTarget;
 
     // Tick of the last scroll event the native layer marked as precise (see OnScroll).
     private long _trackpadTick = -1000; // "long ago", without overflowing the subtraction
-
-    // Copied nodes. Process-wide so a copy in one graph pastes into another of the same domain.
-    private static Snapshot? _clipboard;
-    private int _pasteCount;
-    private readonly Dictionary<Guid, (float X, float Y)> _dragOrigins = [];
-    public GraphPinEndpoint? SearchConnection { get; private set; }
-    public Offset SearchAnchor { get; private set; }
+    private float _zoom = 1f;
 
 
     public GraphCanvas(GraphEditorState state, ThemeData theme)
@@ -145,6 +147,12 @@ public sealed class GraphCanvas : Widget
         OnCompileChanged(); // seed from any compile already done
     }
 
+    /// <summary>Stands in for <c>App.CurrentScrollPrecise</c> when the canvas has no app (tests).</summary>
+    public bool PreciseScroll { get; set; }
+
+    public GraphPinEndpoint? SearchConnection { get; private set; }
+    public Offset SearchAnchor { get; private set; }
+
     /// <summary>
     ///     Whether the bottom-right minimap overview is drawn. Off by default; toggled from the
     ///     toolbar.
@@ -162,6 +170,12 @@ public sealed class GraphCanvas : Widget
     private Modifiers Mods => Owner is { } app ? app.CurrentModifiers : _modifiers;
 
     private bool Additive => Mods.HasFlag(Modifiers.Shift) || Mods.HasCommand();
+
+    /// <summary>
+    ///     Fit the view to the graph when the canvas first gets a size, and again on resize until
+    ///     the user pans or zooms. Off by default: a host that positions the view itself keeps it.
+    /// </summary>
+    public bool AutoFrame { get; set; }
 
     private float NodeWidth(NodeLayoutData layout) =>
         MathF.Max(x: layout.Width > 0 ? layout.Width : NodeMinWidth, y: NodeMinWidth);
@@ -223,15 +237,6 @@ public sealed class GraphCanvas : Widget
             color: color,
             width: width
         );
-
-    /// <summary>
-    ///     Fit the view to the graph when the canvas first gets a size, and again on resize until
-    ///     the user pans or zooms. Off by default: a host that positions the view itself keeps it.
-    /// </summary>
-    public bool AutoFrame { get; set; }
-
-    private Size _framedSize;
-    private float _autoPanX, _autoPanY, _autoZoom;
 
     public override void Layout(Offset origin)
     {
@@ -332,7 +337,7 @@ public sealed class GraphCanvas : Widget
             paint.AddText(
                 text: hint,
                 baselineX: Bounds.X +
-                           ((Bounds.Width - UI.TextShaping.TextMeasure.Width(
+                           ((Bounds.Width - TextMeasure.Width(
                                text: hint,
                                fontSize: fs
                            )) / 2f),
@@ -466,6 +471,7 @@ public sealed class GraphCanvas : Widget
         var color = _theme.OnSurface.WithAlpha(0.10f);
         for (float x = startX; x < Bounds.Right; x += spacing)
         for (float y = startY; y < Bounds.Bottom; y += spacing)
+        {
             paint.AddRect(
                 bounds: new Rect(
                     x: x - 0.8f,
@@ -476,6 +482,7 @@ public sealed class GraphCanvas : Widget
                 color: color,
                 radius: 0.8f
             );
+        }
     }
 
     // ── Node height helpers ───────────────────────────────────────────────────
@@ -516,8 +523,10 @@ public sealed class GraphCanvas : Widget
         foreach (var p in def.Properties)
         {
             if (p.Editor == PropertyDefinition.BypassEditor && p.Type == GraphTypeRef.Bool)
+            {
                 return node.Properties.TryGetValue(key: p.Id, value: out var v) &&
                        v.Kind == GraphValueKind.Bool && v.AsBool();
+            }
         }
 
         return false;
@@ -531,11 +540,14 @@ public sealed class GraphCanvas : Widget
     private static float EffectiveHeight(NodeLayoutData layout, NodeDefinition? def)
     {
         if (layout.IsCollapsed)
+        {
             return MathF.Max(
                 x: NodeHeaderH,
                 y: 12f + (Math.Max(val1: def?.Inputs.Count ?? 0, val2: def?.Outputs.Count ?? 0) *
                           12f)
             );
+        }
+
         float min = TotalBodyH(def);
         return layout.Height > min ? layout.Height : min;
     }
@@ -1034,7 +1046,7 @@ public sealed class GraphCanvas : Widget
             float f = val.AsFloat();
             return f.ToString(
                 format: "0.###",
-                provider: System.Globalization.CultureInfo.InvariantCulture
+                provider: CultureInfo.InvariantCulture
             );
         }
 
@@ -1447,6 +1459,7 @@ public sealed class GraphCanvas : Widget
             }
 
             if (prop.Type == GraphTypeRef.String && prop.Editor is null)
+            {
                 BeginTextEdit(
                     new PropEditTarget(
                         NodeId: nid,
@@ -1455,6 +1468,8 @@ public sealed class GraphCanvas : Widget
                         ScreenRect: default
                     )
                 );
+            }
+
             // A property click selects its node, rather than starting a node drag.
             return;
         }
@@ -1532,7 +1547,7 @@ public sealed class GraphCanvas : Widget
         }
 
         // 4) Empty space → box select. Shift/Ctrl keeps what is selected and adds to it.
-        _boxBase = Additive ? _state.SelectedNodes.ToArray() : [];
+        _boxBase = Additive ? [.. _state.SelectedNodes] : [];
         if (!Additive) _state.ClearSelection();
         _isBoxSelecting = true;
         _boxStartX = _boxEndX = point.X;
@@ -1769,6 +1784,7 @@ public sealed class GraphCanvas : Widget
             }
 
             if (final.ToString() != _editOriginalValue.ToString())
+            {
                 _state.Commands.Execute(
                     new ChangeNodePropertyCommand(
                         nodeId: editTarget.NodeId,
@@ -1777,6 +1793,8 @@ public sealed class GraphCanvas : Widget
                         newValue: final
                     )
                 );
+            }
+
             MarkNeedsPaint();
             return;
         }
@@ -1828,7 +1846,7 @@ public sealed class GraphCanvas : Widget
                 );
             }
 
-            if (commands.Count > 0) _state.Commands.Execute(new GraphGesture(commands.ToArray()));
+            if (commands.Count > 0) _state.Commands.Execute(new GraphGesture([.. commands]));
             else if (_collapseOnRelease == _dragNodeId) _state.Select(_dragNodeId);
             _dragOrigins.Clear();
         }
@@ -1963,8 +1981,6 @@ public sealed class GraphCanvas : Widget
 
         ZoomAt(factor: 1f + (dy * 0.08f), sx: _mouseX, sy: _mouseY);
     }
-
-    private const float PanPerScroll = 40f; // the ScrollView's speed, so the canvas feels the same
 
     /// <summary>Scales the view by <paramref name="factor" />, keeping the screen point fixed.</summary>
     private void ZoomAt(float factor, float sx, float sy)
@@ -2289,12 +2305,14 @@ public sealed class GraphCanvas : Widget
         for (int i = 0; i < def.Inputs.Count; i++)
         {
             if (def.Inputs[i].Id == ep.PinId)
+            {
                 return (layout.X, PinY(
                     layout: layout,
                     def: def,
                     index: i,
                     output: false
                 ));
+            }
         }
 
         for (int i = 0; i < def.Outputs.Count; i++)
@@ -2500,7 +2518,7 @@ public sealed class GraphCanvas : Widget
         var ids = _state.SelectedNodes.ToArray();
         if (ids.Length == 0) return;
         _state.Commands.Execute(
-            new GraphGesture(ids.Select(id => (IGraphCommand)new DeleteNodeCommand(id)).ToArray())
+            new GraphGesture([.. ids.Select(id => (IGraphCommand)new DeleteNodeCommand(id))])
         );
     }
 
@@ -2511,13 +2529,6 @@ public sealed class GraphCanvas : Widget
         if (cut.Length > 0) _state.Commands.Execute(new GraphGesture(cut));
         _hoveredEdgeId = null;
     }
-
-    /// <summary>Nodes lifted off a graph: enough to recreate them, and the cables between them.</summary>
-    private sealed record Snapshot(
-        string DomainId,
-        (string DefinitionId, KeyValuePair<string, GraphValue>[] Properties, float X, float Y, float
-            Width, float Height, bool Collapsed)[] Nodes,
-        (int From, string FromPin, int To, string ToPin)[] Edges);
 
     private Snapshot? Capture()
     {
@@ -2532,18 +2543,23 @@ public sealed class GraphCanvas : Widget
         );
         return new Snapshot(
             DomainId: _state.Graph.DomainId,
-            Nodes: nodes.Select(n =>
-                {
-                    var layout = _state.Graph.EditorData.NodeLayouts[n.Id];
-                    return (n.DefinitionId, n.Properties.ToArray(), layout.X, layout.Y,
-                        layout.Width,
-                        layout.Height, layout.IsCollapsed);
-                }
-            ).ToArray(),
-            Edges: _state.Graph.Edges
-                .Where(e => index.ContainsKey(e.From.NodeId) && index.ContainsKey(e.To.NodeId))
-                .Select(e => (index[e.From.NodeId], e.From.PinId, index[e.To.NodeId], e.To.PinId))
-                .ToArray()
+            Nodes: [
+                .. nodes.Select(n =>
+                    {
+                        var layout = _state.Graph.EditorData.NodeLayouts[n.Id];
+                        return (n.DefinitionId, n.Properties.ToArray(), layout.X, layout.Y,
+                            layout.Width,
+                            layout.Height, layout.IsCollapsed);
+                    }
+                ),
+            ],
+            Edges: [
+                .. _state.Graph.Edges
+                    .Where(e => index.ContainsKey(e.From.NodeId) && index.ContainsKey(e.To.NodeId))
+                    .Select(e => (index[e.From.NodeId], e.From.PinId, index[e.To.NodeId],
+                        e.To.PinId)
+                    ),
+            ]
         );
     }
 
@@ -2581,7 +2597,7 @@ public sealed class GraphCanvas : Widget
             }
         }
 
-        _state.Commands.Execute(new GraphGesture(commands.ToArray()));
+        _state.Commands.Execute(new GraphGesture([.. commands]));
         // AddNodeCommand seeds a default card; carry the original's size and fold state over.
         for (int i = 0; i < created.Length; i++)
         {
@@ -2674,12 +2690,14 @@ public sealed class GraphCanvas : Widget
         foreach (var id in _state.SelectedNodes)
         {
             if (_state.Graph.EditorData.NodeLayouts.TryGetValue(key: id, value: out var layout))
+            {
                 commands.Add(
                     new MoveNodeCommand(nodeId: id, newX: layout.X + dx, newY: layout.Y + dy)
                 );
+            }
         }
 
-        if (commands.Count > 0) _state.Commands.Execute(new GraphGesture(commands.ToArray()));
+        if (commands.Count > 0) _state.Commands.Execute(new GraphGesture([.. commands]));
     }
 
     // ── Color helpers ─────────────────────────────────────────────────────────
@@ -2826,7 +2844,7 @@ public sealed class GraphCanvas : Widget
                 OnSelect: DeleteSelection
             )
         );
-        new ContextMenu(items.ToArray()).ShowAt(screenPos);
+        new ContextMenu([.. items]).ShowAt(screenPos);
     }
 
     private void ShowAddNodeContextMenu(float wx, float wy, Offset screenPos)
@@ -2997,7 +3015,7 @@ public sealed class GraphCanvas : Widget
                 : target.Def.Type == GraphTypeRef.Float
                     ? Math.Round(value: value.AsFloat(), digits: Decimals(target.Def)).ToString(
                         format: "0.######",
-                        provider: System.Globalization.CultureInfo.InvariantCulture
+                        provider: CultureInfo.InvariantCulture
                     )
                     : value.ToString(),
             Cancel = () => FinishTextEdit(false),
@@ -3058,9 +3076,9 @@ public sealed class GraphCanvas : Widget
     private static bool TryParseNumber(string text, out float number) =>
         float.TryParse(
             s: text.Trim().Replace(oldChar: ',', newChar: '.'),
-            style: System.Globalization.NumberStyles.AllowLeadingSign |
-                   System.Globalization.NumberStyles.AllowDecimalPoint,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
+            style: NumberStyles.AllowLeadingSign |
+                   NumberStyles.AllowDecimalPoint,
+            provider: CultureInfo.InvariantCulture,
             result: out number
         ) && float.IsFinite(number);
 
@@ -3083,7 +3101,7 @@ public sealed class GraphCanvas : Widget
         if (!IsNumeric(def) || text.Length == 0) return null;
         if (!TryParseNumber(text: text, number: out float number))
             return text is "-" or "." or "," or "-." ? null : "Not a number · Esc cancels";
-        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var inv = CultureInfo.InvariantCulture;
         if (def.Min is { } min && number < min)
             return $"Below the minimum of {min.ToString(inv)} · Enter clamps";
         if (def.Max is { } max && number > max)
@@ -3130,6 +3148,7 @@ public sealed class GraphCanvas : Widget
             var old = node.Properties.GetValueOrDefault(target.PropId) ?? GraphValue.Null();
             var effective = old.IsNull ? target.Def.DefaultValue : old;
             if (value.ToString() != effective.ToString())
+            {
                 _state.Commands.Execute(
                     new ChangeNodePropertyCommand(
                         nodeId: target.NodeId,
@@ -3138,41 +3157,11 @@ public sealed class GraphCanvas : Widget
                         newValue: value
                     )
                 );
+            }
         }
 
         if (!losingFocus) AppInstance.Active?.RequestFocus(this);
         MarkNeedsLayout();
-    }
-
-    private sealed class InlineTextField : AdwTextField
-    {
-        public Action? Cancel { get; init; }
-
-        /// <summary>Typed characters that get in; null lets everything through.</summary>
-        public Func<char, bool>? Accept { get; init; }
-
-        public override void OnTextInput(string text)
-        {
-            if (Accept is { } accept)
-                text = new string(text.Where(accept).Select(ch => ch == ',' ? '.' : ch).ToArray());
-            if (text.Length > 0) base.OnTextInput(text);
-        }
-
-        public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
-        {
-            if (down && scancode == 41)
-            {
-                Cancel?.Invoke();
-                return;
-            }
-
-            base.OnKey(
-                keyChar: keyChar,
-                scancode: scancode,
-                down: down,
-                mods: mods
-            );
-        }
     }
 
     private void RestoreProperty(GraphNode node, string key)
@@ -3224,6 +3213,44 @@ public sealed class GraphCanvas : Widget
             _state.SetSelection(_boxBase); // an abandoned marquee selects nothing new
         _isBoxSelecting = false;
         InvalidateView();
+    }
+
+    /// <summary>Nodes lifted off a graph: enough to recreate them, and the cables between them.</summary>
+    private sealed record Snapshot(
+        string DomainId,
+        (string DefinitionId, KeyValuePair<string, GraphValue>[] Properties, float X, float Y, float
+            Width, float Height, bool Collapsed)[] Nodes,
+        (int From, string FromPin, int To, string ToPin)[] Edges);
+
+    private sealed class InlineTextField : AdwTextField
+    {
+        public Action? Cancel { get; init; }
+
+        /// <summary>Typed characters that get in; null lets everything through.</summary>
+        public Func<char, bool>? Accept { get; init; }
+
+        public override void OnTextInput(string text)
+        {
+            if (Accept is { } accept)
+                text = new string(text.Where(accept).Select(ch => ch == ',' ? '.' : ch).ToArray());
+            if (text.Length > 0) base.OnTextInput(text);
+        }
+
+        public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+        {
+            if (down && scancode == 41)
+            {
+                Cancel?.Invoke();
+                return;
+            }
+
+            base.OnKey(
+                keyChar: keyChar,
+                scancode: scancode,
+                down: down,
+                mods: mods
+            );
+        }
     }
 
     // Inline property editing

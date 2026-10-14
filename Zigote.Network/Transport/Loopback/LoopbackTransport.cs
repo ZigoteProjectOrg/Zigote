@@ -104,7 +104,7 @@ public sealed class LoopbackTransport : ITransport
     {
         if (!_links.TryGetValue(key: connectionId, value: out var link)) return;
 
-        byte[] copy = payload.ToArray();
+        byte[] copy = [.. payload];
         link.Stats.PacketsSent++;
         link.Stats.BytesSent += copy.Length;
         link.Peer._links.TryGetValue(key: link.RemoteConnId, value: out var peerLink);

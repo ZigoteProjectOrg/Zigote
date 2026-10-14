@@ -55,10 +55,10 @@ public class PinchGestureTests
                 Animated = false,
                 Marks = {
                     LineMark.Of(
-                        data: new[] {
+                        data: [
                             (0.0, 0.0),
                             (1.0, 1.0),
-                        },
+                        ],
                         x: d => d.Item1,
                         y: d => d.Item2
                     ),

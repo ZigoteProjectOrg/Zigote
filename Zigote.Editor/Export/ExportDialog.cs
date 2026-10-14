@@ -54,7 +54,7 @@ public static class ExportDialog
         }
 
         string hostRid = RuntimeInformation.RuntimeIdentifier;
-        bool[] platformSelected = Platforms.Select(p => p.Rid == hostRid).ToArray();
+        bool[] platformSelected = [.. Platforms.Select(p => p.Rid == hostRid)];
         if (!platformSelected.Any(s => s)) platformSelected[0] = true;
         bool jitSelected = true;
         bool aotSelected = false;

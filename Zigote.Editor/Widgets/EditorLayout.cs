@@ -8,13 +8,10 @@ using Zigote.Editor.Panels.AssetPreview;
 using Zigote.Editor.Scene;
 using Zigote.Editor.Settings;
 using Zigote.Editor.Shading;
-using Zigote.Graphs.Core;
 using Zigote.Graphs.Editor;
-using Zigote.Graphs.Registry;
 using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Host;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -35,6 +32,29 @@ namespace Zigote.Editor.Widgets;
 /// </summary>
 public sealed class EditorLayout : Widget
 {
+    // ── Command palette + shortcuts ─────────────────────────────────────────────
+
+    private const string PaletteShortcut = "⌘⇧P";
+
+    // Dock panels that get ⌘1…⌘n, in that order.
+    private static readonly string[] PanelShortcutOrder =
+        ["hierarchy", "viewport", "inspector", "browser", "console"];
+
+    // Viewport keys are handled by the focused panel, not the menu — listed here so the
+    // shortcuts window still documents them. GTK accelerator syntax (AdwShortcutLabel).
+    private static readonly (string Title, string Accel)[] ViewportShortcuts = [
+        ("Move gizmo", "w"),
+        ("Rotate gizmo", "e"),
+        ("Scale gizmo", "r"),
+        ("Frame selection", "f"),
+        ("Frame all", "<Shift>f"),
+        ("Orbit / fly camera", "c"),
+        ("Fly: move", "w a s d"),
+        ("Fly: down / up", "q e"),
+        ("Delete node", "Delete"),
+        ("Rename node (Hierarchy)", "F2"),
+    ];
+
     private readonly EditorActions _actions;
     private readonly App _app;
     private readonly Widget _root;
@@ -256,29 +276,6 @@ public sealed class EditorLayout : Widget
         return [file, edit, view, run, help];
     }
 
-    // ── Command palette + shortcuts ─────────────────────────────────────────────
-
-    private const string PaletteShortcut = "⌘⇧P";
-
-    // Dock panels that get ⌘1…⌘n, in that order.
-    private static readonly string[] PanelShortcutOrder =
-        ["hierarchy", "viewport", "inspector", "browser", "console"];
-
-    // Viewport keys are handled by the focused panel, not the menu — listed here so the
-    // shortcuts window still documents them. GTK accelerator syntax (AdwShortcutLabel).
-    private static readonly (string Title, string Accel)[] ViewportShortcuts = [
-        ("Move gizmo", "w"),
-        ("Rotate gizmo", "e"),
-        ("Scale gizmo", "r"),
-        ("Frame selection", "f"),
-        ("Frame all", "<Shift>f"),
-        ("Orbit / fly camera", "c"),
-        ("Fly: move", "w a s d"),
-        ("Fly: down / up", "q e"),
-        ("Delete node", "Delete"),
-        ("Rename node (Hierarchy)", "F2"),
-    ];
-
     /// <summary>Every project-relative file under the asset root, capped — the palette's "Asset" rows.</summary>
     private IEnumerable<string> AssetFiles()
     {
@@ -419,9 +416,10 @@ public sealed class EditorLayout : Widget
         dialog.Add(
             new AdwShortcutsSection(
                 title: "Viewport",
-                items: ViewportShortcuts
-                    .Select(v => new AdwShortcutsItem(title: v.Title, accelerator: v.Accel))
-                    .ToArray()
+                items: [
+                    .. ViewportShortcuts
+                        .Select(v => new AdwShortcutsItem(title: v.Title, accelerator: v.Accel)),
+                ]
             )
         );
         dialog.Show();
@@ -963,7 +961,7 @@ public sealed class EditorLayout : Widget
         var nodeKinds = NodeKinds();
         var addBtn = new AdwSplitButton(label: "Add", onPressed: nodeKinds[0].Add) {
             IconName = Icons.Add,
-            MenuItems = nodeKinds.Select(k => k.Label).ToArray(),
+            MenuItems = [.. nodeKinds.Select(k => k.Label)],
             OnMenuSelected = i => nodeKinds[i].Add(),
         };
 

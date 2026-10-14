@@ -72,7 +72,7 @@ public sealed class ScriptMetadata
             );
         }
 
-        return result.ToArray();
+        return [.. result];
     }
 
     private static ExportedFieldKind? ResolveKind(Type t)

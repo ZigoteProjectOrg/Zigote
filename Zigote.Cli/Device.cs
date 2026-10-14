@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Zigote.Cli;
@@ -21,6 +22,19 @@ namespace Zigote.Cli;
 /// </summary>
 public static class Device
 {
+    /// <summary>
+    ///     The first SDK band whose <c>dotnet watch</c> can reach an app on a phone.
+    ///     <para>
+    ///         Both halves of device hot reload have to be present. The Android workload has shipped
+    ///         its half for a while (Microsoft.Android.Sdk.HotReload.targets: startup hook, websocket
+    ///         endpoint, <c>adb reverse</c>), but it is driven entirely by
+    ///         <c>@(RuntimeEnvironmentVariable)</c> items that only a newer dotnet-watch writes — see
+    ///         dotnet/sdk#52581. On an older SDK `dotnet watch` still builds, deploys and runs; it
+    ///         simply never sends a delta, and nothing anywhere says so.
+    ///     </para>
+    /// </summary>
+    private const string MinHotReloadSdk = "10.0.300";
+
     public static int Run(DeviceVerb options)
     {
         // adb is optional for `list`: a Mac with only simulators booted has no reason to have the
@@ -50,30 +64,6 @@ public static class Device
         };
     }
 
-    // ── devices ───────────────────────────────────────────────────────────────
-
-    /// <summary>Which toolchain a device is reached through — they share nothing but the picker.</summary>
-    internal enum Kind
-    {
-        Android,
-        IosSimulator,
-    }
-
-    /// <summary>One device, as <c>adb devices -l</c> or <c>simctl</c> reports it.</summary>
-    internal readonly record struct Attached(
-        string Serial,
-        string State,
-        string Model,
-        Kind Kind = Kind.Android
-    )
-    {
-        public bool Ready => State == "device";
-
-        public override string ToString() =>
-            (Ready ? $"{Serial}  {Model}" : $"{Serial}  {Model} ({State})") +
-            (Kind == Kind.IosSimulator ? "  (simulator)" : "");
-    }
-
     private static int List(string? adb, bool json)
     {
         var devices = adb is null
@@ -89,7 +79,7 @@ public static class Device
             foreach (var device in devices)
             {
                 Console.WriteLine(
-                    System.Text.Json.JsonSerializer.Serialize(
+                    JsonSerializer.Serialize(
                         new {
                             id = device.Serial,
                             name = device.Model,
@@ -204,17 +194,6 @@ public static class Device
             ),
         };
 
-    // ── run ───────────────────────────────────────────────────────────────────
-
-    /// <summary>What a launch needs, independent of which verb asked for it.</summary>
-    internal readonly record struct LaunchSpec(
-        string Directory,
-        bool Release,
-        bool NoReload,
-        bool Debug,
-        int DebugPort
-    );
-
     internal static int Launch(Attached device, LaunchSpec options, string adb)
     {
         string head = Projects.RequireHead(
@@ -278,9 +257,11 @@ public static class Device
 
         Console.WriteLine($"  {device.Model} ({device.Serial})  →  {rid}");
         if (reload)
+        {
             Console.WriteLine(
                 "  hot reload on: edit a Build() and save — the tree re-runs in place."
             );
+        }
         else if (!options.NoReload && !options.Release)
         {
             // Said out loud rather than silently degraded: an app that quietly ignores every delta
@@ -306,19 +287,6 @@ public static class Device
 
         return Shell.Wait(start);
     }
-
-    /// <summary>
-    ///     The first SDK band whose <c>dotnet watch</c> can reach an app on a phone.
-    ///     <para>
-    ///         Both halves of device hot reload have to be present. The Android workload has shipped
-    ///         its half for a while (Microsoft.Android.Sdk.HotReload.targets: startup hook, websocket
-    ///         endpoint, <c>adb reverse</c>), but it is driven entirely by
-    ///         <c>@(RuntimeEnvironmentVariable)</c> items that only a newer dotnet-watch writes — see
-    ///         dotnet/sdk#52581. On an older SDK `dotnet watch` still builds, deploys and runs; it
-    ///         simply never sends a delta, and nothing anywhere says so.
-    ///     </para>
-    /// </summary>
-    private const string MinHotReloadSdk = "10.0.300";
 
     private static bool SupportsDeviceHotReload(out string version)
     {
@@ -418,7 +386,7 @@ public static class Device
     ///     installing the Android SDK does not put platform-tools on PATH on any of the three hosts.
     /// </summary>
     internal static List<Attached> ReadyDevices(string adb) =>
-        Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"])).Where(d => d.Ready).ToList();
+        [.. Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"])).Where(d => d.Ready)];
 
     /// <summary>adb if this machine has one, null if it does not — `run` falls back to desktop.</summary>
     internal static string? TryFindAdb()
@@ -475,4 +443,39 @@ public static class Device
             "`zigote doctor` checks the rest of the toolchain too."
         );
     }
+
+    // ── devices ───────────────────────────────────────────────────────────────
+
+    /// <summary>Which toolchain a device is reached through — they share nothing but the picker.</summary>
+    internal enum Kind
+    {
+        Android,
+        IosSimulator,
+    }
+
+    /// <summary>One device, as <c>adb devices -l</c> or <c>simctl</c> reports it.</summary>
+    internal readonly record struct Attached(
+        string Serial,
+        string State,
+        string Model,
+        Kind Kind = Kind.Android
+    )
+    {
+        public bool Ready => State == "device";
+
+        public override string ToString() =>
+            (Ready ? $"{Serial}  {Model}" : $"{Serial}  {Model} ({State})") +
+            (Kind == Kind.IosSimulator ? "  (simulator)" : "");
+    }
+
+    // ── run ───────────────────────────────────────────────────────────────────
+
+    /// <summary>What a launch needs, independent of which verb asked for it.</summary>
+    internal readonly record struct LaunchSpec(
+        string Directory,
+        bool Release,
+        bool NoReload,
+        bool Debug,
+        int DebugPort
+    );
 }

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Net;
 using System.Text.Json.Serialization.Metadata;
 using Zigote.Http.Cache;
 using Zigote.Http.Transport;
@@ -24,7 +25,10 @@ public sealed record HttpRunnerOptions
     public string UserAgent { get; init; } =
         "Zigote/1.0 (+https://github.com/ZigoteProjectOrg/Zigote)";
 
-    /// <summary>The response cache. Null disables the cache layer entirely — no key computation, no lookup.</summary>
+    /// <summary>
+    ///     The response cache. Null disables the cache layer entirely — no key computation, no
+    ///     lookup.
+    /// </summary>
     public IHttpCacheStore? Cache { get; init; }
 
     /// <summary>Where tokens come from. Null disables the auth layer.</summary>
@@ -54,7 +58,10 @@ public sealed record HttpRunnerOptions
     /// <summary>How long an open circuit stays open before one probe is let through.</summary>
     public TimeSpan BreakerCooldown { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>Opt in to HTTP/3, falling back to h2 where QUIC is blocked. Off by default (design doc §14.1).</summary>
+    /// <summary>
+    ///     Opt in to HTTP/3, falling back to h2 where QUIC is blocked. Off by default (design doc
+    ///     §14.1).
+    /// </summary>
     public bool Http3 { get; init; }
 
     /// <summary>
@@ -64,7 +71,7 @@ public sealed record HttpRunnerOptions
     ///     value. Pass a <see cref="System.Net.CookieContainer" /> when the API actually uses
     ///     cookie sessions. Ignored on browser targets, where the browser owns the jar.
     /// </summary>
-    public System.Net.CookieContainer? Cookies { get; init; }
+    public CookieContainer? Cookies { get; init; }
 
     /// <summary>
     ///     Redirects the transport follows per request, still inside the call's deadline. 0 turns
@@ -185,6 +192,7 @@ public sealed class HttpRunner : IDisposable
             )
         );
         if (options.OnLog is { } sink)
+        {
             layers.Add(
                 LoggingMiddleware.Create(
                     sink: sink,
@@ -192,8 +200,11 @@ public sealed class HttpRunner : IDisposable
                     sensitive: options.EnableSensitiveLogging
                 )
             );
+        }
+
         if (!options.Interceptors.IsDefaultOrEmpty) layers.AddRange(options.Interceptors);
         if (options.Cache is { } cache)
+        {
             layers.Add(
                 CacheMiddleware.Create(
                     store: cache,
@@ -202,14 +213,19 @@ public sealed class HttpRunner : IDisposable
                     lifetime: _lifetime.Token
                 )
             );
+        }
+
         layers.Add(DedupMiddleware.Create(options.BaseAddress));
         if (options.MaxConcurrencyPerHost > 0)
+        {
             layers.Add(
                 ConcurrencyMiddleware.Create(
                     maxPerHost: options.MaxConcurrencyPerHost,
                     baseAddress: options.BaseAddress
                 )
             );
+        }
+
         layers.Add(
             RetryMiddleware.Create(
                 time: options.Time,
@@ -220,10 +236,13 @@ public sealed class HttpRunner : IDisposable
         );
         if (options.Auth is { } auth) layers.Add(AuthMiddleware.Create(auth));
 
-        _send = Pipeline.Build(transport: transport, layers: layers.ToImmutable().AsSpan());
+        _send = Pipeline.Build(transport: transport, layers: [.. layers]);
     }
 
-    /// <summary>A runner against <paramref name="baseAddress" /> with an in-memory cache. The two-line setup.</summary>
+    /// <summary>
+    ///     A runner against <paramref name="baseAddress" /> with an in-memory cache. The two-line
+    ///     setup.
+    /// </summary>
     public HttpRunner(string baseAddress)
         : this(
             new HttpRunnerOptions {
@@ -232,7 +251,10 @@ public sealed class HttpRunner : IDisposable
             }
         ) { }
 
-    /// <summary>What this platform's transport can do. Check before asking for ranges or streaming uploads.</summary>
+    /// <summary>
+    ///     What this platform's transport can do. Check before asking for ranges or streaming
+    ///     uploads.
+    /// </summary>
     public HttpCapabilities Capabilities { get; }
 
     /// <summary>The base address relative routes resolve against.</summary>

@@ -260,8 +260,8 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             !list.Any(f => f.Extensions.Contains("*")))
             list.Add(new FileDialogFilter(name: "All Files", "*"));
 
-        _filters = list.ToArray();
-        _filterLabels = _filters.Select(LabelOf).ToArray();
+        _filters = [.. list];
+        _filterLabels = [.. _filters.Select(LabelOf)];
         _activeFilter = 0;
         _model.ExtensionFilter = _filters.Length > 0 ? NormalizedExts(_filters[0]) : null;
         return;
@@ -278,10 +278,11 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     /// <summary>Extensions without dots, or null when the filter admits everything.</summary>
     private static string[]? NormalizedExts(FileDialogFilter filter)
     {
-        string[] exts = filter.Extensions
-            .Select(e => e.TrimStart('*', '.'))
-            .Select(e => e.Length == 0 ? "*" : e)
-            .ToArray();
+        string[] exts = [
+            .. filter.Extensions
+                .Select(e => e.TrimStart('*', '.'))
+                .Select(e => e.Length == 0 ? "*" : e),
+        ];
         return exts.Contains("*") ? null : exts;
     }
 
@@ -815,8 +816,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                     return;
                 }
 
-                string[] files = selected.Where(e => !e.IsDirectory).Select(e => e.FullPath)
-                    .ToArray();
+                string[] files = [.. selected.Where(e => !e.IsDirectory).Select(e => e.FullPath)];
                 if (files.Length > 0) Complete(files);
                 break;
             }
@@ -921,7 +921,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             items.Add(new ContextMenuItem(Label: "New Folder", OnSelect: PromptNewFolder));
         }
 
-        if (items.Count > 0) new ContextMenu(items.ToArray()).ShowAt(point);
+        if (items.Count > 0) new ContextMenu([.. items]).ShowAt(point);
     }
 
     private string TrashLabel()

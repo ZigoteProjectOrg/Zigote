@@ -50,7 +50,7 @@ public abstract class PreferencesProvider
     {
         get
         {
-            lock (_registered) return _registered.ToArray();
+            lock (_registered) return [.. _registered];
         }
     }
 
@@ -62,7 +62,7 @@ public abstract class PreferencesProvider
     public void Reset()
     {
         IPreference[] snapshot;
-        lock (_registered) snapshot = _registered.ToArray();
+        lock (_registered) snapshot = [.. _registered];
 
         Reactive.Sync(() => Reactive.Batch(() =>
                 {

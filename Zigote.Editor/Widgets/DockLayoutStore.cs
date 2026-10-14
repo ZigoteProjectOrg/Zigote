@@ -13,7 +13,7 @@ public static class DockLayoutStore
     {
         return node switch {
             DockLeaf l => new DockLayoutData {
-                Panels = l.PanelIds.ToList(),
+                Panels = [.. l.PanelIds],
                 Active = l.ActiveIndex,
                 Collapsed = l.Collapsed,
             },

@@ -688,7 +688,7 @@ public abstract class Widget : ITickerProvider
     /// <summary>Allocation-free `[Child]` for single-child <see cref="GetChildren" /> overrides.</summary>
     protected IEnumerable<Widget> ChildOrEmpty(Widget? child)
     {
-        if (child is null) return Array.Empty<Widget>();
+        if (child is null) return [];
         var cached = _singleChildCache;
         if (cached is null || !ReferenceEquals(objA: cached[0], objB: child))
             _singleChildCache = cached = [child];

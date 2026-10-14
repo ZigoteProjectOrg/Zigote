@@ -255,23 +255,24 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     {
         string dir = Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts");
         if (!Directory.Exists(dir)) return [];
-        return Directory.EnumerateFiles(dir)
-            .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".ttf" or ".ttc" or ".otf")
-            .Where(f =>
-                {
-                    string name = Path.GetFileNameWithoutExtension(f);
-                    return !name.Contains(
-                               value: "MaterialIcons",
-                               comparisonType: StringComparison.OrdinalIgnoreCase
-                           ) &&
-                           !name.Contains(
-                               value: "Emoji",
-                               comparisonType: StringComparison.OrdinalIgnoreCase
-                           );
-                }
-            )
-            .OrderBy(Path.GetFileNameWithoutExtension)
-            .Select(f => (Path.GetFileNameWithoutExtension(f)!, f))
-            .ToList();
+        return [
+            .. Directory.EnumerateFiles(dir)
+                .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".ttf" or ".ttc" or ".otf")
+                .Where(f =>
+                    {
+                        string name = Path.GetFileNameWithoutExtension(f);
+                        return !name.Contains(
+                                   value: "MaterialIcons",
+                                   comparisonType: StringComparison.OrdinalIgnoreCase
+                               ) &&
+                               !name.Contains(
+                                   value: "Emoji",
+                                   comparisonType: StringComparison.OrdinalIgnoreCase
+                               );
+                    }
+                )
+                .OrderBy(Path.GetFileNameWithoutExtension)
+                .Select(f => (Path.GetFileNameWithoutExtension(f)!, f)),
+        ];
     }
 }

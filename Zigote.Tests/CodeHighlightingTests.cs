@@ -15,15 +15,16 @@ public class CodeHighlightingTests
     {
         var buf = new List<Token>();
         t.Tokenize(line: line, state: state, output: buf);
-        return buf
-            .Select(x => (
-                line.Substring(
-                    startIndex: x.Start,
-                    length: Math.Min(val1: x.Length, val2: line.Length - x.Start)
+        return [
+            .. buf
+                .Select(x => (
+                    line.Substring(
+                        startIndex: x.Start,
+                        length: Math.Min(val1: x.Length, val2: line.Length - x.Start)
+                    ),
+                    x.Kind)
                 ),
-                x.Kind)
-            )
-            .ToArray();
+        ];
     }
 
     [Fact]

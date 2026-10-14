@@ -3,13 +3,13 @@ using Zigote.Core.Engine;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
 using Zigote.Editor.Scene;
+using Zigote.Editor.Widgets;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.Editor.Widgets;
 
 namespace Zigote.Editor.Panels;
 
@@ -34,6 +34,8 @@ public sealed class SettingsPanel : Widget
     private readonly EditorState _state;
     private readonly ThemeData _theme;
     private Widget _content;
+
+    private string _filter = "";
     private ZgRenderSettings3D _s;
     private Size _size;
 
@@ -46,10 +48,6 @@ public sealed class SettingsPanel : Widget
         _s = state.Authored3D;
         _content = Build();
     }
-
-    private void Apply() => _state.Apply3D(in _s);
-
-    private string _filter = "";
 
     /// <summary>
     ///     Setting filter (case-insensitive substring over row captions and group titles) — the
@@ -66,6 +64,8 @@ public sealed class SettingsPanel : Widget
             Rebuild();
         }
     }
+
+    private void Apply() => _state.Apply3D(in _s);
 
     private void Rebuild()
     {
@@ -556,12 +556,13 @@ public sealed class SettingsPanel : Widget
             // A matching group title keeps the whole group; otherwise only its matching rows.
             if (!title.Contains(value: _filter, comparisonType: ic))
             {
-                rows = rows.Where(r => RowCaption.Of(r)?.Contains(
+                rows = [
+                    .. rows.Where(r => RowCaption.Of(r)?.Contains(
                             value: _filter,
                             comparisonType: ic
                         ) == true
-                    )
-                    .ToArray();
+                    ),
+                ];
             }
 
             if (rows.Length == 0) return;

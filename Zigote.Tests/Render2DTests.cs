@@ -809,7 +809,7 @@ public class Render2DTests
             SpriteWrap wrap)
         {
             CreateTextureCalls++;
-            LastTexturePixels = rgba.ToArray(); // spans are transient — copy
+            LastTexturePixels = [.. rgba]; // spans are transient — copy
             LastTextureWidth = width;
             return _nextHandle++;
         }
@@ -832,8 +832,8 @@ public class Render2DTests
             float viewportH)
         {
             BeginCalls++;
-            LastSceneVp = sceneViewProj.ToArray();
-            LastOverlayVp = overlayViewProj.ToArray();
+            LastSceneVp = [.. sceneViewProj];
+            LastOverlayVp = [.. overlayViewProj];
             LastViewportW = viewportW;
             LastViewportH = viewportH;
         }
@@ -848,8 +848,8 @@ public class Render2DTests
                     Shader: shader,
                     Blend: blend,
                     Stage: stage,
-                    Params: materialParams.ToArray(),
-                    Instances: instances.ToArray(),
+                    Params: [.. materialParams],
+                    Instances: [.. instances],
                     Count: count
                 )
             );

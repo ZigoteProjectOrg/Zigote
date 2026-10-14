@@ -1,6 +1,6 @@
 using System.Collections;
-using System.Collections.Frozen;
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -17,6 +17,9 @@ namespace Zigote.UI.Debug;
 /// </summary>
 public static class WidgetDebug
 {
+    /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
+    private const int MaxItems = 200;
+
     /// <summary>
     ///     Gates the per-widget M/L/P/R counter increments. Off by default: the counters are read
     ///     only by the inspector, and unconditional increments dirty a cache line on every widget
@@ -24,12 +27,9 @@ public static class WidgetDebug
     /// </summary>
     public static bool CountersEnabled;
 
-    /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
-    private const int MaxItems = 200;
-
     /// <summary>Names handled by the fixed header rows or never useful in the dump.</summary>
-    private static readonly FrozenSet<string> SkipProps = FrozenSet.ToFrozenSet(
-        source: new HashSet<string>(StringComparer.Ordinal) {
+    private static readonly FrozenSet<string> SkipProps =
+        new HashSet<string>(StringComparer.Ordinal) {
             "Bounds",
             "Focusable",
             "Focused",
@@ -48,9 +48,7 @@ public static class WidgetDebug
             "NeedsLayout",
             "NeedsPaint",
             "SemanticsId",
-        },
-        comparer: StringComparer.Ordinal
-    );
+        }.ToFrozenSet(comparer: StringComparer.Ordinal);
 
     // The debug layers walk the whole tree every frame, so the reflection fallback must not
     // re-run GetProperties (a fresh PropertyInfo[] per call) or GetValue value-type props (a box
@@ -76,14 +74,15 @@ public static class WidgetDebug
     {
         return ChildProps.GetOrAdd(
             key: type,
-            valueFactory: static t => t
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
-                .Where(p =>
-                    p.Name is not ("Items" or "Cells" or "Theme" or "ScrollParent" or "Parent")
-                )
-                .Where(p => CouldHoldWidgets(p.PropertyType))
-                .ToArray()
+            valueFactory: static t => [
+                .. t
+                    .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
+                    .Where(p =>
+                        p.Name is not ("Items" or "Cells" or "Theme" or "ScrollParent" or "Parent")
+                    )
+                    .Where(p => CouldHoldWidgets(p.PropertyType)),
+            ]
         );
     }
 
@@ -196,7 +195,7 @@ public static class WidgetDebug
             if (depth <= 0) return self ? w : null;
 
             var kids = Children(w);
-            var list = kids as IReadOnlyList<Widget> ?? kids.ToList();
+            var list = kids as IReadOnlyList<Widget> ?? [.. kids];
 
             // Topmost-first, but a sibling only *wins* if the real hit test also reaches into it.
             // A full-screen overlay layer that is currently showing nothing (AdwToastOverlay's
@@ -305,13 +304,14 @@ public static class WidgetDebug
     {
         return ObjProps.GetOrAdd(
             key: type,
-            valueFactory: static t => t
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
-                .Where(p => !typeof(Widget).IsAssignableFrom(p.PropertyType))
-                .Where(p => !typeof(IEnumerable<Widget>).IsAssignableFrom(p.PropertyType))
-                .OrderBy(p => p.DeclaringType == t ? 0 : 1)
-                .ToArray()
+            valueFactory: static t => [
+                .. t
+                    .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
+                    .Where(p => !typeof(Widget).IsAssignableFrom(p.PropertyType))
+                    .Where(p => !typeof(IEnumerable<Widget>).IsAssignableFrom(p.PropertyType))
+                    .OrderBy(p => p.DeclaringType == t ? 0 : 1),
+            ]
         );
     }
 
@@ -369,7 +369,7 @@ public static class WidgetDebug
             ? DumpProps.GetOrAdd(
                 key: o.GetType(),
                 valueFactory: static t =>
-                    MemberProps(t).Where(p => !SkipProps.Contains(p.Name)).ToArray()
+                    [.. MemberProps(t).Where(p => !SkipProps.Contains(p.Name))]
             )
             : MemberProps(o.GetType());
 

@@ -23,11 +23,13 @@ public static class VfxAssetJson
             SpawnRate = a.SpawnRate,
             Bursts = a.Bursts.Count == 0
                 ? null
-                : a.Bursts.Select(b => new[] {
-                        b.Time,
-                        b.Count,
-                    }
-                ).ToList(),
+                : [
+                    .. a.Bursts.Select(b => new[] {
+                            b.Time,
+                            b.Count,
+                        }
+                    ),
+                ],
             Shape = (int)a.Shape,
             ShapeRadius = a.ShapeRadius,
             ShapeBox = Arr(a.ShapeBoxHalfExtents),
@@ -41,7 +43,7 @@ public static class VfxAssetJson
             StartColor = Arr(a.StartColor),
             StartColorVariation = Arr(a.StartColorVariation),
             Modules =
-                a.UpdateModules.Count == 0 ? null : a.UpdateModules.Select(ModuleDto).ToList(),
+                a.UpdateModules.Count == 0 ? null : [.. a.UpdateModules.Select(ModuleDto)],
             Blend = (int)a.Blend,
             TexturePath = a.TexturePath,
             SoftParticles = a.SoftParticles,
@@ -120,15 +122,16 @@ public static class VfxAssetJson
             },
             ColorOverLifeModule c => new VfxModuleDto {
                 Kind = (int)m.Kind,
-                Stops = c.Ramp.Stops.Select(s => new[] {
+                Stops = [
+                    .. c.Ramp.Stops.Select(s => new[] {
                             s.Position,
                             s.Color.R,
                             s.Color.G,
                             s.Color.B,
                             s.Color.A,
                         }
-                    )
-                    .ToList(),
+                    ),
+                ],
             },
             SizeOverLifeModule s => new VfxModuleDto {
                 Kind = (int)m.Kind,
@@ -177,11 +180,13 @@ public static class VfxAssetJson
 
     private static List<float[]> CurveStops(FloatCurve c)
     {
-        return c.Keys.Select(k => new[] {
-                k.Position,
-                k.Value,
-            }
-        ).ToList();
+        return [
+            .. c.Keys.Select(k => new[] {
+                    k.Position,
+                    k.Value,
+                }
+            ),
+        ];
     }
 
     private static FloatCurve Curve(List<float[]> stops) =>

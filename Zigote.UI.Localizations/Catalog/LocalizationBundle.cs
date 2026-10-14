@@ -47,7 +47,7 @@ public sealed class LocalizationBundle
     public Func<string, Locale, string?>? OnMissing { get; set; }
 
     /// <summary>All locales that have a catalog, in insertion order.</summary>
-    public IReadOnlyList<Locale> Locales => _catalogs.Keys.ToList();
+    public IReadOnlyList<Locale> Locales => [.. _catalogs.Keys];
 
     public void Add(LocalizationCatalog catalog)
     {

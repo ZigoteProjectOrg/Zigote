@@ -1,6 +1,5 @@
 using Xunit;
 using Zigote.Core;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 
@@ -18,9 +17,10 @@ public class AdwSuggestionEntryTests
     {
         return new AdwSuggestionEntry(
             value: "initial",
-            suggest: _ =>
-                Enumerable.Range(start: 0, count: suggestions)
-                    .Select(i => ($"value{i}", $"display{i}")).ToList(),
+            suggest: _ => [
+                .. Enumerable.Range(start: 0, count: suggestions)
+                    .Select(i => ($"value{i}", $"display{i}")),
+            ],
             onCommit: onCommit ?? (_ => { })
         );
     }

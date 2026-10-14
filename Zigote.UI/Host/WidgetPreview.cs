@@ -150,16 +150,17 @@ public static class WidgetPreview
             .Select(found => Describe(
                     target: found.Target,
                     preview: found.Method!.GetCustomAttribute<PreviewAttribute>(),
-                    parameters: found.Method.GetParameters()
+                    parameters: found.Method?.GetParameters() ?? []
                 )
             );
 
-        return widgets.Concat(factories)
-            .DistinctBy(d => d.Target)
-            .OrderByDescending(d => d.Annotated)
-            .ThenBy(keySelector: d => d.Group ?? "", comparer: StringComparer.Ordinal)
-            .ThenBy(keySelector: d => d.Target, comparer: StringComparer.Ordinal)
-            .ToList();
+        return [
+            .. widgets.Concat(factories)
+                .DistinctBy(d => d.Target)
+                .OrderByDescending(d => d.Annotated)
+                .ThenBy(keySelector: d => d.Group ?? "", comparer: StringComparer.Ordinal)
+                .ThenBy(keySelector: d => d.Target, comparer: StringComparer.Ordinal),
+        ];
     }
 
     private static PreviewTarget Describe(
@@ -176,7 +177,7 @@ public static class WidgetPreview
             Height: preview?.Height ?? 0,
             Theme: preview?.Theme,
             Annotated: preview is not null,
-            Parameters: parameters.Select(Describe).OfType<PreviewParam>().ToList()
+            Parameters: [.. parameters.Select(Describe).OfType<PreviewParam>()]
         );
     }
 
@@ -215,8 +216,10 @@ public static class WidgetPreview
     {
         var usable = options.Where(m => Previewable(m.GetParameters())).ToList();
         if (!annotated && !usable.Any(m => m.GetCustomAttribute<PreviewAttribute>() is not null))
+        {
             if (usable.FirstOrDefault(m => m.GetParameters().Length == 0) is { } plain)
                 return plain;
+        }
 
         return usable.MaxBy(m => m.GetParameters().Length);
     }
@@ -320,12 +323,14 @@ public static class WidgetPreview
         IReadOnlyDictionary<string, string> values
     )
     {
-        return parameters.Select(p =>
-            p.Name is { } name && values.TryGetValue(key: name, value: out string? raw) &&
-            TryConvert(type: p.ParameterType, raw: raw, value: out object? converted)
-                ? converted
-                : p.DefaultValue
-        ).ToArray();
+        return [
+            .. parameters.Select(p =>
+                p.Name is { } name && values.TryGetValue(key: name, value: out string? raw) &&
+                TryConvert(type: p.ParameterType, raw: raw, value: out object? converted)
+                    ? converted
+                    : p.DefaultValue
+            ),
+        ];
     }
 
     private static MethodInfo? Factory(Type owner, string name) => Pick(
@@ -509,7 +514,8 @@ public sealed record PreviewTarget(
 ///     One editable property of a preview: a defaulted constructor or factory parameter.
 ///     <para>
 ///         <paramref name="Kind" /> is what to draw — <c>string</c>, <c>bool</c>, <c>int</c>,
-///         <c>number</c> or <c>enum</c> — rather than the .NET type name, so a previewer picks a control
+///         <c>number</c> or <c>enum</c> — rather than the .NET type name, so a previewer picks a
+///         control
 ///         without a table of type names in it.
 ///     </para>
 /// </summary>

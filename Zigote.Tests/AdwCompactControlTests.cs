@@ -1,6 +1,5 @@
 using Xunit;
 using Zigote.Core;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 
@@ -32,12 +31,12 @@ public class AdwCompactControlTests
     [Fact]
     public void EveryCompactControlResolvesTheSameHeight()
     {
-        float[] heights = new[] {
+        float[] heights = [
             Measure(new AdwEntry { Compact = true }).Height,
             Measure(new AdwDropDown(["one", "two"]) { Compact = true }).Height,
             Measure(new AdwSpinButton(value: 1, min: 0, max: 10) { Compact = true }).Height,
             Measure(new AdwButton(label: "Go", onPressed: () => { }) { Compact = true }).Height,
-        };
+        ];
 
         Assert.All(
             collection: heights,
@@ -52,12 +51,12 @@ public class AdwCompactControlTests
     [Fact]
     public void EveryRegularControlResolvesTheSameHeight()
     {
-        float[] heights = new[] {
+        float[] heights = [
             Measure(new AdwEntry()).Height,
             Measure(new AdwDropDown(["one", "two"])).Height,
             Measure(new AdwSpinButton(value: 1, min: 0, max: 10)).Height,
             Measure(new AdwButton(label: "Go", onPressed: () => { })).Height,
-        };
+        ];
 
         Assert.All(
             collection: heights,

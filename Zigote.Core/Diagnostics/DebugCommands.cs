@@ -130,7 +130,7 @@ public static class DebugCommands
         {
             try
             {
-                result = cmd.Execute(tokens.GetRange(index: 1, count: tokens.Count - 1).ToArray());
+                result = cmd.Execute([.. tokens.GetRange(index: 1, count: tokens.Count - 1)]);
             }
             catch (Exception ex)
             {

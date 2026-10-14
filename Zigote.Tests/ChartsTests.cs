@@ -1,12 +1,11 @@
-using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
-using Zigote.Core.Native;
 using Zigote.Core.Paint;
 using Zigote.UI.Charts;
 using Zigote.UI.Charts.Marks;
 using Zigote.UI.Charts.Rendering;
 using Zigote.UI.Charts.Scales;
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 
 namespace Zigote.Tests;
 
@@ -990,7 +989,7 @@ public class ChartsTests
             "linear-line" => linear,
             "area" => AreaMark.Of(data: data, x: d => d.Item1, y: d => d.Item2),
             "bars" => BarMark.Of(
-                data: data.Take(12).ToList(),
+                data: [.. data.Take(12)],
                 x: d => d.Item1,
                 y: d => d.Item2
             ),

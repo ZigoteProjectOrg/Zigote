@@ -1,5 +1,4 @@
 using Zigote.Core;
-using Zigote.Core.Events;
 using Zigote.Core.Paint;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
@@ -137,7 +136,7 @@ public sealed class CommandPalette : Widget
             if (total >= 0) scored.Add((command, total));
         }
 
-        return scored.OrderByDescending(s => s.Score).Select(s => s.Command).ToList();
+        return [.. scored.OrderByDescending(s => s.Score).Select(s => s.Command)];
     }
 
     /// <summary>
@@ -312,7 +311,7 @@ public sealed class CommandPalette : Widget
     {
         if (VisibleRows == 0) return;
         _first = Math.Clamp(
-            value: _first - ((int)MathF.Sign(dy) * 2),
+            value: _first - (MathF.Sign(dy) * 2),
             min: 0,
             max: Math.Max(val1: 0, val2: _hits.Count - VisibleRows)
         );

@@ -138,6 +138,14 @@ public static class FileDialog
     /// </summary>
     public static uint DefaultParentWindow { get; set; }
 
+    /// <summary>
+    ///     Poll the native layer once: start the next queued dialog and complete a finished one
+    ///     (on the calling thread). Zigote.UI's App calls this every frame — only hosts that run
+    ///     their own loop without App need to call it themselves.
+    /// </summary>
+    /// <summary>A dialog is open or queued, so <see cref="Pump" /> must keep being called.</summary>
+    public static bool IsBusy => _active is not null || Pending.Count > 0;
+
     /// <summary>Pick one existing file. Null result = user cancelled.</summary>
     /// <param name="acceptLabel">OK-button text (e.g. "Import"); null = the platform default.</param>
     /// <param name="showHidden">Start with hidden files visible.</param>
@@ -233,14 +241,6 @@ public static class FileDialog
         );
     }
 
-    /// <summary>
-    ///     Poll the native layer once: start the next queued dialog and complete a finished one
-    ///     (on the calling thread). Zigote.UI's App calls this every frame — only hosts that run
-    ///     their own loop without App need to call it themselves.
-    /// </summary>
-    /// <summary>A dialog is open or queued, so <see cref="Pump" /> must keep being called.</summary>
-    public static bool IsBusy => _active is not null || Pending.Count > 0;
-
     public static void Pump()
     {
         // Whoever pumps is the UI thread, by definition: this is where a completed dialog's task is
@@ -259,7 +259,7 @@ public static class FileDialog
 
         var done = _active;
         _active = null;
-        string[] paths = Array.Empty<string>();
+        string[] paths = [];
         if (status == 2)
         {
             string? joined;
@@ -427,10 +427,11 @@ public static class FileDialog
         foreach (var filter in filters)
         {
             if (filter.Extensions is not { Count: > 0 }) continue;
-            string[] exts = filter.Extensions
-                .Select(e => e.TrimStart('*', '.'))
-                .Select(e => e.Length == 0 ? "*" : e) // "*" / "*.*" → all files
-                .ToArray();
+            string[] exts = [
+                .. filter.Extensions
+                    .Select(e => e.TrimStart('*', '.'))
+                    .Select(e => e.Length == 0 ? "*" : e), // "*" / "*.*" → all files
+            ];
             string pattern = exts.Contains("*") ? "*" : string.Join(separator: ';', value: exts);
             string name = filter.Name.Replace(oldChar: '\n', newChar: ' ')
                 .Replace(oldChar: '|', newChar: ' ').Trim();

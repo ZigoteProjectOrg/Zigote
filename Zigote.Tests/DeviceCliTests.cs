@@ -64,9 +64,10 @@ public class DeviceCliTests
 /// </summary>
 public class RunTargetTests
 {
-    private static List<Device.Attached> Ready(params string[] serials) =>
-        serials.Select(s => new Device.Attached(Serial: s, State: "device", Model: $"{s}-model"))
-            .ToList();
+    private static List<Device.Attached> Ready(params string[] serials) => [
+        .. serials.Select(s => new Device.Attached(Serial: s, State: "device", Model: $"{s}-model")
+        ),
+    ];
 
     [Fact]
     public void NoDevices_MeansDesktop() => Assert.Null(Run.Resolve(spec: null, ready: []));

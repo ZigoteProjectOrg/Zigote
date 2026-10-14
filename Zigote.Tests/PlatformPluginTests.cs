@@ -163,7 +163,7 @@ public class PlatformPluginTests
     {
         PlatformChannel.Handle(
             channel: "test.bytes",
-            handler: (ReadOnlySpan<byte> payload, IBufferWriter<byte> reply) =>
+            handler: (payload, reply) =>
             {
                 reply.Write(payload);
                 reply.Write("!"u8);
@@ -179,7 +179,7 @@ public class PlatformPluginTests
             );
             Assert.Equal(
                 expected: (byte[])[1, 0, 2, 0, 3, (byte)'!'],
-                actual: reply.WrittenSpan.ToArray()
+                actual: [.. reply.WrittenSpan]
             );
         }
         finally
@@ -194,7 +194,7 @@ public class PlatformPluginTests
         // Text caller reaching a byte-shaped implementation…
         PlatformChannel.Handle(
             channel: "test.cross.bytes",
-            handler: (ReadOnlySpan<byte> payload, IBufferWriter<byte> reply) =>
+            handler: (payload, reply) =>
             {
                 reply.Write(payload);
                 return true;
@@ -214,7 +214,7 @@ public class PlatformPluginTests
             Assert.True(
                 PlatformChannel.Invoke(channel: "test.cross.text", payload: "up"u8, reply: reply)
             );
-            Assert.Equal(expected: "UP"u8.ToArray(), actual: reply.WrittenSpan.ToArray());
+            Assert.Equal(expected: [.. "UP"u8], actual: [.. reply.WrittenSpan]);
         }
         finally
         {
@@ -228,13 +228,6 @@ public class PlatformPluginTests
     {
         Assert.Equal(expected: ("7", "a\nb"), actual: PlatformChannel.ParseRequest("7\na\nb"));
         Assert.Equal(expected: ("7", ""), actual: PlatformChannel.ParseRequest("7"));
-    }
-
-    private sealed class RecordingPlugin(string name, List<string> journal) : IPlatformPlugin
-    {
-        public string Name => name;
-        public void Start() => journal.Add(name + ":start");
-        public void Stop() => journal.Add(name + ":stop");
     }
 
     [Fact]
@@ -318,5 +311,12 @@ public class PlatformPluginTests
             PluginHost.PluginStopped -= onStopped;
             PluginHost.StopAll();
         }
+    }
+
+    private sealed class RecordingPlugin(string name, List<string> journal) : IPlatformPlugin
+    {
+        public string Name => name;
+        public void Start() => journal.Add(name + ":start");
+        public void Stop() => journal.Add(name + ":stop");
     }
 }

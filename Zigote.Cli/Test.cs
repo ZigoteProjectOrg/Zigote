@@ -164,8 +164,8 @@ public static class Test
         canvas[at + 3] = a;
     }
 
-    private static List<string> TestProjects(string root) =>
-        Directory
+    private static List<string> TestProjects(string root) => [
+        .. Directory
             .EnumerateFiles(
                 path: root,
                 searchPattern: "*.csproj",
@@ -179,6 +179,6 @@ public static class Test
             )
             .Where(p => Path.GetFileNameWithoutExtension(p)
                 .EndsWith(value: "Tests", comparisonType: StringComparison.OrdinalIgnoreCase)
-            )
-            .ToList();
+            ),
+    ];
 }

@@ -122,10 +122,10 @@ public static class MeshLoader
 
         using var reader = new StreamReader(path);
         string? line;
-        char[] sep = new[] {
+        char[] sep = [
             ' ',
             '\t',
-        };
+        ];
 
         while ((line = reader.ReadLine()) is not null)
         {
@@ -231,9 +231,9 @@ public static class MeshLoader
 
         // If the file had no normals, leave them zero — the widget computes face normals.
         return new MeshData {
-            Positions = outPos.ToArray(),
-            Normals = outNorm.ToArray(),
-            Indices = outIdx.ToArray(),
+            Positions = [.. outPos],
+            Normals = [.. outNorm],
+            Indices = [.. outIdx],
         };
     }
 
@@ -331,9 +331,9 @@ public static class MeshLoader
 
         if (allIdx.Count < 3) return null;
         return new MeshData {
-            Positions = allPos.ToArray(),
-            Normals = allNorm.ToArray(),
-            Indices = allIdx.ToArray(),
+            Positions = [.. allPos],
+            Normals = [.. allNorm],
+            Indices = [.. allIdx],
         };
     }
 
@@ -358,7 +358,7 @@ public static class MeshLoader
         return new MeshData {
             Positions = m.Positions,
             Normals = m.Normals,
-            Indices = kept.ToArray(),
+            Indices = [.. kept],
         };
     }
 

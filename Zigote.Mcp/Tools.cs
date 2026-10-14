@@ -583,6 +583,9 @@ public static class Tools
         )),
     ];
 
+    // The window each app's per-window commands go to, chosen with the `windows` tool. Absent = main.
+    private static readonly Dictionary<int, uint> SelectedWindow = [];
+
     // ── MCP plumbing ──────────────────────────────────────────────────────────
 
     public static JsonArray List()
@@ -903,9 +906,12 @@ public static class Tools
             if (lines++ >= MaxOutlineLines)
             {
                 if (lines == MaxOutlineLines + 1)
+                {
                     outline.Append(
                         $"… cut at {MaxOutlineLines} lines — narrow with root or max_depth\n"
                     );
+                }
+
                 return;
             }
 
@@ -1207,19 +1213,23 @@ public static class Tools
                 if (lines++ >= MaxOutlineLines)
                 {
                     if (lines == MaxOutlineLines + 1)
+                    {
                         outline.Append(
                             $"… cut at {MaxOutlineLines} lines — use visible_only or `find`\n"
                         );
+                    }
+
                     return;
                 }
 
                 outline.Append(value: ' ', repeatCount: depth).Append(Describe(node));
                 if (S(node: node, field: "hint") is { } hint)
                     outline.Append(" (").Append(hint).Append(')');
-                string[] states = (S(node: node, field: "flags") ?? "")
+                string[] states = [
+                    .. (S(node: node, field: "flags") ?? "")
                     .Split(separator: ", ", options: StringSplitOptions.RemoveEmptyEntries)
-                    .Where(f => f != "None" && !f.EndsWith("able"))
-                    .ToArray();
+                    .Where(f => f != "None" && !f.EndsWith("able")),
+                ];
                 if (states.Length > 0)
                     outline.Append(" [").AppendJoin(separator: ',', values: states).Append(']');
                 if (offscreen) outline.Append(" offscreen");
@@ -1256,10 +1266,13 @@ public static class Tools
 
         text.Append($" [{F(N(node: hit, field: "x"))},{F(N(node: hit, field: "y"))} {Dim(hit)}]");
         if (reply["path"] is JsonArray { Count: > 0 } path)
+        {
             text.Append(" in ").AppendJoin(
                 separator: " < ",
                 values: path.Select(p => p?.ToString())
             );
+        }
+
         return text.ToString();
     }
 
@@ -1306,7 +1319,7 @@ public static class Tools
         Parse(Send(port: port, command: command))?["tree"];
 
     private static List<JsonObject> Children(JsonObject node) =>
-        node["children"] is JsonArray children ? children.OfType<JsonObject>().ToList() : [];
+        node["children"] is JsonArray children ? [.. children.OfType<JsonObject>()] : [];
 
     private static IEnumerable<JsonObject> Nodes(JsonNode? node)
     {
@@ -1356,9 +1369,6 @@ public static class Tools
     // ── the inspect wire ──────────────────────────────────────────────────────
 
     private static int Port(JsonObject args) => AppHost.Resolve(Int(args: args, name: "port"));
-
-    // The window each app's per-window commands go to, chosen with the `windows` tool. Absent = main.
-    private static readonly Dictionary<int, uint> SelectedWindow = [];
 
     private static JsonObject Windows(JsonObject args)
     {

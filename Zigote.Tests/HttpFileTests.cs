@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using Xunit;
 using Zigote.Http;
 
@@ -13,59 +12,7 @@ namespace Zigote.Tests;
 public class HttpFileTests
 {
     private static readonly byte[] Content =
-        Enumerable.Range(start: 0, count: 1000).Select(i => (byte)i).ToArray();
-
-    private sealed class RangeOrigin
-    {
-        public int Requests;
-        public string ETag = "\"v1\"";
-        public bool ServeRanges = true;
-
-        public ValueTask<HttpResult<HttpResponse>> Send(HttpSpec spec, CancellationToken ct)
-        {
-            Requests++;
-            string? range = spec.Headers.FirstOrDefault(h => h.Name == "Range").Value;
-            string? ifRange = spec.Headers.FirstOrDefault(h => h.Name == "If-Range").Value;
-
-            // A validator that no longer matches means the resource moved on: RFC 9110 says answer
-            // with the whole thing, and HttpFile is required to notice rather than splice.
-            bool whole = !ServeRanges || range is null || (ifRange is not null && ifRange != ETag);
-            if (whole)
-            {
-                return ValueTask.FromResult(
-                    HttpResult<HttpResponse>.Ok(
-                        HttpResponse.FromBytes(
-                            status: HttpStatusCode.OK,
-                            headers: [new HeaderPair(Name: "ETag", Value: ETag)],
-                            body: Content
-                        )
-                    )
-                );
-            }
-
-            string[] span = range!["bytes=".Length..].Split('-');
-            int start = int.Parse(span[0]);
-            int end = span[1].Length == 0 ? Content.Length - 1 : int.Parse(span[1]);
-            end = Math.Min(val1: end, val2: Content.Length - 1);
-
-            return ValueTask.FromResult(
-                HttpResult<HttpResponse>.Ok(
-                    HttpResponse.FromBytes(
-                        status: HttpStatusCode.PartialContent,
-                        headers: [
-                            new HeaderPair(Name: "ETag", Value: ETag),
-                            new HeaderPair(
-                                Name: "Content-Range",
-                                Value: $"bytes {start}-{end}/{Content.Length}"
-                            ),
-                            new HeaderPair(Name: "Accept-Ranges", Value: "bytes"),
-                        ],
-                        body: Content[start..(end + 1)]
-                    )
-                )
-            );
-        }
-    }
+        [.. Enumerable.Range(start: 0, count: 1000).Select(i => (byte)i)];
 
     private static HttpRunner Runner(RangeOrigin origin) => new(
         new HttpRunnerOptions {
@@ -218,6 +165,58 @@ public class HttpFileTests
             File.Delete(path);
             File.Delete(path + ".part");
             File.Delete(path + ".part.validator");
+        }
+    }
+
+    private sealed class RangeOrigin
+    {
+        public string ETag = "\"v1\"";
+        public int Requests;
+        public bool ServeRanges = true;
+
+        public ValueTask<HttpResult<HttpResponse>> Send(HttpSpec spec, CancellationToken ct)
+        {
+            Requests++;
+            string? range = spec.Headers.FirstOrDefault(h => h.Name == "Range").Value;
+            string? ifRange = spec.Headers.FirstOrDefault(h => h.Name == "If-Range").Value;
+
+            // A validator that no longer matches means the resource moved on: RFC 9110 says answer
+            // with the whole thing, and HttpFile is required to notice rather than splice.
+            bool whole = !ServeRanges || range is null || (ifRange is not null && ifRange != ETag);
+            if (whole)
+            {
+                return ValueTask.FromResult(
+                    HttpResult<HttpResponse>.Ok(
+                        HttpResponse.FromBytes(
+                            status: HttpStatusCode.OK,
+                            headers: [new HeaderPair(Name: "ETag", Value: ETag)],
+                            body: Content
+                        )
+                    )
+                );
+            }
+
+            string[] span = range!["bytes=".Length..].Split('-');
+            int start = int.Parse(span[0]);
+            int end = span[1].Length == 0 ? Content.Length - 1 : int.Parse(span[1]);
+            end = Math.Min(val1: end, val2: Content.Length - 1);
+
+            return ValueTask.FromResult(
+                HttpResult<HttpResponse>.Ok(
+                    HttpResponse.FromBytes(
+                        status: HttpStatusCode.PartialContent,
+                        headers: [
+                            new HeaderPair(Name: "ETag", Value: ETag),
+                            new HeaderPair(
+                                Name: "Content-Range",
+                                Value: $"bytes {start}-{end}/{Content.Length}"
+                            ),
+                            new HeaderPair(Name: "Accept-Ranges", Value: "bytes"),
+                        ],
+                        body: Content[start..(end + 1)]
+                    )
+                )
+            );
         }
     }
 }

@@ -105,7 +105,7 @@ public static class Profiler
         if (_captureFramesLeft > 0)
         {
             Captured.Add(
-                _previous.ToArray()
+                [.. _previous]
             ); // copy out only while capturing (not the steady-state path)
             if (--_captureFramesLeft == 0) FlushCapture();
         }

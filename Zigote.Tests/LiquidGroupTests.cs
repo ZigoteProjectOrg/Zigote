@@ -1,11 +1,9 @@
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Host;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
@@ -19,6 +17,10 @@ namespace Zigote.Tests;
 /// </summary>
 public class LiquidGroupTests
 {
+    // A real App needs a window and a GPU. Attach only touches the repaint tracker, so an
+    // uninitialized instance with that one field filled in stands in for one headlessly.
+    private static readonly App FakeOwner = FakeApp();
+
     private static LiquidPane Pane() => new() {
         Elevation = 4f,
         Child = new DecoratedBox {
@@ -34,10 +36,11 @@ public class LiquidGroupTests
         root.Layout(Offset.Zero);
         var paint = new PaintList();
         root.Paint(paint);
-        return Enumerable.Range(start: 0, count: paint.RecordCount)
-            .Select(i => paint.RecordKind(i).ToString())
-            .Where(kind => kind is "Shadow" or "LiquidGlass" or "Rect")
-            .ToArray();
+        return [
+            .. Enumerable.Range(start: 0, count: paint.RecordCount)
+                .Select(i => paint.RecordKind(i).ToString())
+                .Where(kind => kind is "Shadow" or "LiquidGlass" or "Rect"),
+        ];
     }
 
     [Fact]
@@ -106,10 +109,6 @@ public class LiquidGroupTests
         Assert.Equal(expected: 1, actual: toggle.Group!.PaneCount);
     }
 
-    // A real App needs a window and a GPU. Attach only touches the repaint tracker, so an
-    // uninitialized instance with that one field filled in stands in for one headlessly.
-    private static readonly App FakeOwner = FakeApp();
-
     private static App FakeApp()
     {
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
@@ -120,25 +119,6 @@ public class LiquidGroupTests
             )!
             .SetValue(obj: app, value: new RepaintTracker());
         return app;
-    }
-
-    /// <summary>Retained content: built once, then handed to whichever wrapper the toggle picks.</summary>
-    private sealed class Retained(Widget child) : ComposedWidget
-    {
-        protected override Widget Build(BuildContext context) => child;
-    }
-
-    /// <summary>A build that returns its content bare one frame and wrapped in a group the next.</summary>
-    private sealed class Toggle(Widget content) : ComposedWidget
-    {
-        public bool Wrap { get; set; }
-        public LiquidGroup? Group { get; private set; }
-
-        protected override Widget Build(BuildContext context)
-        {
-            Group = Wrap ? new LiquidGroup(content) : null;
-            return (Widget?)Group ?? content;
-        }
     }
 
     /// <summary>
@@ -177,6 +157,25 @@ public class LiquidGroupTests
         string[] ops = Ops(new Row { Children = { pane } });
         Assert.Equal(expected: 0, actual: group.PaneCount);
         Assert.Equal(expected: ["Shadow", "LiquidGlass", "Rect"], actual: ops);
+    }
+
+    /// <summary>Retained content: built once, then handed to whichever wrapper the toggle picks.</summary>
+    private sealed class Retained(Widget child) : ComposedWidget
+    {
+        protected override Widget Build(BuildContext context) => child;
+    }
+
+    /// <summary>A build that returns its content bare one frame and wrapped in a group the next.</summary>
+    private sealed class Toggle(Widget content) : ComposedWidget
+    {
+        public bool Wrap { get; set; }
+        public LiquidGroup? Group { get; private set; }
+
+        protected override Widget Build(BuildContext context)
+        {
+            Group = Wrap ? new LiquidGroup(content) : null;
+            return (Widget?)Group ?? content;
+        }
     }
 }
 

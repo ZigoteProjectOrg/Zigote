@@ -74,10 +74,12 @@ public sealed class PrefabService
 
     private static string MakeFileSafe(string name)
     {
-        char[] chars = name
-            .Select(c =>
-                Array.IndexOf(array: Path.GetInvalidFileNameChars(), value: c) >= 0 ? '_' : c
-            ).ToArray();
+        char[] chars = [
+            .. name
+                .Select(c =>
+                    Array.IndexOf(array: Path.GetInvalidFileNameChars(), value: c) >= 0 ? '_' : c
+                ),
+        ];
         string safe = new string(chars).Trim();
         return string.IsNullOrEmpty(safe) ? "Prefab" : safe;
     }

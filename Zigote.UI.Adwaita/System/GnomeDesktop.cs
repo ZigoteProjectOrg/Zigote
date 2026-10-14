@@ -1,6 +1,6 @@
-using Zigote.Core.Animation;
 using System.Diagnostics;
 using System.Globalization;
+using Zigote.Core.Animation;
 
 namespace Zigote.UI.Adwaita;
 
@@ -243,7 +243,7 @@ public static class GnomeDesktop
                 }
             }
 
-            return list.ToArray();
+            return [.. list];
         }
     }
 

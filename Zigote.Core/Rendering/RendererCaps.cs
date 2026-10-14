@@ -89,7 +89,7 @@ public readonly record struct RendererCaps(
         if (Supports(UpscalerKinds.Dlss)) list.Add(UpscalerSelection.Dlss);
         if (Supports(UpscalerKinds.Fsr)) list.Add(UpscalerSelection.Fsr);
         if (Supports(UpscalerKinds.XeSs)) list.Add(UpscalerSelection.XeSs);
-        return list.ToArray();
+        return [.. list];
     }
 
     internal static RendererCaps From(ZgRendererCaps c)

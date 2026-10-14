@@ -217,7 +217,7 @@ public class ReactiveConcurrencyTests
         }
 
         Assert.True(
-            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. tasks], timeout: Budget),
             userMessage: "did not finish (deadlock?)"
         );
     }
@@ -262,7 +262,7 @@ public class ReactiveConcurrencyTests
         }
 
         Assert.True(
-            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. tasks], timeout: Budget),
             userMessage: "did not finish (deadlock?)"
         );
     }
@@ -338,7 +338,7 @@ public class ReactiveConcurrencyTests
     private static void AwaitAll(List<Task> tasks)
     {
         Assert.True(
-            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. tasks], timeout: Budget),
             userMessage: "reader tasks did not finish within the budget"
         );
     }

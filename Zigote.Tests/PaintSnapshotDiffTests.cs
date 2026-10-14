@@ -29,7 +29,7 @@ public class PaintSnapshotDiffTests
         snap.Capture(prev);
         Span<Rect> changed = stackalloc Rect[PaintSnapshot.MaxChangedRects];
         var result = snap.Diff(current: cur, changed: changed, changedCount: out int count);
-        rects = changed[..count].ToArray();
+        rects = [.. changed[..count]];
         return result;
     }
 

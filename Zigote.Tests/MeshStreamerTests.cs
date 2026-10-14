@@ -18,13 +18,13 @@ public sealed class MeshStreamerTests
     public void Want_AcquiresAndUploadsOnce_Drop_Unloads_ReWant_Reloads()
     {
         string tmp = Path.GetTempFileName();
-        byte[] blob = new byte[] {
+        byte[] blob = [
             9,
             8,
             7,
             6,
             5,
-        };
+        ];
         File.WriteAllBytes(path: tmp, bytes: blob);
         try
         {

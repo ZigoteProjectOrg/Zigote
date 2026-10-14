@@ -102,7 +102,7 @@ public sealed class LocalizationsScope : Widget
                 ? Locale.System
                 : fallback;
 
-        var pool = supported.Count > 0 ? supported : new List<Locale> { requested };
+        var pool = supported.Count > 0 ? supported : [requested];
         var initial = LocaleResolution.Resolve(
             preferred: requested,
             supported: pool,
@@ -152,7 +152,7 @@ public sealed class LocalizationsScope : Widget
         owner.SetLocale = _setLocale;
         owner.LocaleInfo = () => (
             Controller!.Locale.ToString(),
-            Controller.SupportedLocales.Select(l => l.ToString()).ToArray()
+            [.. Controller.SupportedLocales.Select(l => l.ToString())]
         );
     }
 

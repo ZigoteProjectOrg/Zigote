@@ -88,11 +88,15 @@ public sealed class EntriesPage : ComposedWidget
     private Widget Results()
     {
         string query = _query.Value.Trim();
-        string[] matches = Fruit
-            .Where(f => query.Length == 0 ||
-                        f.Contains(value: query, comparisonType: StringComparison.OrdinalIgnoreCase)
-            )
-            .ToArray();
+        string[] matches = [
+            .. Fruit
+                .Where(f => query.Length == 0 ||
+                            f.Contains(
+                                value: query,
+                                comparisonType: StringComparison.OrdinalIgnoreCase
+                            )
+                ),
+        ];
 
         if (matches.Length == 0)
         {

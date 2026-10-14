@@ -241,10 +241,10 @@ public class LocalizationsScopeTests
         scope.Controller!.SetLocale(Locale.Ja);
         Assert.Contains(
             expected: scope.Controller.Locale,
-            collection: new[] {
+            collection: [
                 Locale.En,
                 Locale.Es,
-            }
+            ]
         );
     }
 }

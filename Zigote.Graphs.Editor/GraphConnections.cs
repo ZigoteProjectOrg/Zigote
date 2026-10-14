@@ -1,6 +1,6 @@
+using Zigote.Graphs.Commands;
 using Zigote.Graphs.Core;
 using Zigote.Graphs.Registry;
-using Zigote.Graphs.Commands;
 
 namespace Zigote.Graphs.Editor;
 
@@ -14,11 +14,17 @@ public static class GraphConnections
         var def = node is null ? null : registry.GetNodeDefinition(node.DefinitionId);
         if (def is null) return null;
         foreach (var pin in def.Inputs)
+        {
             if (pin.Id == endpoint.PinId)
                 return (pin, PinDirection.Input);
+        }
+
         foreach (var pin in def.Outputs)
+        {
             if (pin.Id == endpoint.PinId)
                 return (pin, PinDirection.Output);
+        }
+
         return null;
     }
 
@@ -126,7 +132,7 @@ internal sealed class GraphGesture(params IGraphCommand[] commands) : IGraphComm
 
 internal sealed class CollapseNodesCommand(IEnumerable<Guid> nodes, bool collapsed) : IGraphCommand
 {
-    private readonly Guid[] _nodes = nodes.ToArray();
+    private readonly Guid[] _nodes = [.. nodes];
     private readonly Dictionary<Guid, bool> _old = [];
 
     public void Execute(GraphDocument graph)
@@ -144,7 +150,9 @@ internal sealed class CollapseNodesCommand(IEnumerable<Guid> nodes, bool collaps
     public void Undo(GraphDocument graph)
     {
         foreach (var pair in _old)
+        {
             if (graph.EditorData.NodeLayouts.TryGetValue(key: pair.Key, value: out var layout))
                 layout.IsCollapsed = pair.Value;
+        }
     }
 }

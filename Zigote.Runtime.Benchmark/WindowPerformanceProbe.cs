@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
+using Zigote.Core.Engine;
 using Zigote.UI.Host;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -28,9 +30,9 @@ internal static class WindowPerformanceProbe
         ulong initialTextureBytes = app.Engine.GetEngineStats().GpuTextureMemory;
         report.Metadata["gpu"] = app.Engine.ActiveGpu()?.ToString() ?? "unknown";
         report.Metadata["refresh_hz"] =
-            app.DisplayRefreshHz.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            app.DisplayRefreshHz.ToString(CultureInfo.InvariantCulture);
         report.Metadata["scale"] =
-            app.HostScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            app.HostScale.ToString(CultureInfo.InvariantCulture);
         report.Metadata["pacing"] =
             "Default vsync, no software FPS cap. Profiler enabled; normal partial repaint except explicit full-repaint case.";
         var list = PerformanceProbe.BuildList(count: 10000, prefix: "native");
@@ -47,7 +49,7 @@ internal static class WindowPerformanceProbe
             );
             app.Frame();
             if (encode is null) return;
-            Core.Engine.ZigoteEngine.GetFrameTimings(
+            ZigoteEngine.GetFrameTimings(
                 acquireMs: out double a,
                 encodeMs: out double e,
                 presentMs: out double p
@@ -65,9 +67,9 @@ internal static class WindowPerformanceProbe
             encode = [];
             present = [];
             measure();
-            report.Add(name: $"{name}.native_acquire_wait", unit: "ms", samples: acquire.ToArray());
-            report.Add(name: $"{name}.native_encode_submit", unit: "ms", samples: encode.ToArray());
-            report.Add(name: $"{name}.native_present", unit: "ms", samples: present.ToArray());
+            report.Add(name: $"{name}.native_acquire_wait", unit: "ms", samples: [.. acquire]);
+            report.Add(name: $"{name}.native_encode_submit", unit: "ms", samples: [.. encode]);
+            report.Add(name: $"{name}.native_present", unit: "ms", samples: [.. present]);
             acquire = encode = present = null;
         }
 
@@ -103,7 +105,7 @@ internal static class WindowPerformanceProbe
         {
             app.RequestPaint();
             Frame();
-            Core.Engine.ZigoteEngine.GetFrameTimings(
+            ZigoteEngine.GetFrameTimings(
                 acquireMs: out double acquireMs,
                 encodeMs: out _,
                 presentMs: out _
@@ -112,7 +114,7 @@ internal static class WindowPerformanceProbe
         }
 
         report.Metadata["settle_seconds"] = Stopwatch.GetElapsedTime(settleStart).TotalSeconds
-            .ToString(format: "0.00", provider: System.Globalization.CultureInfo.InvariantCulture);
+            .ToString(format: "0.00", provider: CultureInfo.InvariantCulture);
         Drops("startup");
         Split(
             name: "window.full_repaint",
@@ -212,7 +214,7 @@ internal static class WindowPerformanceProbe
         );
         report.Metadata["frame_reserve_ms_unpaced"] = app.FrameReserveMs.ToString(
             format: "0.###",
-            provider: System.Globalization.CultureInfo.InvariantCulture
+            provider: CultureInfo.InvariantCulture
         );
         Drops("unpaced");
         app.FrameRateLimit = 0;
@@ -318,7 +320,7 @@ internal static class WindowPerformanceProbe
             app.Frame();
         }
 
-        Core.Engine.ZigoteEngine.GetImageStats(
+        ZigoteEngine.GetImageStats(
             count: out int baseCount,
             cpuBytes: out _,
             gpuBytes: out long baseGpu
@@ -362,7 +364,7 @@ internal static class WindowPerformanceProbe
             Task.WhenAll(tasks).GetAwaiter().GetResult();
             app.RequestPaint();
             app.Frame(); // ensure every delivered texture has been submitted at least once
-            Core.Engine.ZigoteEngine.GetImageStats(
+            ZigoteEngine.GetImageStats(
                 count: out int resident,
                 cpuBytes: out long cpuBytes,
                 gpuBytes: out long gpuBytes
@@ -377,11 +379,11 @@ internal static class WindowPerformanceProbe
                 unit: "ms",
                 samples: [Stopwatch.GetElapsedTime(start).TotalMilliseconds]
             );
-            report.Add(name: "images.64x512.frames", unit: "ms", samples: frameTimes.ToArray());
+            report.Add(name: "images.64x512.frames", unit: "ms", samples: [.. frameTimes]);
             report.Add(
                 name: "images.64x512.ui_alloc",
                 unit: "bytes",
-                samples: frameAllocations.ToArray()
+                samples: [.. frameAllocations]
             );
             report.Add(
                 name: "images.64x512.process_alloc",
@@ -507,11 +509,14 @@ internal static class WindowPerformanceProbe
                 marked.Color = Color.Rgb(r: 200, g: 40 + (step * 8), b: 60);
                 app.RequestPaintFor(marked);
                 if (step % 3 == 0)
+                {
                     boxes[((step * 11) + 5) % cells].Color = Color.Rgb(
                         r: 40,
                         g: 200,
                         b: 40 + (step * 8)
                     );
+                }
+
                 app.Frame();
                 PerformanceReport.Require(
                     condition: app.Engine.CaptureSceneBmp(partialPath),
@@ -561,7 +566,7 @@ internal static class WindowPerformanceProbe
 
     private static void RequireImagesReclaimed(int baseCount, long baseGpu, string when)
     {
-        Core.Engine.ZigoteEngine.GetImageStats(
+        ZigoteEngine.GetImageStats(
             count: out int count,
             cpuBytes: out _,
             gpuBytes: out long gpu

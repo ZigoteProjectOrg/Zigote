@@ -107,7 +107,7 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
             return;
         }
 
-        byte[] copy = payload.ToArray();
+        byte[] copy = [.. payload];
         Enqueue(
             connectionId: connectionId,
             payload: copy,

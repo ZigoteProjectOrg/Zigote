@@ -17,7 +17,6 @@ using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
 using Zigote.UI.Host;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -62,6 +61,8 @@ public sealed partial class InspectorPanel : Widget
     private readonly ThemeData _theme;
     private bool _applyToSubMeshes;
     private Widget _content;
+
+    private string _filter = "";
     private float _lastPlayRefresh;
 
     // Cached .prefab template for the shown instance, so override-detection doesn't re-read disk each rebuild.
@@ -86,8 +87,6 @@ public sealed partial class InspectorPanel : Widget
         _content = Placeholder;
         Rebuild();
     }
-
-    private string _filter = "";
 
     /// <summary>
     ///     Property filter (case-insensitive substring over row captions and section titles) — the
@@ -1114,7 +1113,7 @@ public sealed partial class InspectorPanel : Widget
             _rows.Add(
                 PropRow.DropdownRow(
                     label: "Preset",
-                    items: VfxPresets.Names.ToArray(),
+                    items: [.. VfxPresets.Names],
                     selectedIndex: 0,
                     onChange: i =>
                     {
@@ -1584,26 +1583,27 @@ public sealed partial class InspectorPanel : Widget
             PropRow.Suggest(
                 label: "Class",
                 value: _shown.ScriptClass ?? "",
-                suggest: q => _state.ScriptRegistry.All
-                    .Where(m => string.IsNullOrEmpty(q)
-                                || m.FullName.Contains(
-                                    value: q,
-                                    comparisonType: StringComparison.OrdinalIgnoreCase
-                                )
-                                || m.DisplayName.Contains(
-                                    value: q,
-                                    comparisonType: StringComparison.OrdinalIgnoreCase
-                                )
-                    )
-                    .OrderByDescending(m => m.DisplayName.StartsWith(
-                            value: q,
-                            comparisonType: StringComparison.OrdinalIgnoreCase
+                suggest: q => [
+                    .. _state.ScriptRegistry.All
+                        .Where(m => string.IsNullOrEmpty(q)
+                                    || m.FullName.Contains(
+                                        value: q,
+                                        comparisonType: StringComparison.OrdinalIgnoreCase
+                                    )
+                                    || m.DisplayName.Contains(
+                                        value: q,
+                                        comparisonType: StringComparison.OrdinalIgnoreCase
+                                    )
                         )
-                    )
-                    .ThenBy(m => m.DisplayName)
-                    .Select(m => (m.FullName, m.DisplayName))
-                    .Take(12)
-                    .ToList(),
+                        .OrderByDescending(m => m.DisplayName.StartsWith(
+                                value: q,
+                                comparisonType: StringComparison.OrdinalIgnoreCase
+                            )
+                        )
+                        .ThenBy(m => m.DisplayName)
+                        .Select(m => (m.FullName, m.DisplayName))
+                        .Take(12),
+                ],
                 onCommit: v => _state.History.Execute(
                     new ChangePropertyCommand<string?>(
                         state: _state,

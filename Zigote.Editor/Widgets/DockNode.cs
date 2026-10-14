@@ -23,7 +23,7 @@ public sealed class DockLeaf : DockNode
 {
     public DockLeaf(string panelId) => PanelIds = [panelId];
 
-    public DockLeaf(IEnumerable<string> panelIds) => PanelIds = panelIds.ToList();
+    public DockLeaf(IEnumerable<string> panelIds) => PanelIds = [.. panelIds];
 
     public string LeafId { get; init; } = Guid.NewGuid().ToString("N")[..8];
     public List<string> PanelIds { get; }

@@ -36,9 +36,10 @@ public sealed class EcsComponentType
     {
         Type = type;
         Name = name;
-        Fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance)
-            .Select(f => new EcsField(f))
-            .ToArray();
+        Fields = [
+            .. type.GetFields(BindingFlags.Public | BindingFlags.Instance)
+                .Select(f => new EcsField(f)),
+        ];
     }
 
     public Type Type { get; }

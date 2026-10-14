@@ -67,7 +67,7 @@ public class InstancingTests
             Calls++;
             LastEntity = entityId;
             LastCount = count;
-            LastData = matrices.ToArray();
+            LastData = [.. matrices];
         }
 
         public void SetInstances(string nodeName, ReadOnlySpan<float> matrices, int count)
@@ -75,7 +75,7 @@ public class InstancingTests
             Calls++;
             LastName = nodeName;
             LastCount = count;
-            LastData = matrices.ToArray();
+            LastData = [.. matrices];
         }
     }
 }

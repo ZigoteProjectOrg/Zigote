@@ -1,8 +1,8 @@
+using System.Diagnostics;
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Paint;
 using Zigote.Core.Threading;
-using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
@@ -104,9 +104,9 @@ internal static class PerformanceProbe
         while (!background.FrameIdle)
         {
             int before = delivered;
-            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            long start = Stopwatch.GetTimestamp();
             background.RunFrame(TimeSpan.FromMilliseconds(.5));
-            drainTimes.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            drainTimes.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
             units.Add(delivered - before);
             PerformanceReport.Require(
                 condition: drainTimes.Count <= burst,
@@ -121,12 +121,12 @@ internal static class PerformanceProbe
         report.Add(
             name: "background.burst_400_100us.budget_0.5",
             unit: "ms",
-            samples: drainTimes.ToArray()
+            samples: [.. drainTimes]
         );
         report.Add(
             name: "background.burst_400_100us.units",
             unit: "callbacks",
-            samples: units.ToArray()
+            samples: [.. units]
         );
         report.Metadata["burst_drain_calls"] = drainTimes.Count.ToString();
 

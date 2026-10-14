@@ -284,7 +284,7 @@ public class AudioPlayerTests
         }
 
         Assert.False(player.HasNext);
-        Assert.Equal(expectedSpan: [0, 1, 2], actualArray: visited.Order().ToArray());
+        Assert.Equal(expectedSpan: [0, 1, 2], actualArray: [.. visited.Order()]);
     }
 
     [Fact]

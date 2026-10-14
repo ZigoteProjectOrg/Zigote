@@ -277,7 +277,7 @@ public class AssetStreamingTests
     public void FileBytesLoader_StreamsFileContentsOffThread()
     {
         string tmp = Path.GetTempFileName();
-        byte[] payload = new byte[] {
+        byte[] payload = [
             1,
             2,
             3,
@@ -286,7 +286,7 @@ public class AssetStreamingTests
             6,
             7,
             8,
-        };
+        ];
         File.WriteAllBytes(path: tmp, bytes: payload);
         try
         {
@@ -378,13 +378,6 @@ public class AssetStreamingTests
         Assert.Equal(expected: 2, actual: loader.Applies);
     }
 
-    // ── A resident asset + a controllable loader ────────────────────────────────
-
-    private sealed class FakeAsset
-    {
-        public required string FromPath;
-    }
-
     // ── load-gate fan-out ───────────────────────────────────────────────────────
 
     [Fact]
@@ -415,10 +408,17 @@ public class AssetStreamingTests
         );
     }
 
+    // ── A resident asset + a controllable loader ────────────────────────────────
+
+    private sealed class FakeAsset
+    {
+        public required string FromPath;
+    }
+
     private sealed class ConcurrencyProbeLoader : IAssetLoader<FakeAsset>
     {
-        private int _concurrent;
         public int MaxConcurrent;
+        private int _concurrent;
 
         public object LoadOffThread(AssetId id, string path)
         {

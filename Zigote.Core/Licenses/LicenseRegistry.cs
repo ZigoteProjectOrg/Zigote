@@ -56,7 +56,7 @@ public static class LicenseRegistry
                     Entries.AddRange(collector());
             }
 
-            return Entries.ToArray();
+            return [.. Entries];
         }
     }
 

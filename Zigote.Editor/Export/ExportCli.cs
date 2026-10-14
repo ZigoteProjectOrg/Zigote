@@ -118,7 +118,7 @@ public static class ExportCli
         var options = new ExportOptions(
             OutputDir: Path.GetFullPath(outDir),
             Rids: rids,
-            Modes: modes.Distinct().ToList()
+            Modes: [.. modes.Distinct()]
         );
         bool ok = await GameExporter.ExportAsync(
             input: input,

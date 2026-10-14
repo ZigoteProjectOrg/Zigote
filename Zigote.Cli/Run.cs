@@ -134,17 +134,18 @@ public static class Run
                 .ToList();
             if (matches.Count == 0)
             {
-                matches = ready
-                    .Where(d => d.Serial.Contains(
-                                    value: spec,
-                                    comparisonType: StringComparison.OrdinalIgnoreCase
-                                )
-                                || d.Model.Contains(
-                                    value: spec,
-                                    comparisonType: StringComparison.OrdinalIgnoreCase
-                                )
-                    )
-                    .ToList();
+                matches = [
+                    .. ready
+                        .Where(d => d.Serial.Contains(
+                                        value: spec,
+                                        comparisonType: StringComparison.OrdinalIgnoreCase
+                                    )
+                                    || d.Model.Contains(
+                                        value: spec,
+                                        comparisonType: StringComparison.OrdinalIgnoreCase
+                                    )
+                        ),
+                ];
             }
 
             return matches.Count switch {

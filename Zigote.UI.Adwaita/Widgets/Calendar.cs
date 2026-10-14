@@ -31,9 +31,10 @@ public sealed class AdwCalendar : Widget
     // Hit targets: header steppers, then 100 + cell index for days.
     private const int PrevMonth = 1, NextMonth = 2, PrevYear = 3, NextYear = 4, DayBase = 100;
 
-    private static readonly string[] DayNumbers =
-        Enumerable.Range(start: 0, count: 32).Select(i => i.ToString(CultureInfo.InvariantCulture))
-            .ToArray();
+    private static readonly string[] DayNumbers = [
+        .. Enumerable.Range(start: 0, count: 32)
+            .Select(i => i.ToString(CultureInfo.InvariantCulture)),
+    ];
 
     private readonly AnimationController _slide;
     private float _cell = 34f;
@@ -110,6 +111,15 @@ public sealed class AdwCalendar : Widget
 
     private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
 
+    // ── Geometry ──────────────────────────────────────────────────────────────
+
+    private Rect GridRect => new(
+        x: Bounds.X,
+        y: Bounds.Y + HeaderH + Gap + WeekdayH,
+        width: _cell * 7f,
+        height: _cell * Weeks
+    );
+
     private static DateOnly FirstOfMonth(DateOnly d) => new(year: d.Year, month: d.Month, day: 1);
 
     /// <summary>Bring the month containing <paramref name="day" /> into view, sliding toward it.</summary>
@@ -128,15 +138,6 @@ public sealed class AdwCalendar : Widget
     }
 
     protected override void OnMount() => _slide.AttachTicker(this);
-
-    // ── Geometry ──────────────────────────────────────────────────────────────
-
-    private Rect GridRect => new(
-        x: Bounds.X,
-        y: Bounds.Y + HeaderH + Gap + WeekdayH,
-        width: _cell * 7f,
-        height: _cell * Weeks
-    );
 
     private DateOnly GridStart(DateOnly month)
     {
@@ -174,8 +175,10 @@ public sealed class AdwCalendar : Widget
     private int TargetAt(Offset point)
     {
         for (int t = PrevMonth; t <= NextYear; t++)
+        {
             if (StepperRect(t).Contains(px: point.X, py: point.Y))
                 return t;
+        }
 
         var grid = GridRect;
         if (!grid.Contains(px: point.X, py: point.Y)) return -1;
@@ -369,11 +372,13 @@ public sealed class AdwCalendar : Widget
             if (selected)
                 paint.AddRect(bounds: disc, color: p.AccentBg, radius: disc.Height / 2f);
             else if (interactive && enabled && (_hover == target || _pressed == target))
+            {
                 paint.AddRect(
                     bounds: disc,
                     color: _pressed == target ? p.ActiveFill : p.HoverFill,
                     radius: disc.Height / 2f
                 );
+            }
 
             var color = selected ? p.AccentFg
                 : day == today ? p.Accent

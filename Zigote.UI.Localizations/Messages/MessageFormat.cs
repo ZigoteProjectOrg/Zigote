@@ -324,7 +324,7 @@ public sealed class MessageFormat
             }
 
             Flush();
-            return parts.ToArray();
+            return [.. parts];
         }
 
         // ICU apostrophe escaping. s[i] == '\''.

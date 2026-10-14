@@ -41,7 +41,7 @@ public sealed class PreferenceStore : IDisposable
     {
         get
         {
-            lock (_entries) return _providers.ToArray();
+            lock (_entries) return [.. _providers];
         }
     }
 

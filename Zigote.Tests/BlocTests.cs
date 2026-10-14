@@ -50,11 +50,11 @@ public class BlocTests : IDisposable
 
         // Nested dispatch would give outer-start, inner, outer-end.
         Assert.Equal(
-            expected: new[] {
+            expected: [
                 "outer:start",
                 "outer:end",
                 "inner",
-            },
+            ],
             actual: bloc.Log
         );
     }
@@ -73,7 +73,7 @@ public class BlocTests : IDisposable
         // The handler is parked on the gate, so these queue behind it rather than interleaving.
         bloc.Add(new Note("a"));
         bloc.Add(new Note("b"));
-        Assert.Equal(expected: new[] { "slow:start" }, actual: bloc.Log);
+        Assert.Equal(expected: ["slow:start"], actual: bloc.Log);
 
         release.Set();
         Assert.True(
@@ -82,12 +82,12 @@ public class BlocTests : IDisposable
         );
 
         Assert.Equal(
-            expected: new[] {
+            expected: [
                 "slow:start",
                 "slow:end",
                 "a",
                 "b",
-            },
+            ],
             actual: bloc.Log
         );
     }
@@ -412,7 +412,7 @@ file sealed class OrderBloc() : Bloc<OrderEvent, int>(0)
     {
         get
         {
-            lock (_log) return _log.ToArray();
+            lock (_log) return [.. _log];
         }
     }
 

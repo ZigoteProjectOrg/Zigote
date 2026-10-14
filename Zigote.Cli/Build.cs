@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace Zigote.Cli;
@@ -139,9 +139,11 @@ public static class Build
 
         string resources = Path.Combine(path1: Path.GetDirectoryName(head)!, path2: "Resources");
         foreach ((string folder, int size) in Densities)
+        {
             icon.Resized(size).Save(
                 Path.Combine(path1: resources, path2: folder, path3: "ic_launcher.png")
             );
+        }
 
         DeclareIconInManifest(head);
         Console.WriteLine(
@@ -510,6 +512,7 @@ public static class Build
                      searchPattern: "*",
                      searchOption: SearchOption.AllDirectories
                  ))
+        {
             Directory.CreateDirectory(
                 directory.Replace(
                     oldValue: source,
@@ -517,6 +520,8 @@ public static class Build
                     comparisonType: StringComparison.Ordinal
                 )
             );
+        }
+
         foreach (string file in Directory.EnumerateFiles(
                      path: source,
                      searchPattern: "*",
@@ -627,9 +632,9 @@ public static class Build
     internal static string HostRid()
     {
         string architecture =
-            System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch {
-                System.Runtime.InteropServices.Architecture.Arm64 => "arm64",
-                System.Runtime.InteropServices.Architecture.X64 => "x64",
+            RuntimeInformation.OSArchitecture switch {
+                Architecture.Arm64 => "arm64",
+                Architecture.X64 => "x64",
                 var other => other.ToString().ToLowerInvariant(),
             };
         string os = OperatingSystem.IsWindows() ? "win"
@@ -724,11 +729,12 @@ public static class Build
     /// </summary>
     internal static int VersionCode(string version)
     {
-        int[] parts = version
-            .Split('-')[0]
-            .Split('.')
-            .Select(p => int.TryParse(s: p, result: out int value) ? value : 0)
-            .ToArray();
+        int[] parts = [
+            .. version
+                .Split('-')[0]
+                .Split('.')
+                .Select(p => int.TryParse(s: p, result: out int value) ? value : 0),
+        ];
         int major = parts.Length > 0 ? parts[0] : 0;
         int minor = parts.Length > 1 ? parts[1] : 0;
         int patch = parts.Length > 2 ? parts[2] : 0;

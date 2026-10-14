@@ -32,7 +32,7 @@ public sealed class ColorRamp
 
     public ColorRamp(IEnumerable<ColorStop> stops)
     {
-        _stops = stops.OrderBy(s => s.Position).ToArray();
+        _stops = [.. stops.OrderBy(s => s.Position)];
         if (_stops.Length == 0) _stops = [new ColorStop(position: 0f, color: Color.White)];
     }
 
@@ -75,7 +75,7 @@ public sealed class FloatCurve
 
     public FloatCurve(IEnumerable<CurveKey> keys)
     {
-        _keys = keys.OrderBy(k => k.Position).ToArray();
+        _keys = [.. keys.OrderBy(k => k.Position)];
         if (_keys.Length == 0) _keys = [new CurveKey(position: 0f, value: 1f)];
     }
 

@@ -56,10 +56,13 @@ public sealed class Loopback : IDisposable
                     try
                     {
                         if (cacheControl is not null)
+                        {
                             context.Response.Headers.Add(
                                 name: "Cache-Control",
                                 value: cacheControl
                             );
+                        }
+
                         if (etag is not null)
                             context.Response.Headers.Add(name: "ETag", value: etag);
                         context.Response.ContentLength64 = body.Length;
@@ -90,8 +93,8 @@ public class RequestComparison
 {
     private HttpClient _client = null!;
     private HttpRunner _fullRunner = null!;
-    private Loopback _server = null!;
     private HttpRunner _runner = null!;
+    private Loopback _server = null!;
     private HttpSpec _spec = null!;
 
     [GlobalSetup]
@@ -214,7 +217,7 @@ public class FrameApi
                         HttpResponse.FromBytes(
                             status: HttpStatusCode.OK,
                             headers: [],
-                            body: "ok"u8.ToArray()
+                            body: [.. "ok"u8]
                         )
                     )
                 ),

@@ -91,12 +91,12 @@ public static class Png
         BinaryPrimitives.WriteInt32BigEndian(destination: length, value: data.Length);
         png.Write(length);
 
-        byte[] typeBytes = new[] {
+        byte[] typeBytes = [
             (byte)type[0],
             (byte)type[1],
             (byte)type[2],
             (byte)type[3],
-        };
+        ];
         png.Write(typeBytes);
         png.Write(data);
 

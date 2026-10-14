@@ -38,6 +38,12 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     private readonly FileSystemWatcher? _watcher;
     private readonly Background _work;
 
+    /// <summary>
+    ///     Raised when the selected row should be scrolled into view — <c>(top, height)</c> in the
+    ///     panel's own content space. The shell wires it to the wrapping scroller.
+    /// </summary>
+    public Action<float, float>? OnRevealRequested;
+
     private volatile bool _dirty = true;
     private Offset _dragStart;
     private string _filter = "";
@@ -69,9 +75,11 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
         // Start with the asset folder open: it is where everything the user wants lives.
         if (state.ProjectDir is { } projectDir)
+        {
             _expanded.Add(
                 Path.GetFullPath(path: state.AssetRoot, basePath: projectDir).TrimEnd('/', '\\')
             );
+        }
 
         string? root = RootPath;
         if (root != null && Directory.Exists(root))
@@ -106,12 +114,6 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         }
     }
 
-    /// <summary>
-    ///     Raised when the selected row should be scrolled into view — <c>(top, height)</c> in the
-    ///     panel's own content space. The shell wires it to the wrapping scroller.
-    /// </summary>
-    public Action<float, float>? OnRevealRequested;
-
     /// <summary>File-name filter; non-empty flattens the tree to the matching files.</summary>
     public string Filter
     {
@@ -133,6 +135,9 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     private string? RootPath => _state.ProjectDir ??
                                 (Directory.Exists(_state.AssetRoot) ? _state.AssetRoot : null);
+
+    private static string RevealLabel => OperatingSystem.IsMacOS() ? "Reveal in Finder" :
+        OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in File Manager";
 
     public void Dispose()
     {
@@ -245,12 +250,20 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         List<string> dirs, files;
         try
         {
-            dirs = Directory.GetDirectories(dir).Where(d => !Skip(Path.GetFileName(d)))
-                .OrderBy(keySelector: Path.GetFileName, comparer: StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            files = Directory.GetFiles(dir).Where(f => !Skip(Path.GetFileName(f)))
-                .OrderBy(keySelector: Path.GetFileName, comparer: StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            dirs = [
+                .. Directory.GetDirectories(dir).Where(d => !Skip(Path.GetFileName(d)))
+                    .OrderBy(
+                        keySelector: Path.GetFileName,
+                        comparer: StringComparer.OrdinalIgnoreCase
+                    ),
+            ];
+            files = [
+                .. Directory.GetFiles(dir).Where(f => !Skip(Path.GetFileName(f)))
+                    .OrderBy(
+                        keySelector: Path.GetFileName,
+                        comparer: StringComparer.OrdinalIgnoreCase
+                    ),
+            ];
         }
         catch
         {
@@ -522,8 +535,10 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         if (!down || _rows.Length == 0) return;
         int cur = -1;
         for (int i = 0; i < _rows.Length && cur < 0; i++)
+        {
             if (_rows[i].FullPath == _selectedPath)
                 cur = i;
+        }
 
         switch ((KeyCode)scancode)
         {
@@ -646,11 +661,8 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             );
         }
 
-        new ContextMenu(items.ToArray()).ShowAt(point);
+        new ContextMenu([.. items]).ShowAt(point);
     }
-
-    private static string RevealLabel => OperatingSystem.IsMacOS() ? "Reveal in Finder" :
-        OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in File Manager";
 
     private static void Reveal(string path)
     {

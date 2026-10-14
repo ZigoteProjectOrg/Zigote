@@ -27,7 +27,7 @@ public abstract class MultiChildWidget : Widget
     /// </summary>
     public void SetChildren(IEnumerable<Widget> children)
     {
-        var list = children as IReadOnlyList<Widget> ?? children.ToList();
+        var list = children as IReadOnlyList<Widget> ?? [.. children];
         ChildReconciler.Reconcile(current: Children, incoming: list, parent: this);
         MarkNeedsLayout();
     }

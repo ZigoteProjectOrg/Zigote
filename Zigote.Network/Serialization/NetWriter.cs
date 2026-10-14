@@ -175,7 +175,7 @@ public sealed class NetWriter
         return _data.AsSpan(start: 0, length: ByteLength);
     }
 
-    public byte[] ToArray() => AsSpan().ToArray();
+    public byte[] ToArray() => [.. AsSpan()];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureByte()

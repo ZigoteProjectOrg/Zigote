@@ -21,7 +21,7 @@ public sealed class LocalizationsController
         Locale initial,
         Locale fallback)
     {
-        _delegates = delegates.ToList();
+        _delegates = [.. delegates];
         SupportedLocales = supportedLocales;
         FallbackLocale = fallback;
         Locale = initial;
@@ -73,7 +73,7 @@ public sealed class LocalizationsController
     /// </summary>
     public bool SetLocale(Locale requested)
     {
-        var pool = SupportedLocales.Count > 0 ? SupportedLocales : new[] { requested };
+        var pool = SupportedLocales.Count > 0 ? SupportedLocales : [requested];
         var resolved = LocaleResolution.Resolve(
             preferred: requested,
             supported: pool,

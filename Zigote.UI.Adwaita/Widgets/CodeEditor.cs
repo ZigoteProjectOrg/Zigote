@@ -61,19 +61,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     private const int
         LayoutCacheCap = 16384; // enough for long source files without cyclic re-shaping
 
+    // Multi-cursor: the primary caret lives in the _caret*/_anchor* fields, so everything written
+    // for one caret keeps working untouched; the additional carets park here and ForEachCaret swaps
+    // them through those fields one at a time.
+    private readonly List<Sel> _extra = [];
+
     private readonly Dictionary<string, TextLayout> _layouts = new();
-
-    // Scratch for EvictLayouts.
-    private List<string>? _layoutEvictScratch;
-
-    // Soft-wrap memo keyed by line content — see RebuildVisualRows. Ordinal keying means lines
-    // with identical text share one entry, which is exactly right (same text + width ⇒ same rows).
-    private readonly Dictionary<string, CachedWrap> _wrapCache = new(StringComparer.Ordinal);
-
-    private readonly record struct CachedWrap(
-        float WrapWidth,
-        float CharWidth,
-        (int Start, int End, float Width)[] Rows);
 
     // Line-number strings cached by line index (index l always renders "l+1") so the gutter doesn't
     // allocate a string per visible line per frame.
@@ -95,10 +88,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
     private readonly List<VisualRow> _visualRows = [];
 
-    // Multi-cursor: the primary caret lives in the _caret*/_anchor* fields, so everything written
-    // for one caret keeps working untouched; the additional carets park here and ForEachCaret swaps
-    // them through those fields one at a time.
-    private readonly List<Sel> _extra = [];
+    // Soft-wrap memo keyed by line content — see RebuildVisualRows. Ordinal keying means lines
+    // with identical text share one entry, which is exactly right (same text + width ⇒ same rows).
+    private readonly Dictionary<string, CachedWrap> _wrapCache = new(StringComparer.Ordinal);
     private int _anchorCol;
     private int _anchorLine = -1;
     private int _barDrag; // 0 = none, 1 = vertical scrollbar, 2 = horizontal scrollbar
@@ -107,7 +99,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
     // Caret + selection as (line, col). Anchor < 0 means no selection.
     private int _caretLine;
+    private float _charWidth; // monospace advance of one glyph in the code face
     private int _clickCount; // consecutive clicks on one spot: 2 = word, 3 = line
+    private int _compositionSelectionLength;
+    private int _compositionSelectionStart;
+    private string _compositionText = string.Empty;
+    private float _contentWidth; // widest line in px (horizontal-scroll extent)
     private float _desiredX = float.NaN; // sticky column for ↑/↓ (NaN = take it from the caret)
 
     // Incremental find (⌘F): the query while the bar is open, null when closed. Typed text goes to
@@ -116,18 +113,6 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
     private string?
         _findLabel; // "3/17" — rebuilt lazily after the query, selection or text changes
-
-    // The whole-line text last put on the clipboard by a selection-less copy/cut; pasting that exact
-    // text inserts it as a line above the caret rather than splitting the current line.
-    private string? _lineClip;
-
-    // ⌘D started from a bare caret (it selected the word) → further matches must be whole words.
-    private bool _occWholeWord;
-    private float _charWidth; // monospace advance of one glyph in the code face
-    private int _compositionSelectionLength;
-    private int _compositionSelectionStart;
-    private string _compositionText = string.Empty;
-    private float _contentWidth; // widest line in px (horizontal-scroll extent)
 
     // Resolved at Measure, reused by Paint so the two passes agree.
     private float _fontSize = Typography.Code.Size;
@@ -141,10 +126,20 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     private EditKind _lastEditKind = EditKind.Other;
     private float _lastEditTime = -1f;
 
+    // Scratch for EvictLayouts.
+    private List<string>? _layoutEvictScratch;
+
     private bool
         _layoutsUnavailable; // no engine (headless tests) / backend without layout support → AddText
 
+    // The whole-line text last put on the clipboard by a selection-less copy/cut; pasting that exact
+    // text inserts it as a line above the caret rather than splitting the current line.
+    private string? _lineClip;
+
     private float _lineHeight; // pixels per line
+
+    // ⌘D started from a bare caret (it selected the word) → further matches must be whole words.
+    private bool _occWholeWord;
     private Ticker? _scrollTicker;
 
     private float _scrollX;
@@ -245,6 +240,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             InvalidateTextLayouts();
         }
     }
+
+    // Smart case, as in Zed/ripgrep: a query with no capitals matches any case.
+    private StringComparison FindComparison =>
+        _find is { } q && q.Any(char.IsUpper)
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
 
     // Only an editable, focused editor blinks a caret; a read-only docked viewer doesn't, so the frame
     // loop can stop repainting it every frame (see App's focus repaint gate / ITextInputClient).
@@ -570,12 +571,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     private DocSnapshot CaptureSnapshot()
     {
         return new DocSnapshot(
-            Lines: _lines.ToArray(),
+            Lines: [.. _lines],
             CaretLine: _caretLine,
             CaretCol: _caretCol,
             AnchorLine: _anchorLine,
             AnchorCol: _anchorCol,
-            Extra: _extra.Count == 0 ? [] : _extra.ToArray()
+            Extra: _extra.Count == 0 ? [] : [.. _extra]
         );
     }
 
@@ -683,7 +684,10 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
     // ── Occurrences + find ────────────────────────────────────────────────────
 
-    /// <summary>First match of <paramref name="needle" /> in <paramref name="s" /> at or after <paramref name="from" />, or -1.</summary>
+    /// <summary>
+    ///     First match of <paramref name="needle" /> in <paramref name="s" /> at or after
+    ///     <paramref name="from" />, or -1.
+    /// </summary>
     private static int NextMatch(
         string s,
         ReadOnlySpan<char> needle,
@@ -758,12 +762,6 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         return null;
     }
-
-    // Smart case, as in Zed/ripgrep: a query with no capitals matches any case.
-    private StringComparison FindComparison =>
-        _find is { } q && q.Any(char.IsUpper)
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
 
     /// <summary>
     ///     ⌘D. With a bare caret, select the word under it; with a selection, add a cursor on its
@@ -1493,7 +1491,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             ExitingState: exiting,
             SourceText: text,
             Tokens: tokens,
-            Runs: runs.ToArray()
+            Runs: [.. runs]
         );
     }
 
@@ -3002,8 +3000,10 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     {
         var edge = Primary;
         foreach (var x in _extra)
+        {
             if (dir < 0 ? x.CaretLine < edge.CaretLine : x.CaretLine > edge.CaretLine)
                 edge = x;
+        }
 
         int row = RowForCaret(line: edge.CaretLine, col: edge.CaretCol);
         int target = row + dir;
@@ -3108,6 +3108,11 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         _caretLine = targetRow.Line;
         _caretCol = XToCol(row: targetRow, localX: _desiredX);
     }
+
+    private readonly record struct CachedWrap(
+        float WrapWidth,
+        float CharWidth,
+        (int Start, int End, float Width)[] Rows);
 
     /// <summary>Classifies an edit for undo coalescing — same-kind runs collapse into one undo step.</summary>
     private enum EditKind

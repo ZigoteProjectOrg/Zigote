@@ -253,12 +253,12 @@ public class ReactiveStressTests
         }
 
         Assert.True(
-            condition: Task.WaitAll(tasks: writers.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. writers], timeout: Budget),
             userMessage: "writers did not finish (deadlock?)"
         );
         Volatile.Write(location: ref stop, value: true);
         Assert.True(
-            condition: Task.WaitAll(tasks: readers.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. readers], timeout: Budget),
             userMessage: "readers did not finish (deadlock?)"
         );
 
@@ -289,7 +289,7 @@ public class ReactiveStressTests
         }
 
         Assert.True(
-            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            condition: Task.WaitAll(tasks: [.. tasks], timeout: Budget),
             userMessage:
             $"{tasks.Count} workers did not finish within {Budget.TotalSeconds}s (possible deadlock)"
         );

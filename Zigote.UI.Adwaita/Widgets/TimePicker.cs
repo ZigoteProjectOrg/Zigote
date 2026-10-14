@@ -28,12 +28,13 @@ public sealed class AdwTimePicker : Widget
 
     private const int Hour = 0, Minute = 1, Meridiem = 2;
 
-    private static readonly string[] TwoDigits =
-        Enumerable.Range(start: 0, count: 60).Select(i => i.ToString(
+    private static readonly string[] TwoDigits = [
+        .. Enumerable.Range(start: 0, count: 60).Select(i => i.ToString(
                 format: "00",
                 provider: CultureInfo.InvariantCulture
             )
-        ).ToArray();
+        ),
+    ];
 
     private int _focusSegment;
     private (int Segment, int Dir) _hover = (-1, 0);
@@ -94,6 +95,11 @@ public sealed class AdwTimePicker : Widget
 
     private int Segments => Use24Hour ? 2 : 3;
 
+    private Size Natural => new(
+        width: (ValueW * 2f) + ColonW + (Use24Hour ? 0f : (Gap * 2f) + ValueW),
+        height: (ArrowH * 2f) + ValueH + (Gap * 2f)
+    );
+
     private static string Designator(bool pm)
     {
         var f = CultureInfo.CurrentCulture.DateTimeFormat;
@@ -143,11 +149,6 @@ public sealed class AdwTimePicker : Widget
         return c.Constrain(Natural);
     }
 
-    private Size Natural => new(
-        width: (ValueW * 2f) + ColonW + (Use24Hour ? 0f : (Gap * 2f) + ValueW),
-        height: (ArrowH * 2f) + ValueH + (Gap * 2f)
-    );
-
     public override void Layout(Offset origin)
     {
         var size = Natural;
@@ -181,6 +182,7 @@ public sealed class AdwTimePicker : Widget
             size: NumberSize
         );
         if (!Use24Hour)
+        {
             PaintSegment(
                 paint: paint,
                 p: p,
@@ -188,6 +190,7 @@ public sealed class AdwTimePicker : Widget
                 text: Designator(hour >= 12),
                 size: AdwTypography.Title4.Size
             );
+        }
 
         var colon = new Rect(
             x: Bounds.X + ValueW,
@@ -222,11 +225,14 @@ public sealed class AdwTimePicker : Widget
         {
             var r = ArrowRect(segment: segment, dir: dir);
             if (_pressed == (segment, dir) || _hover == (segment, dir))
+            {
                 paint.AddRect(
                     bounds: r,
                     color: _pressed == (segment, dir) ? p.ActiveFill : p.HoverFill,
                     radius: AdwMetrics.ControlRadius
                 );
+            }
+
             Icons.Draw(
                 paint: paint,
                 glyph: dir > 0 ? MaterialIcons.ExpandLess : MaterialIcons.ExpandMore,

@@ -71,13 +71,6 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         );
     }
 
-    private class ZigEnum
-    {
-        public string Name = string.Empty;
-        public string BackingType = "int";
-        public List<KeyValuePair<string, string>> Members = new();
-    }
-
     /// <summary>
     ///     Parses <c>pub const Name = enum(i32) { a = 0, b = -1, ... };</c> out of a Zig source.
     ///     Only explicitly-valued members are emitted, which is every enum that crosses the ABI —
@@ -159,11 +152,13 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             }
 
             if (members.Count > 0)
+            {
                 yield return new ZigEnum {
                     Name = name,
                     BackingType = backing,
                     Members = members,
                 };
+            }
         }
     }
 
@@ -174,19 +169,6 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         "ulong" => 8, "long" => 8, "double" => 8, "byte*" => 8,
         _ => 4,
     };
-
-    private class ZigStructField
-    {
-        public string Name = string.Empty;
-        public string Type = string.Empty;
-        public int ArrayLength; // 0 = not an array
-    }
-
-    private class ZigStruct
-    {
-        public string Name = string.Empty;
-        public List<ZigStructField> Fields = new();
-    }
 
     /// <summary>
     ///     Maps a Zig field type to its C# equivalent. Deliberately a closed set: every type that
@@ -430,9 +412,11 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             {
                 string csName = SnakeToPascal(f.Name);
                 if (f.ArrayLength > 0)
+                {
                     sb.AppendLine(
                         $"    [FieldOffset({f.Offset})] public fixed {f.Type} {csName}[{f.ArrayLength}];"
                     );
+                }
                 else
                     sb.AppendLine($"    [FieldOffset({f.Offset})] public {f.Type} {csName};");
             }
@@ -743,6 +727,26 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         }
 
         return sb.ToString();
+    }
+
+    private class ZigEnum
+    {
+        public string BackingType = "int";
+        public List<KeyValuePair<string, string>> Members = [];
+        public string Name = string.Empty;
+    }
+
+    private class ZigStructField
+    {
+        public int ArrayLength; // 0 = not an array
+        public string Name = string.Empty;
+        public string Type = string.Empty;
+    }
+
+    private class ZigStruct
+    {
+        public readonly List<ZigStructField> Fields = [];
+        public string Name = string.Empty;
     }
 
     private class ZigFunction

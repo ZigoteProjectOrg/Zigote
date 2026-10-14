@@ -51,7 +51,7 @@ public class FileBrowserModelTests
         );
         Assert.Equal(
             expectedSpan: ["Alpha", "beta", "alpha.txt", "zeta.txt"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
     }
 
@@ -66,14 +66,14 @@ public class FileBrowserModelTests
         model.SortBy(AdwFileSortColumn.Size);
         Assert.Equal(
             expectedSpan: ["sub", "small.txt", "big.txt"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
 
         model.SortBy(AdwFileSortColumn.Size); // same column again flips to descending
         Assert.False(model.SortAscending);
         Assert.Equal(
             expectedSpan: ["sub", "big.txt", "small.txt"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
     }
 
@@ -83,7 +83,7 @@ public class FileBrowserModelTests
         var model = Loaded(File(".secret"), File("visible.txt"), Dir(".git"));
         Assert.Equal(
             expectedSpan: ["visible.txt"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
 
         model.ShowHidden = true;
@@ -99,7 +99,7 @@ public class FileBrowserModelTests
         model.ApplyView();
         Assert.Equal(
             expectedSpan: ["assets", "a.png"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
 
         model.ExtensionFilter = ["*"];
@@ -115,7 +115,7 @@ public class FileBrowserModelTests
         model.ApplyView();
         Assert.Equal(
             expectedSpan: ["MainScene.scene"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
     }
 
@@ -140,14 +140,14 @@ public class FileBrowserModelTests
         model.SelectIndex(3); // plain click replaces
         Assert.Equal(
             expectedSpan: ["d"],
-            actualArray: model.SelectedEntries().Select(e => e.Name).ToArray()
+            actualArray: [.. model.SelectedEntries().Select(e => e.Name)]
         );
 
         model.AllowMultiSelect = false;
         model.SelectIndex(index: 0, toggle: true); // toggle demotes to plain in single-select mode
         Assert.Equal(
             expectedSpan: ["a"],
-            actualArray: model.SelectedEntries().Select(e => e.Name).ToArray()
+            actualArray: [.. model.SelectedEntries().Select(e => e.Name)]
         );
     }
 
@@ -242,7 +242,7 @@ public class FileBrowserModelTests
         var model = Loaded(File("file10.txt"), File("file2.txt"), File("file1.txt"));
         Assert.Equal(
             expectedSpan: ["file1.txt", "file2.txt", "file10.txt"],
-            actualArray: model.Visible.Select(e => e.Name).ToArray()
+            actualArray: [.. model.Visible.Select(e => e.Name)]
         );
 
         Assert.True(AdwFileBrowserModel.NaturalCompare(a: "scene9", b: "scene10") < 0);

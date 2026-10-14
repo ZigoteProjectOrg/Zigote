@@ -16,6 +16,10 @@ namespace Zigote.Graphs.Editor;
 /// </summary>
 public sealed class GraphInspectorPanel : Widget
 {
+    // ── Building blocks ───────────────────────────────────────────────────────
+
+    private const float RowH = 28f;
+    private const float LabelW = 88f;
     private readonly Column _content;
     private readonly GraphEditorState _state;
     private readonly ThemeData _theme;
@@ -44,11 +48,6 @@ public sealed class GraphInspectorPanel : Widget
         _state.CompileChanged += Rebuild; // refresh compile status text when a new build finishes
         Rebuild();
     }
-
-    // ── Building blocks ───────────────────────────────────────────────────────
-
-    private const float RowH = 28f;
-    private const float LabelW = 88f;
 
     private void Add(Widget widget) => _content.Children.Add(widget);
 
@@ -297,9 +296,10 @@ public sealed class GraphInspectorPanel : Widget
                         icon: MaterialIcons.LinkOff,
                         onPressed: () => _state.Commands.Execute(
                             new GraphGesture(
-                                _state.SelectedEdges
-                                    .Select(id => (IGraphCommand)new DeleteEdgeCommand(id))
-                                    .ToArray()
+                                [
+                                    .. _state.SelectedEdges
+                                        .Select(id => (IGraphCommand)new DeleteEdgeCommand(id)),
+                                ]
                             )
                         )
                     ),
@@ -351,9 +351,10 @@ public sealed class GraphInspectorPanel : Widget
                         icon: Icons.Delete,
                         onPressed: () => _state.Commands.Execute(
                             new GraphGesture(
-                                _state.SelectedNodes
-                                    .Select(id => (IGraphCommand)new DeleteNodeCommand(id))
-                                    .ToArray()
+                                [
+                                    .. _state.SelectedNodes
+                                        .Select(id => (IGraphCommand)new DeleteNodeCommand(id)),
+                                ]
                             )
                         )
                     ),
@@ -539,12 +540,14 @@ public sealed class GraphInspectorPanel : Widget
             );
         }
         else
+        {
             control = Text(
                 text: value.IsNull ? "—" : value.ToString() ?? "—",
                 size: _theme.FontSizeCaption,
                 color: _theme.Hint,
                 oneLine: true
             );
+        }
 
         var label = Text(
             text: name,
@@ -778,6 +781,7 @@ public sealed class GraphInspectorPanel : Widget
                              separator: '\n',
                              options: StringSplitOptions.RemoveEmptyEntries
                          ))
+                {
                     Add(
                         Text(
                             text: line.TrimEnd(),
@@ -785,6 +789,7 @@ public sealed class GraphInspectorPanel : Widget
                             color: _theme.OnSurface
                         )
                     );
+                }
             }
 
             if (cr.Diagnostics.Count > 0)

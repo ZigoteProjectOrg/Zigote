@@ -175,7 +175,7 @@ public sealed class AdwFileBrowserModel
 
     /// <summary>Entries of <see cref="Visible" /> currently selected, in view order.</summary>
     public List<AdwFileBrowserEntry> SelectedEntries() =>
-        _visible.Where(e => _selected.Contains(e.FullPath)).ToList();
+        [.. _visible.Where(e => _selected.Contains(e.FullPath))];
 
     public void ClearSelection()
     {

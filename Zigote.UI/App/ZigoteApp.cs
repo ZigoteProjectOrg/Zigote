@@ -47,8 +47,14 @@ namespace Zigote.UI.Host;
 /// </summary>
 public class ZigoteApp
 {
+    // ── Content / styling ────────────────────────────────────────────────────
+
+    // Pushes a new theme into the running window; null until Run has built the tree.
+    private Action<ThemeData>? _applyTheme;
+
     // The previewed widget's name, or null in a normal run — also the switch for the frame-loop guard.
     private string? _preview;
+    private ThemeData _theme = ThemeData.Dark;
 
     // Whether the previous lifecycle state was Paused, so OnResume fires only for the
     // suspend→foreground pair and not for plain desktop focus regains.
@@ -71,12 +77,6 @@ public class ZigoteApp
     /// <summary>Font family name matching <see cref="FontPath" />. Null = "Inter".</summary>
     public string? FontName { get; set; }
 
-    // ── Content / styling ────────────────────────────────────────────────────
-
-    // Pushes a new theme into the running window; null until Run has built the tree.
-    private Action<ThemeData>? _applyTheme;
-    private ThemeData _theme = ThemeData.Dark;
-
     /// <summary>
     ///     App-wide theme. Propagated via the <see cref="ThemeProvider" /> InheritedWidget, and
     ///     applied the moment it is assigned: a change made inside a frame (a click on an appearance
@@ -94,13 +94,6 @@ public class ZigoteApp
             OnThemeChanged(value);
         }
     }
-
-    /// <summary>
-    ///     <see cref="Theme" /> was assigned. For an app that themes more than the main window
-    ///     (secondary OS windows), so they change in the same frame rather than on a later poll.
-    ///     Can run before <see cref="Run" />, from a constructor.
-    /// </summary>
-    protected virtual void OnThemeChanged(ThemeData theme) { }
 
     /// <summary>The root content widget.</summary>
     public Widget? Home { get; set; }
@@ -152,6 +145,13 @@ public class ZigoteApp
     ///     suppression.
     /// </summary>
     public static bool AutoInstallDevTools { get; set; } = true;
+
+    /// <summary>
+    ///     <see cref="Theme" /> was assigned. For an app that themes more than the main window
+    ///     (secondary OS windows), so they change in the same frame rather than on a later poll.
+    ///     Can run before <see cref="Run" />, from a constructor.
+    /// </summary>
+    protected virtual void OnThemeChanged(ThemeData theme) { }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -417,10 +417,10 @@ public class ZigoteApp
                 obj: null,
                 invokeAttr: BindingFlags.OptionalParamBinding,
                 binder: null,
-                parameters: new[] {
+                parameters: [
                     app,
                     Type.Missing,
-                },
+                ],
                 culture: null
             );
         }
