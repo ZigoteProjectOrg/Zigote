@@ -314,7 +314,7 @@ public sealed class ContextMenu : Widget
             else if (!enabled) fg = _theme.Hint;
             else fg = _theme.OnSurface;
 
-            float baseline = row.Y + ((rowH - fs) / 2f) + (fs * 0.8f);
+            float baseline = TextBaseline.Centered(row.Y, rowH, fs);
 
             // Leading gutter: checkmark takes precedence over a decorative icon.
             float gutter = GutterWidth();
@@ -357,7 +357,7 @@ public sealed class ContextMenu : Widget
                 paint.AddText(
                     text: arrow,
                     baselineX: row.Right - Spacing.Md - arrowW,
-                    baselineY: row.Y + ((rowH - arrowFs) / 2f) + (arrowFs * 0.8f),
+                    baselineY: TextBaseline.Centered(row.Y, rowH, arrowFs),
                     color: hovered ? _theme.OnPrimary : _theme.Hint,
                     fontSize: arrowFs
                 );

@@ -419,7 +419,7 @@ public sealed class AdwCalendar : Widget
         FontWeight weight)
     {
         float w = TextMeasure.Width(text: text, fontSize: size, weight: weight);
-        float baseline = box.Y + ((box.Height - size) / 2f) + (size * 0.8f);
+        float baseline = TextBaseline.Centered(box.Y, box.Height, size);
         paint.AddText(
             text: text,
             baselineX: box.X + ((box.Width - w) / 2f),

@@ -316,7 +316,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
                 );
             }
 
-            float baseline = rowY + ((rowH - fs) / 2f) + (fs * 0.8f);
+            float baseline = TextBaseline.Centered(rowY, rowH, fs);
             paint.AddText(
                 text: item.Label,
                 baselineX: mr.X + TextPad + indent,
@@ -330,7 +330,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
                     text: accel,
                     baselineX: mr.Right - TextPad -
                                TextMeasure.Width(text: accel, fontSize: AccelFs),
-                    baselineY: rowY + ((rowH - AccelFs) / 2f) + (AccelFs * 0.8f),
+                    baselineY: TextBaseline.Centered(rowY, rowH, AccelFs),
                     color: p.DimLabel.WithAlpha(p.DimLabel.A * alpha),
                     fontSize: AccelFs
                 );

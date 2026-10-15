@@ -554,7 +554,7 @@ public class RichText : LeafWidget
                 maxFontSize: line.MaxFontSize,
                 top: top,
                 height: height,
-                baseline: top + (line.MaxFontSize * 0.8f)
+                baseline: TextBaseline.Centered(top, height, line.MaxFontSize)
             );
             top += height;
         }

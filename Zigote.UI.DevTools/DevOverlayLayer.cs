@@ -231,7 +231,7 @@ public sealed class DevOverlayLayer : Widget, INoAutoFocus
         paint.AddText(
             text: _tagText,
             baselineX: x + pad,
-            baselineY: y + (tagH * 0.72f),
+            baselineY: TextBaseline.Centered(y, tagH, DevKit.CaptionSize),
             color: Theme.OnSurface,
             fontSize: DevKit.CaptionSize,
             fontFamily: "code"
@@ -269,7 +269,7 @@ public sealed class DevOverlayLayer : Widget, INoAutoFocus
         paint.AddText(
             text: _badgeFpsText,
             baselineX: bx + 7f,
-            baselineY: 6f + (BadgeH * 0.74f),
+            baselineY: TextBaseline.Centered(6f, BadgeH, t.FontSizeCaption),
             color: color,
             fontSize: t.FontSizeCaption,
             fontFamily: "code"
@@ -455,12 +455,13 @@ public sealed class DevOverlayLayer : Widget, INoAutoFocus
             color: color,
             radius: 2f
         );
-        float baseline = y + OverflowBadgeH - 4f;
+        // Icon and caption each centred in the badge on their own metrics.
+        float baseline = TextBaseline.Centered(y, OverflowBadgeH, Theme.FontSizeCaption - 1f);
         Icons.DrawAt(
             paint: paint,
             glyph: icon,
             x: x + 3f,
-            baselineY: baseline,
+            baselineY: TextBaseline.Centered(y, OverflowBadgeH, OverflowIcon, Icons.Family),
             color: Color.White,
             size: OverflowIcon
         );

@@ -71,12 +71,13 @@ public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
             width: focused ? _theme.FocusRingWidth : 1f
         );
 
-        float textY = Bounds.Y + (_height * 0.64f);
+        float textY = TextBaseline.Centered(Bounds.Y, _height, DevKit.CaptionSize);
+        float iconY = TextBaseline.Centered(Bounds.Y, _height, AdwMetrics.IconSize, Icons.Family);
         Icons.DrawAt(
             paint: paint,
             glyph: Icons.Search,
             x: Bounds.X + 8f,
-            baselineY: textY,
+            baselineY: iconY,
             color: p.DimLabel,
             size: AdwMetrics.IconSize
         );
@@ -110,7 +111,7 @@ public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
                 paint: paint,
                 glyph: Icons.Close,
                 x: Bounds.Right - AdwMetrics.IconSize - 8f,
-                baselineY: textY,
+                baselineY: iconY,
                 color: p.DimLabel,
                 size: AdwMetrics.IconSize
             );

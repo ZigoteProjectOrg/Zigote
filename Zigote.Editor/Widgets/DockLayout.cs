@@ -833,7 +833,7 @@ public sealed class DockLayout : Widget
                 paint.AddText(
                     text: glyph.ToString(),
                     baselineX: bounds.X + ((bounds.Width - (fs * 0.55f)) * 0.5f),
-                    baselineY: cy + (fs * 0.8f),
+                    baselineY: TextBaseline.Centered(cy, fs + 1f, fs - 1f), // one glyph per fs+1 cell
                     color: col,
                     fontSize: fs - 1f
                 );

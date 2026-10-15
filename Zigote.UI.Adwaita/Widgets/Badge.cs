@@ -69,7 +69,7 @@ public sealed class AdwBadge(Widget? child = null, int count = 0) : Widget
         );
 
         float tx = bx + ((bw - textSize.Width) / 2f);
-        float ty = by + ((bh - textSize.Height) / 2f) + (fs * 0.8f);
+        float ty = TextBaseline.Centered(by, bh, fs);
         paint.AddText(
             text: text,
             baselineX: tx,

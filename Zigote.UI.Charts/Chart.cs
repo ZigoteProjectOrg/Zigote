@@ -1066,7 +1066,8 @@ public class Chart : Widget
 
         if (XAxis.Show && XAxis.ShowLabels)
         {
-            float baseline = plot.Bottom + 8f + IndicatorSpaceX + (caption * 0.8f);
+            // One caption line (the 1.25 em TextMeasure reports) under the axis.
+            float baseline = TextBaseline.Centered(plot.Bottom + 8f + IndicatorSpaceX, caption * 1.25f, caption);
             float lastRight = float.NegativeInfinity;
             for (int i = 0; i < _xTicks.Count; i++)
             {
@@ -1548,7 +1549,8 @@ public class Chart : Widget
         paint.AddRect(bounds: card, color: _theme.CardRaised, radius: 6f);
         paint.AddBorder(bounds: card, color: _theme.Border, radius: 6f);
 
-        float textY = cardY + pad + (caption * 0.8f);
+        // Rows are rowH apart with a 4 px gap — the same geometry cardH is sized from.
+        float textY = TextBaseline.Centered(cardY + pad, rowH - 4f, caption);
         paint.AddText(
             text: hover.XLabel,
             baselineX: cardX + pad,

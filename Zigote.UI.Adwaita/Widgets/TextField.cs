@@ -605,9 +605,8 @@ public class AdwTextField : Widget, ITextInputClient
 
         float bx = Bounds.X + padX - _scrollX;
 
-        // Vertically centre the text on its measured height.
-        float th = TextMeasure.Measure(text: Text.Length > 0 ? Text : "X", fontSize: fs).Height;
-        float by = Bounds.Y + ((Bounds.Height - th) / 2f) + (fs * 0.8f);
+        // Vertically centre the text in the field.
+        float by = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
 
         // Selection highlight.
         if (HasSelection)
@@ -899,7 +898,7 @@ public class AdwTextField : Widget, ITextInputClient
             paint.AddText(
                 text: Hint,
                 baselineX: innerX - _scrollX,
-                baselineY: innerTop + (fs * 0.8f),
+                baselineY: TextBaseline.Centered(innerTop, lineH, fs),
                 color: _theme.Hint,
                 fontSize: fs
             );
@@ -910,7 +909,7 @@ public class AdwTextField : Widget, ITextInputClient
             {
                 string lt = DisplayLine(s: display, line: ln);
                 if (lt.Length == 0) continue;
-                float y = innerTop + (ln * lineH) - _scrollY + (fs * 0.8f);
+                float y = TextBaseline.Centered(innerTop + (ln * lineH) - _scrollY, lineH, fs);
                 paint.AddText(
                     text: lt,
                     baselineX: innerX - _scrollX,

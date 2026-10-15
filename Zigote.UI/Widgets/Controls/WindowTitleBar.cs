@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Paint;
@@ -141,7 +142,7 @@ public sealed class WindowTitleBar : Widget
             float textW = (App.Active ?? ForWindow)?.Engine
                           .MeasureText(text: Title, fontSize: fs, weight: FontWeight.Bold).Width ??
                           Title.Length * fs * 0.55f;
-            float textY = Bounds.Y + ((BarHeight - fs) / 2f) + (fs * 0.8f);
+            float textY = TextBaseline.Centered(Bounds.Y, BarHeight, fs);
             // Centered on the bar, then pushed clear of the leading widget / window buttons if the
             // window is too narrow for a true centre — the GNOME headerbar behaviour. Dropped
             // entirely when even the shifted title would collide (a title is not worth clipping).

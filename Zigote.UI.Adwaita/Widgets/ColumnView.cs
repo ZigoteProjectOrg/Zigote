@@ -539,7 +539,7 @@ public sealed class AdwColumnView<T> : ComposedWidget
                     paint.AddFocusRing(bounds: row, radius: 0f, theme: theme);
 
                 float x = Bounds.X;
-                float baseline = y + ((rowH - fs) / 2f) + (fs * 0.8f);
+                float baseline = TextBaseline.Centered(y, rowH, fs);
                 for (int c = 0; c < owner._columns.Count; c++)
                 {
                     var col = owner._columns[c];
@@ -755,7 +755,7 @@ public sealed class AdwColumnView<T> : ComposedWidget
             var theme = owner._theme;
             var p = AdwPalette.For(theme);
             float fs = AdwTypography.CaptionHeading.Size;
-            float baseline = Bounds.Y + ((HeaderH - fs) / 2f) + (fs * 0.8f);
+            float baseline = TextBaseline.Centered(Bounds.Y, HeaderH, fs);
 
             paint.AddClipStart(Bounds);
             float x = Bounds.X - ScrollX;

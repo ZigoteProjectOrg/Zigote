@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core.Animation;
 using Zigote.UI.Host;
 
@@ -300,7 +301,7 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
             }
 
             var fg = _theme.OnSurface;
-            float textY = rowY + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float textY = TextBaseline.Centered(rowY, RowH, fs);
             paint.AddText(
                 text: _labelOf(row.Node),
                 baselineX: contentX,

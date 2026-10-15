@@ -122,7 +122,7 @@ public sealed class Snackbar(
         paint.AddClipStart(bounds: sRect, radius: radius);
 
         float fs = _theme.FontSizeBody;
-        float baselineY = sRect.Y + ((Height - fs) / 2f) + (fs * 0.8f);
+        float baselineY = TextBaseline.Centered(sRect.Y, Height, fs);
 
         if (!string.IsNullOrEmpty(message))
         {

@@ -139,7 +139,7 @@ public sealed class AdwShortcutLabel : Widget
             paint.AddText(
                 text: text,
                 baselineX: cap.X + ((width - textW) / 2f),
-                baselineY: cap.Y + ((CapH - FontSize) / 2f) + (FontSize * 0.8f),
+                baselineY: TextBaseline.Centered(cap.Y, CapH, FontSize),
                 color: separator ? p.DimLabel : _theme.OnBackground,
                 fontSize: FontSize
             );

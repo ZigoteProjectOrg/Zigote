@@ -378,7 +378,7 @@ internal sealed class AdwListPopover : AdwPopoverBase
             );
             if (wash.A > 0f) paint.AddRect(bounds: row, color: wash, radius: AdwMetrics.MenuRadius);
 
-            float baseline = row.Y + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float baseline = TextBaseline.Centered(row.Y, RowH, fs);
             if (_showCheck && i == InitialHighlight)
             {
                 // GtkDropDown's list item: label at the start, the check at the end.
@@ -386,7 +386,7 @@ internal sealed class AdwListPopover : AdwPopoverBase
                     paint: paint,
                     glyph: Icons.Check,
                     x: row.Right - TextPad - fs,
-                    baselineY: baseline,
+                    baselineY: TextBaseline.Centered(row.Y, RowH, fs, Icons.Family),
                     color: Theme.PrimaryDark,
                     size: fs
                 );

@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using Zigote.Core;
@@ -342,7 +343,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             paint.AddText(
                 text: "No files match",
                 baselineX: Bounds.X + 10f,
-                baselineY: Bounds.Y + HeaderH + ((RowH - fs) / 2f) + (fs * 0.8f),
+                baselineY: TextBaseline.Centered(Bounds.Y + HeaderH, RowH, fs),
                 color: _theme.TextMuted,
                 fontSize: fs
             );
@@ -372,7 +373,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
                 paint.AddRect(bounds: pill, color: wash, radius: 5f);
 
             float x = Bounds.X + 6f + (row.Depth * Indent);
-            float ty = y + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float ty = TextBaseline.Centered(y, RowH, fs);
 
             if (row.IsDir)
             {

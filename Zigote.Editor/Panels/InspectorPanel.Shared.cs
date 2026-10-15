@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using System.Globalization;
 using Zigote.Core;
 using Zigote.Core.Math3D;
@@ -796,7 +797,7 @@ public sealed partial class InspectorPanel
             );
 
             float fs = _theme.FontSizeCaption;
-            float ty = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+            float ty = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
             paint.AddText(
                 text: _title,
                 baselineX: Bounds.X + cs + 2f,

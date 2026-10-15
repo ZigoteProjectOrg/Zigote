@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Native;
@@ -1090,7 +1091,7 @@ public sealed class SettingsPanel : Widget
             );
 
             float fs = _theme.FontSizeBody;
-            float ty = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+            float ty = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
             paint.AddText(
                 text: _title,
                 baselineX: Bounds.X + cs + 2f,

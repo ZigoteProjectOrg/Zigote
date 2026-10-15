@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
@@ -391,7 +392,7 @@ public sealed class HierarchyPanel : Widget
                     ? "No nodes match"
                     : "Empty scene — use Add to create a node",
                 baselineX: Bounds.X + 10f,
-                baselineY: Bounds.Y + ((RowH - fs) / 2f) + (fs * 0.8f),
+                baselineY: TextBaseline.Centered(Bounds.Y, RowH, fs),
                 color: _theme.TextMuted,
                 fontSize: fs
             );
@@ -582,7 +583,7 @@ public sealed class HierarchyPanel : Widget
                 : isAnySelected ? theme.OnSurface.WithAlpha(0.85f)
                 : !node.Visible ? theme.TextMuted.WithAlpha(0.55f)
                 : theme.OnSurface;
-            float textY = Bounds.Y + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float textY = TextBaseline.Centered(Bounds.Y, RowH, fs);
 
             // Disclosure chevron (Material) — only when the node has children.
             if (HasChildren)

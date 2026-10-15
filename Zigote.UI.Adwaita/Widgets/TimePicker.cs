@@ -246,7 +246,7 @@ public sealed class AdwTimePicker : Widget
     private static void CenterText(PaintList paint, string text, Rect box, Color color, float size)
     {
         float w = TextMeasure.Width(text: text, fontSize: size, weight: FontWeight.Bold);
-        float baseline = box.Y + ((box.Height - size) / 2f) + (size * 0.8f);
+        float baseline = TextBaseline.Centered(box.Y, box.Height, size);
         paint.AddText(
             text: text,
             baselineX: box.X + ((box.Width - w) / 2f),

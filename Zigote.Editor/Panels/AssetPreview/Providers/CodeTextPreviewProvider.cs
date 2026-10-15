@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Theme;
@@ -146,7 +147,7 @@ internal sealed class ReadOnlyTextView : Widget
         for (int i = first; i < last; i++)
         {
             float top = Bounds.Y + PadY + (i * LineHeight) - _scrollY;
-            float baseline = top + (FontSize * 0.8f);
+            float baseline = TextBaseline.Centered(top, LineHeight, FontSize);
 
             string num = (i + 1).ToString();
             float numX = Bounds.X + GutterW - 6f - (num.Length * 7f);

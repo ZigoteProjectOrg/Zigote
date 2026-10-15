@@ -1770,7 +1770,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
                 : default;
             var tokens = cachedTokens.Tokens ?? [];
             float y = TextTop - _scrollY + (visual * _lineHeight);
-            float baseline = y + (_fontSize * 0.8f);
+            float baseline = TextBaseline.Centered(y, _lineHeight, _fontSize);
 
             if (row.Start == row.End) continue;
 
@@ -1826,7 +1826,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
                         paint: paint,
                         s: _compositionText,
                         x: cx,
-                        baseline: cy + (_fontSize * 0.8f),
+                        baseline: TextBaseline.Centered(cy, _lineHeight, _fontSize),
                         color: _theme.OnSurface
                     );
                     float compositionWidth = TextMeasure.Width(
@@ -1918,7 +1918,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             string num = LineNo(l);
             float w = num.Length * _charWidth; // monospace
             float nx = Bounds.X + _gutterWidth - GutterPadRight - w;
-            float ny = TextTop - _scrollY + (visual * _lineHeight) + (_fontSize * 0.8f);
+            float ny = TextBaseline.Centered(TextTop - _scrollY + (visual * _lineHeight), _lineHeight, _fontSize);
             var col = l == _caretLine
                 ? _theme.OnSurface
                 : _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity * 0.7f);
@@ -2008,7 +2008,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         paint.AddClipStart(box);
         float x = box.X + Pad;
-        float baseline = box.Y + (Pad / 2f) + (_fontSize * 0.8f);
+        float baseline = TextBaseline.Centered(box.Y, box.Height, _fontSize);
         DrawSegment(
             paint: paint,
             s: query.Length > 0 ? query : "Find",

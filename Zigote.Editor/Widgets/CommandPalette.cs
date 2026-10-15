@@ -244,7 +244,7 @@ public sealed class CommandPalette : Widget
         {
             var hit = _hits[i];
             float y = rows.Y + ((i - _first) * RowH);
-            float baseline = y + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float baseline = TextBaseline.Centered(y, RowH, fs);
             if (i == _selected)
             {
                 paint.AddRect(

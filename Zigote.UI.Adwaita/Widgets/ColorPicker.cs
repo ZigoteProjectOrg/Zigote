@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
@@ -171,8 +172,7 @@ public sealed class AdwColorPicker : Widget
 
         // Hex row label.
         float hexRowY = _alphaRect.Bottom + SectionGap;
-        float labelBaseline = hexRowY + ((HexH - _theme.FontSizeBody) / 2f) +
-                              (_theme.FontSizeBody * 0.8f);
+        float labelBaseline = TextBaseline.Centered(hexRowY, HexH, _theme.FontSizeBody);
         paint.AddText(
             text: "Hex",
             baselineX: Bounds.X,
@@ -367,8 +367,7 @@ public sealed class AdwColorPicker : Widget
     {
         var rgb = Value;
         float y = _hexField.Bounds.Bottom + SectionGap;
-        float baseline = y + ((ReadoutHeight - _theme.FontSizeCaption) / 2f) +
-                         (_theme.FontSizeCaption * 0.8f);
+        float baseline = TextBaseline.Centered(y, ReadoutHeight, _theme.FontSizeCaption);
         int r = (int)MathF.Round(rgb.R * 255f);
         int g = (int)MathF.Round(rgb.G * 255f);
         int b = (int)MathF.Round(rgb.B * 255f);

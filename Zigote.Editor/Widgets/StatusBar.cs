@@ -78,7 +78,7 @@ public sealed class StatusBar : Widget
         );
 
         float fs = _theme.FontSizeCaption;
-        float baseline = Bounds.Y + ((BarH - fs) / 2f) + (fs * 0.8f);
+        float baseline = TextBaseline.Centered(Bounds.Y, BarH, fs);
 
         // ── Start: activity + selection ────────────────────────────────────────
         int scriptErrors = _state.ScriptDiagnostics.Count;

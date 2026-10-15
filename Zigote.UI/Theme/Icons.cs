@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Widgets;
@@ -137,7 +138,9 @@ public static class Icons
         BoxShadow? shadow = null)
     {
         float x = box.X + ((box.Width - size) * 0.5f);
-        float baseline = box.Y + ((box.Height + size) * 0.5f) - (size * 0.12f);
+        // Centred like text (TextBaseline): the old `- size * 0.12` lifted icons to match labels
+        // that were themselves drawn 0.16 em high.
+        float baseline = TextBaseline.Centered(box.Y, box.Height, size, Family);
         paint.AddText(
             text: glyph,
             baselineX: x,

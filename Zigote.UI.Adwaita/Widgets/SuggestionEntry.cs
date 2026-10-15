@@ -197,7 +197,7 @@ public sealed class AdwSuggestionEntry : AdwEntry
                     paint.AddRect(bounds: row, color: wash, radius: AdwMetrics.MenuRadius);
 
                 (string val, string disp) = Items[i];
-                float baseline = row.Y + ((_rowH - fs) / 2f) + (fs * 0.8f);
+                float baseline = TextBaseline.Centered(row.Y, _rowH, fs);
                 paint.AddText(
                     text: disp,
                     baselineX: row.X + Pad,

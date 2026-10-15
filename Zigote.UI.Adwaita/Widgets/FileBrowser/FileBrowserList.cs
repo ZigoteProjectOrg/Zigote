@@ -1,3 +1,4 @@
+using Zigote.UI.TextShaping;
 using System.Globalization;
 using Zigote.Core.Events;
 using Zigote.UI.Host;
@@ -163,7 +164,7 @@ internal sealed class AdwFileBrowserList : Widget
                 size: 15f
             );
 
-            float textY = rowY + ((RowH - fs) / 2f) + (fs * 0.8f);
+            float textY = TextBaseline.Centered(rowY, RowH, fs);
             var fg = entry.IsHidden ? _theme.TextMuted : _theme.OnSurface;
 
             // Clip the name to its column so long names never bleed into Size/Modified.
@@ -497,7 +498,7 @@ internal sealed class AdwFileBrowserHeader : Widget
     {
         (float nameW, float sizeW, _) = AdwFileBrowserList.Columns(_size.Width);
         float fs = _theme.FontSizeCaption - 1f;
-        float textY = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+        float textY = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
 
         DrawLabel(
             paint: paint,

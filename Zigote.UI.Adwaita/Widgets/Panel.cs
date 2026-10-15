@@ -217,7 +217,7 @@ public sealed class AdwPanel : Widget
         paint.AddText(
             text: Title,
             baselineX: PanelX + ((_w - titleW) / 2f),
-            baselineY: PanelY + ((TitleH - fs) / 2f) + (fs * 0.8f),
+            baselineY: TextBaseline.Centered(PanelY, TitleH, fs),
             color: p.DialogFg,
             fontSize: fs,
             fontWeight: FontWeight.Bold

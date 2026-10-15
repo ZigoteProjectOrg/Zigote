@@ -78,7 +78,7 @@ public sealed class AdwTabButton : ComposedWidget
             paint.AddText(
                 text: text,
                 baselineX: Bounds.X + ((GlyphBox - w) / 2f),
-                baselineY: Bounds.Y + ((GlyphBox - fs) / 2f) + (fs * 0.82f),
+                baselineY: TextBaseline.Centered(Bounds.Y, GlyphBox, fs),
                 color: fg,
                 fontSize: fs,
                 fontWeight: FontWeight.ExtraBold

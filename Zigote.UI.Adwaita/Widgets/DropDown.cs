@@ -137,7 +137,7 @@ public sealed class AdwDropDown : Widget
         paint.AddRect(bounds: Bounds, color: fill, radius: AdwMetrics.ControlRadius);
 
         float fs = _theme.FontSizeBody;
-        float baseline = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+        float baseline = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
         paint.AddClipStart(Bounds);
         paint.AddText(
             text: SelectedLabel,

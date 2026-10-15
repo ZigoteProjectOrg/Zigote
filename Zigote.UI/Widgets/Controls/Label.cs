@@ -470,7 +470,7 @@ public class Label : Widget
                 paint.AddText(
                     text: line,
                     baselineX: lineX,
-                    baselineY: Bounds.Y + (_fontSize * 0.8f) + (i * lineH),
+                    baselineY: TextBaseline.Centered(Bounds.Y + (i * lineH), lineH, _fontSize, FontFamily),
                     color: color,
                     fontSize: _fontSize,
                     lineHeight: lh,
@@ -506,8 +506,9 @@ public class Label : Widget
             TextAlign.Right => Bounds.Right - drawW,
             _ => Bounds.X,
         };
-        // baseline ≈ top + font_size * 0.8
-        float baseline = Bounds.Y + (_fontSize * 0.8f);
+        // Centred in the label's own line (its measured height), not in whatever taller box a parent
+        // stretched it to — a label in a tall slot stays at the top of it, as before.
+        float baseline = TextBaseline.Centered(Bounds.Y, _size.Height, _fontSize, FontFamily);
 
         // Clip only when the text genuinely overflows its box. A bare MaxLines cap on text that
         // fits must NOT clip: glyph ink (side bearings, AA fringe) can extend a pixel or two past

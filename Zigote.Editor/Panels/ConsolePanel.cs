@@ -175,7 +175,7 @@ public sealed class ConsolePanel : Widget
             paint.AddText(
                 text: label,
                 baselineX: r.X + 25f,
-                baselineY: r.Y + ((20f - fs) / 2f) + (fs * 0.8f),
+                baselineY: TextBaseline.Centered(r.Y, 20f, fs),
                 color: on ? _theme.OnSurface : _theme.TextDisabled,
                 fontSize: fs
             );
@@ -203,7 +203,7 @@ public sealed class ConsolePanel : Widget
         paint.AddText(
             text: "Clear",
             baselineX: _clearRect.X + 18f,
-            baselineY: _clearRect.Y + ((20f - fs) / 2f) + (fs * 0.8f),
+            baselineY: TextBaseline.Centered(_clearRect.Y, 20f, fs),
             color: _theme.TextMuted,
             fontSize: fs
         );

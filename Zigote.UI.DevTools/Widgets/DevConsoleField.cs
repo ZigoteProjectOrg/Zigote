@@ -71,12 +71,13 @@ public sealed class DevConsoleField : Widget, ITextInputClient, IKeyboardTrap
             width: focused ? _theme.FocusRingWidth : 1f
         );
 
-        float textY = Bounds.Y + (_height * 0.62f);
+        float textY = TextBaseline.Centered(Bounds.Y, _height, DevKit.CaptionSize);
+        float iconY = TextBaseline.Centered(Bounds.Y, _height, AdwMetrics.IconSize, Icons.Family);
         Icons.DrawAt(
             paint: paint,
             glyph: Icons.ChevronRight,
             x: Bounds.X + 8f,
-            baselineY: textY,
+            baselineY: iconY,
             color: _theme.Accent,
             size: AdwMetrics.IconSize
         );

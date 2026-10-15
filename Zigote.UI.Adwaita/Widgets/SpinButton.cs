@@ -301,7 +301,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         float fs = _theme.FontSizeBody;
         float textW = TextMeasure.Width(text: DisplayText, fontSize: fs);
         float cx = Bounds.X + (Bounds.Width / 2f);
-        float baseline = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+        float baseline = TextBaseline.Centered(Bounds.Y, Bounds.Height, fs);
         // Click-to-edit shows the committed number selected: the next key replaces it.
         if (_edit is not null && _selectAll)
         {
