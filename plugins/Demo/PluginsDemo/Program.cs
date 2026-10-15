@@ -8,9 +8,11 @@ namespace PluginsDemo;
 /// </summary>
 public static class Program
 {
-    public static async Task Main(string[] args)
+    // Synchronous on purpose: an `async Main` resumes after the await on a thread-pool thread,
+    // and SDL's video init must run on the macOS main thread.
+    public static void Main(string[] args)
     {
-        if (!await AppLinksPlugin.StartAsync("dev.zigote.PluginsDemo", args))
+        if (!AppLinksPlugin.StartAsync("dev.zigote.PluginsDemo", args).GetAwaiter().GetResult())
             return;   // another instance took the links
 
         new PluginsDemoApp().Run();

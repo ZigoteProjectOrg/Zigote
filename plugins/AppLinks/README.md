@@ -4,7 +4,8 @@ The links that open your app — OAuth redirects, universal links, custom scheme
 slot from the [plugin roadmap](../../docs/plugin-roadmap.md).
 
 ```csharp
-if (!await AppLinksPlugin.StartAsync("dev.zigote.MyApp", args)) return;   // handed off — exit
+// in a synchronous Main: `async Main` would resume off the main thread, where macOS can't open a window
+if (!AppLinksPlugin.StartAsync("dev.zigote.MyApp", args).GetAwaiter().GetResult()) return;   // handed off — exit
 using var links = AppLinksPlugin.Listen(uri => app.Post(() => Route(uri)));
 if (AppLinksPlugin.InitialLink is { } cold) Route(cold);
 ```
