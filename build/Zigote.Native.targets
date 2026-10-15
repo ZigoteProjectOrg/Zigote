@@ -104,7 +104,11 @@
     <!-- zig target triple, used only when cross-compiling (RID OS present and != host OS). Windows
          cross uses the GNU ABI: MSVC needs the MSVC SDK (unavailable when cross-compiling from
          macOS/Linux). A native Windows host builds without -Dtarget (ZigCross stays false). -->
-    <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos</_ZigTriple>
+    <!-- macOS floor: a native build stamps the BUILD MACHINE's OS as minos (and zig ignores
+         MACOSX_DEPLOYMENT_TARGET), so the dylib refuses to load on anything older. 12.0 matches
+         NativeAOT's own floor. -->
+    <ZigMacosMin Condition="'$(ZigMacosMin)' == ''">12.0</ZigMacosMin>
+    <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos.$(ZigMacosMin)</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
     <!-- The API suffix is mandatory: without it zig defaults Android to API 29, which disagrees
@@ -141,6 +145,8 @@
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
     <ZigCross Condition="'$(_RidOS)' == '$(_HostOS)' And '$(_RidArch)' != '' And '$(_RidArch)' != '$(_HostArch)'">true</ZigCross>
+    <!-- An osx RID always passes the triple, for the OS floor above. -->
+    <ZigCross Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">true</ZigCross>
     <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
     <!-- CPU floor. A native (non-cross) build lets zig DETECT the build machine's CPU, so libzigote.so
          comes out using whatever the developer's chip happens to have — AVX-512 on a Zen 4 laptop —
