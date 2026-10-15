@@ -58,6 +58,7 @@ public sealed partial class LiquidGlassPage
     private readonly Signal<int> _family = new(0);
     private readonly Signal<int> _shape = new(0);
     private readonly Signal<bool> _glass = new(true);
+    private readonly Signal<bool> _adaptive = new(true);
     private readonly Signal<int> _tab = new(0);
     private readonly Signal<bool> _minimised = new(false);
 
@@ -176,15 +177,10 @@ public sealed partial class LiquidGlassPage
                     height: ArticleHeight,
                     child: new Stack {
                         Children = {
+                            // No dimming layer under clear glass: it darkened the article for
+                            // everyone. Clear stays legible the way Apple's does — adaptive ink
+                            // that turns dark over bright content (the Adaptive row).
                             content,
-                            new Watch(() =>
-                                {
-                                    // Dimming belongs to the media preset, not the optical-strength
-                                    // dial: adjusting a pane must not recolour the content below it.
-                                    float dim = _glass.Value && _variant.Value == 0 ? 0.32f : 0f;
-                                    return new MediaDimming(() => dim);
-                                }
-                            ),
                             new Positioned(
                                 left: ArticlePadding,
                                 right: ArticlePadding,
@@ -366,6 +362,12 @@ public sealed partial class LiquidGlassPage
                 },
             },
             new AdwSwitchRow(
+                title: "Adaptive",
+                subtitle: "Light or dark glass by what is underneath (Auto family) — a GPU probe per pane",
+                value: _adaptive.Peek(),
+                onChanged: v => _adaptive.Value = v
+            ),
+            new AdwSwitchRow(
                 title: "Glass",
                 subtitle: "Off is the same structure the way Adwaita draws it",
                 value: _glass.Peek(),
@@ -386,7 +388,9 @@ public sealed partial class LiquidGlassPage
     {
         bool tabs = _chrome.Value == 1;
         bool glass = _glass.Value;
-        int family = _variant.Value == 0 ? 2 : _family.Value;
+        _ = _adaptive.Value; // a rebuild input: the panes and their ink are built for it
+        int family = _family.Value;
+        _ = _variant.Value; // a rebuild input: the clear/regular choice reshapes the panes
         float radius = _shape.Value switch { 0 => AdwMetrics.Pill, 1 => 16f, _ => 6f };
         _panes.Clear();
 
@@ -402,6 +406,10 @@ public sealed partial class LiquidGlassPage
             _ => ((Color?)null, LiquidPane.OnGlass(_theme)),
         };
         var inkMuted = family == 0 ? LiquidPane.OnGlassMuted(_theme) : ink.WithAlpha(0.72f);
+        // Adaptive panes pick their own family, so their content asks the pane for its ink.
+        bool adaptive = family == 0 && _adaptive.Value;
+        Widget Inked(Func<Color, Color, Widget> build) =>
+            adaptive ? LiquidPane.WithInk(build) : build(ink, inkMuted);
 
         var row = new Row(spacing: 12f, crossAxisAlignment: CrossAxisAlignment.Center);
         if (tabs)
@@ -411,11 +419,11 @@ public sealed partial class LiquidGlassPage
                 child: SizedBox.Square(
                     size: ToolbarHeight,
                     child: new Center {
-                        Child = new IconGlyph(glyph: MaterialIcons.Search, size: 22f, color: ink),
+                        Child = Inked((i, _) => new IconGlyph(glyph: MaterialIcons.Search, size: 22f, color: i)),
                     }
                 )
             );
-            row.Children.Add(Pane(TabBar(ink: ink, radius: radius)));
+            row.Children.Add(Pane(Inked((i, _) => TabBar(ink: i, radius: radius))));
             row.Children.Add(new Spacer());
             row.Children.Add(
                 LiquidPane.Interactive(pane: search, onPressed: () => { }, semantics: "Search")
@@ -427,7 +435,7 @@ public sealed partial class LiquidGlassPage
                 child: SizedBox.Square(
                     size: ToolbarHeight,
                     child: new Center {
-                        Child = new IconGlyph(glyph: MaterialIcons.Menu, size: 24f, color: ink),
+                        Child = Inked((i, _) => new IconGlyph(glyph: MaterialIcons.Menu, size: 24f, color: i)),
                     }
                 )
             );
@@ -436,19 +444,20 @@ public sealed partial class LiquidGlassPage
                     height: ToolbarHeight,
                     child: new Padding(
                         padding: EdgeInsets.Symmetric(horizontal: 20f, vertical: 0f),
-                        child: new Row(
-                            spacing: 10f,
-                            crossAxisAlignment: CrossAxisAlignment.Center
-                        ) {
-                            Children = {
-                                new IconGlyph(glyph: MaterialIcons.Search, size: 22f, color: ink),
-                                new Label(
-                                    text: "Search",
-                                    style: new TextStyle(Size: 17f),
-                                    color: inkMuted
-                                ),
-                            },
-                        }
+                        child: Inked((i, muted) => new Row(
+                                spacing: 10f,
+                                crossAxisAlignment: CrossAxisAlignment.Center
+                            ) {
+                                Children = {
+                                    new IconGlyph(glyph: MaterialIcons.Search, size: 22f, color: i),
+                                    new Label(
+                                        text: "Search",
+                                        style: new TextStyle(Size: 17f),
+                                        color: muted
+                                    ),
+                                },
+                            }
+                        )
                     )
                 )
             );
@@ -478,6 +487,7 @@ public sealed partial class LiquidGlassPage
                 Tinted = _tinted.Peek(),
                 Elevation = _elevation.Peek(),
                 Bevel = _bevel.Peek(),
+                Adaptive = adaptive,
             };
             _panes.Add(pane);
             return pane;

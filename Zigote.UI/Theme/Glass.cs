@@ -39,6 +39,44 @@ public static class Glass
     ///     Adaptive-luminance override in [-1, 1] (negative = anchor the backdrop dark, positive =
     ///     light, 0 = off); null derives it from the tint and theme.
     /// </param>
+    // What the OS's glass preferences push a scrim toward: Tinted glass is a matte of the
+    // glass's own family at these strengths; Reduce transparency is all but opaque.
+    private const float TintedDark = 0.45f;
+    private const float TintedLight = 0.62f;
+    private const float Opaque = 0.9f;
+    private static readonly Color MatteDark = new(r: 0.11f, g: 0.11f, b: 0.13f);
+    private static readonly Color MatteLight = new(r: 0.97f, g: 0.97f, b: 0.98f);
+
+    /// <summary>
+    ///     Fold <see cref="SystemGlass" /> into a pane's scrim. <paramref name="weight" /> is how far
+    ///     the pane follows the Clear/Tinted setting — 1 for regular glass, 0 for clear glass over
+    ///     media, which stays clear as the system's does. Reduce transparency applies to every pane.
+    ///     The family comes from the sign of <paramref name="adapt" /> (negative = dark glass), the
+    ///     theme when it is 0. A scrim already stronger than the target (an accent or latched pane)
+    ///     is left alone.
+    /// </summary>
+    public static (Color Tint, float Adapt) ApplySystem(ThemeData theme, Color tint, float adapt,
+        float weight = 1f)
+    {
+        bool reduce = SystemGlass.ReduceTransparency;
+        float t = reduce ? 1f : SystemGlass.Tinted * Math.Clamp(value: weight, min: 0f, max: 1f);
+        if (t <= 0f) return (tint, adapt);
+
+        bool dark = adapt != 0f ? adapt < 0f : theme.IsDark;
+        float target = reduce ? Opaque : dark ? TintedDark : TintedLight;
+        if (tint.A >= target) return (tint, adapt);
+
+        var matte = dark ? MatteDark : MatteLight;
+        var colour = new Color(
+            r: tint.R + ((matte.R - tint.R) * t),
+            g: tint.G + ((matte.G - tint.G) * t),
+            b: tint.B + ((matte.B - tint.B) * t),
+            a: tint.A + ((target - tint.A) * t)
+        );
+        float strength = MathF.Abs(adapt) + ((1f - MathF.Abs(adapt)) * t);
+        return (colour, dark ? -strength : strength);
+    }
+
     public static void Surface(
         PaintList paint, Rect bounds, ThemeData theme,
         float radius, Color tint, float tintStrength,
@@ -73,15 +111,20 @@ public static class Glass
             max: 1f
         );
 
+        var (scrim, tone) = ApplySystem(
+            theme: theme,
+            tint: tint.WithAlpha(a),
+            adapt: adapt ?? AutoAdapt(theme: theme, tint: tint, tintStrength: tintStrength)
+        );
         paint.AddLiquidGlass(
             bounds: bounds,
-            color: tint.WithAlpha(a),
+            color: scrim,
             radius: radius,
             thickness: thickness,
             glowX: theme.GlassGlowX,
             glowY: theme.GlassGlowY,
             pinch: pinch,
-            adapt: adapt ?? AutoAdapt(theme: theme, tint: tint, tintStrength: tintStrength)
+            adapt: tone
         );
 
         // No drawn border: the rim light is the shader's own directional hairline, and a flat
@@ -165,15 +208,20 @@ public static class Glass
             min: 0f,
             max: 1f
         );
+        var (scrim, tone) = ApplySystem(
+            theme: theme,
+            tint: theme.GlassTint.WithAlpha(a),
+            adapt: AutoAdapt(theme: theme, tint: theme.GlassTint, tintStrength: strength)
+        );
         paint.AddLiquidGlass(
             bounds: bounds,
-            color: theme.GlassTint.WithAlpha(a),
+            color: scrim,
             radius: radius,
             thickness: thickness,
             glowX: theme.GlassGlowX,
             glowY: theme.GlassGlowY,
             pinch: pinch,
-            adapt: AutoAdapt(theme: theme, tint: theme.GlassTint, tintStrength: strength)
+            adapt: tone
         );
     }
 }

@@ -2855,6 +2855,18 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     the frame, and the present call. Wall durations on the calling thread — none is GPU
     ///     execution time. Not updated by frames that render the 3D scene.
     /// </summary>
+    /// <summary>
+    ///     Mean perceptual luminance (0 black … 1 white) of the content under the glass pane painted
+    ///     with probe <paramref name="slot" /> (see <see cref="Paint.PaintList.AddLiquidGlass" />),
+    ///     from the latest finished GPU measurement — a frame or two behind. Negative until measured.
+    ///     Main window only.
+    /// </summary>
+    public static float GlassProbe(uint slot)
+    {
+        var engine = Instance;
+        return engine is null || engine._disposed ? -1f : NativeEngine.GlassProbe(slot);
+    }
+
     public static void GetFrameTimings(out double acquireMs, out double encodeMs,
         out double presentMs)
     {

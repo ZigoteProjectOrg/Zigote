@@ -1,4 +1,5 @@
 using Zigote.Core.Animation;
+using Zigote.Core.Engine;
 
 namespace Zigote.UI.Adwaita;
 
@@ -106,6 +107,23 @@ public sealed class LiquidPane : Widget
     private float _tinted = 1f;
 
     public Widget? Child { get; set; }
+
+    /// <summary>
+    ///     Follow the content underneath, the way Apple's small glass controls do: the renderer
+    ///     measures how bright the backdrop under the pane is, and the pane turns to light glass
+    ///     with dark ink over light content and to dark glass with white ink over dark content,
+    ///     with hysteresis so it does not flicker on an edge. The ink flips through a theme scope
+    ///     around <see cref="Child" />, so content that colours itself with
+    ///     <see cref="OnGlass" /> follows without any wiring.
+    ///     <para>
+    ///         Off by default: each adaptive pane costs a small GPU pass and a readback while it
+    ///         is on screen, and a few extra frames after anything under it changes. Use it on
+    ///         chrome that floats over arbitrary content (tab bars, toolbars, media controls),
+    ///         not on panes whose backdrop is known. At most 63 adaptive panes at once; the rest
+    ///         stay put.
+    ///     </para>
+    /// </summary>
+    public bool Adaptive { get; set; }
 
     /// <summary>Corner radius. The default — <see cref="AdwMetrics.Pill" /> — makes a chip or a bar
     ///     a capsule; a pane carrying more than one row wants something nearer a card.</summary>
@@ -224,6 +242,20 @@ public sealed class LiquidPane : Widget
     private Motion _scrimMotion = new(spec: MotionSpec.Snappy, value: 1f, target: 1f);
     private Ticker? _ticker;
 
+    // ── Adaptive state ──
+    // Perceptual luminance the pane flips at: dark glass below Darken, light glass above Lighten.
+    // The gap is the hysteresis — a backdrop wavering around one number does not flicker the pane.
+    private const float Darken = 0.42f;
+    private const float Lighten = 0.60f;
+    private static readonly bool[] Slots = new bool[64]; // slot 0 is "no probe"
+    private uint _slot;
+    private bool? _adaptiveDark;
+    private float _lastLuma = -1f;
+    private int _settle;
+    private ThemeProvider? _scope;
+    // 1 = dark glass, 0 = light glass: what the lens draws, eased across a flip.
+    private Motion _toneMotion = new(spec: MotionSpec.Snappy, value: -1f, target: -1f);
+
     /// <summary>Steady-state gel targets for the current state — the values the old snap used.</summary>
     private (float Thick, float Pinch, float Scrim) GelTarget => (
         Thick: _pressed ? 0.72f : _hovered ? 1.12f : 1f,
@@ -243,7 +275,33 @@ public sealed class LiquidPane : Widget
 
     // A pane that leaves the tree leaves its group, or the group would keep drawing a lens at
     // wherever the pane last was. A re-attach lays out again, and Layout joins again.
-    protected override void OnUnmount() => Join(null);
+    protected override void OnUnmount()
+    {
+        Join(null);
+        ReleaseSlot();
+    }
+
+    private void ReleaseSlot()
+    {
+        if (_slot == 0) return;
+        lock (Slots) Slots[_slot] = false;
+        _slot = 0;
+    }
+
+    private static uint RentSlot()
+    {
+        lock (Slots)
+        {
+            for (uint i = 1; i < Slots.Length; i++)
+            {
+                if (Slots[i]) continue;
+                Slots[i] = true;
+                return i;
+            }
+        }
+
+        return 0;
+    }
 
     private void SnapGel()
     {
@@ -251,6 +309,8 @@ public sealed class LiquidPane : Widget
         _thicknessMotion.SnapTo(target.Thick);
         _pinchMotion.SnapTo(target.Pinch);
         _scrimMotion.SnapTo(target.Scrim);
+        if (_toneMotion.Target >= 0f) _toneMotion.SnapTo(_toneMotion.Target);
+        SwapInkAtMidpoint();
         _ticker?.Stop();
     }
 
@@ -283,7 +343,9 @@ public sealed class LiquidPane : Widget
         else
         {
             // Non-short-circuit OR: every motion must advance, including the settling frame.
-            bool moving = _thicknessMotion.Tick(dt) | _pinchMotion.Tick(dt) | _scrimMotion.Tick(dt);
+            bool moving = _thicknessMotion.Tick(dt) | _pinchMotion.Tick(dt) | _scrimMotion.Tick(dt)
+                | _toneMotion.Tick(dt);
+            SwapInkAtMidpoint();
             if (!moving) _ticker?.Stop();
         }
 
@@ -362,6 +424,23 @@ public sealed class LiquidPane : Widget
     /// <inheritdoc cref="OnGlass" />
     public static Color OnGlassMuted(ThemeData theme) => OnGlass(theme).WithAlpha(0.72f);
 
+    /// <summary>
+    ///     Content coloured by the glass it sits on: <paramref name="build" /> gets
+    ///     <see cref="OnGlass" /> and <see cref="OnGlassMuted" /> for the theme in force where the
+    ///     content is, and runs again when that changes — which is how an <see cref="Adaptive" />
+    ///     pane's ink follows its flips. Colours captured outside (from a page's theme) do not.
+    /// </summary>
+    public static Widget WithInk(Func<Color, Color, Widget> build) => new GlassInk(build);
+
+    private sealed class GlassInk(Func<Color, Color, Widget> build) : ComposedWidget
+    {
+        protected override Widget Build(BuildContext context)
+        {
+            var theme = ThemeProvider.Of(context);
+            return build(arg1: OnGlass(theme), arg2: OnGlassMuted(theme));
+        }
+    }
+
     // The float shadow paints outside Bounds, and partial repaint trusts this to cover it.
     public override Rect DamageBounds =>
         Elevation > 0f ? Bounds.Inflate(Elevation * 2.4f) : Bounds;
@@ -371,7 +450,7 @@ public sealed class LiquidPane : Widget
         // Read here rather than in a Build, as every control does — the theme provider expects
         // controls to read the theme in Measure.
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = Child?.Measure(c) ?? c.Constrain(Size.Zero);
+        _size = Content()?.Measure(c) ?? c.Constrain(Size.Zero);
         return _size;
     }
 
@@ -398,7 +477,138 @@ public sealed class LiquidPane : Widget
             width: _size.Width,
             height: _size.Height
         );
-        Child?.Layout(origin);
+        Content()?.Layout(origin);
+    }
+
+    /// <summary>
+    ///     What the pane lays out and paints: the child, or — while adaptive — the child inside the
+    ///     theme scope that carries the flipped ink. Created on first use and attached here, since
+    ///     the pane is already mounted by then; dropped again if Adaptive is turned off.
+    /// </summary>
+    private Widget? Content()
+    {
+        if (Child is null) return null;
+        if (!Adaptive)
+        {
+            if (_scope is not null)
+            {
+                _scope = null;
+                ReleaseSlot();
+                _adaptiveDark = null;
+                if (Owner is { } app) Child.Attach(owner: app, parent: this);
+            }
+
+            return Child;
+        }
+
+        var want = ScopeTheme();
+        if (_scope is null || !ReferenceEquals(objA: _scope.Child, objB: Child))
+        {
+            _scope = new ThemeProvider(data: want, child: Child);
+            if (Owner is { } app) _scope.Attach(owner: app, parent: this);
+        }
+        else if (!ReferenceEquals(objA: _scope.Data, objB: want))
+        {
+            // Only reached when the inherited theme itself changed (a flip is applied by Flip,
+            // outside the layout pass); that is already a full relayout.
+            _scope.Data = want;
+        }
+
+        return _scope;
+    }
+
+    /// <summary>The theme the content sees: the inherited one, or its counterpart while flipped.</summary>
+    private ThemeData ScopeTheme() =>
+        _adaptiveDark is { } dark && dark != _theme.IsDark ? Counterpart(theme: _theme, dark: dark) : _theme;
+
+    private static readonly Dictionary<(AdwAccent, bool), ThemeData> Counterparts = [];
+
+    /// <summary>The Adwaita theme of the other appearance with the same accent — cached, so a pane
+    ///     flipping back and forth hands its scope the same instance and rebuilds nothing extra.</summary>
+    private static ThemeData Counterpart(ThemeData theme, bool dark)
+    {
+        var accent = AdwAccent.Blue;
+        foreach (var a in Enum.GetValues<AdwAccent>())
+        {
+            if (AdwAccentColors.Bg(a) != theme.Accent) continue;
+            accent = a;
+            break;
+        }
+
+        lock (Counterparts)
+        {
+            if (!Counterparts.TryGetValue(key: (accent, dark), value: out var t))
+                Counterparts[(accent, dark)] = t = AdwTheme.Create(accent: accent, dark: dark);
+            return t;
+        }
+    }
+
+    /// <summary>
+    ///     Read this pane's latest backdrop measurement and decide the appearance. Runs from paint;
+    ///     a change is applied after the frame (a theme scope may not change mid-paint). Keeps a few
+    ///     frames coming after each repaint so the readback — a frame or two behind — is seen even
+    ///     when nothing else would draw again.
+    /// </summary>
+    private void Sample()
+    {
+        if (_slot == 0) _slot = RentSlot();
+        if (_slot == 0) return;
+        float luma = ZigoteEngine.GlassProbe(_slot);
+        if (luma != _lastLuma) _settle = 0;
+        _lastLuma = luma;
+        if (_settle++ < 4) Owner?.RequestExtraFrames(1);
+        else _settle = 0;
+        if (luma < 0f) return;
+
+        bool dark = _adaptiveDark switch {
+            true => luma < Lighten,
+            false => luma < Darken,
+            null => luma < (Darken + Lighten) * 0.5f,
+        };
+        if (_adaptiveDark == dark) return;
+        bool first = _adaptiveDark is null;
+        _adaptiveDark = dark;
+        Owner?.Post(() => Flip(animate: !first));
+    }
+
+    private void Flip(bool animate)
+    {
+        if (_adaptiveDark is not { } dark) return;
+        if (animate && Mounted && _ticker is not null && !AnimationController.ReduceMotion)
+        {
+            // The lens eases across; the ink swaps when the lens passes halfway (SwapInkAtMidpoint),
+            // inside the content fade Paint applies — so neither ink is ever seen on the wrong glass.
+            _toneMotion.Spec = MotionSpec.Spring(response: 0.42f, damping: 1f);
+            _toneMotion.Retarget(dark ? 1f : 0f);
+            _ticker.Start();
+        }
+        else
+        {
+            _toneMotion.SnapTo(dark ? 1f : 0f);
+            if (_scope is not null) _scope.Data = ScopeTheme();
+        }
+
+        MarkNeedsPaint();
+    }
+
+    private void SwapInkAtMidpoint()
+    {
+        if (_scope is null || _adaptiveDark is not { } dark) return;
+        bool past = dark ? _toneMotion.Value >= 0.5f : _toneMotion.Value <= 0.5f;
+        if (past) _scope.Data = ScopeTheme(); // no-op once swapped: Data ignores the same instance
+    }
+
+    /// <summary>
+    ///     How visible the content is mid-flip: it dips out around the halfway point, where the ink
+    ///     swaps, and back in — a cross-fade through the change rather than a hard cut.
+    /// </summary>
+    private float ContentFade()
+    {
+        if (_scope is null || _toneMotion.Value < 0f) return 1f;
+        if (MathF.Abs(_toneMotion.Target - _toneMotion.Value) < 0.001f) return 1f;
+        float d = MathF.Abs((_toneMotion.Value * 2f) - 1f); // 0 at the midpoint, 1 at either end
+        float x = Math.Clamp(value: d * 2.2f, min: 0f, max: 1f);
+        return x * x * (3f - (2f * x));
     }
 
     public override void Paint(PaintList paint)
@@ -411,7 +621,16 @@ public sealed class LiquidPane : Widget
             PaintLens(paint);
         }
 
-        Child?.Paint(paint);
+        float fade = ContentFade();
+        if (fade >= 1f)
+        {
+            Content()?.Paint(paint);
+            return;
+        }
+
+        paint.AddPushOpacity(bounds: Bounds, alpha: fade);
+        Content()?.Paint(paint);
+        paint.AddPopOpacity();
     }
 
     /// <summary>
@@ -451,31 +670,15 @@ public sealed class LiquidPane : Widget
         float side = MathF.Min(x: Bounds.Width, y: Bounds.Height);
         float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.2f);
 
-        // A restrained haze preserves the backdrop's colour. Contrast compression handles
-        // legibility separately; a large white fill would turn dark glass into a grey slab.
-        var haze = Tint ?? (_theme.IsDark
-            ? new Color(
-                r: 1f,
-                g: 1f,
-                b: 1f,
-                a: 0.012f
-            )
-            : new Color(
-                r: 1f,
-                g: 1f,
-                b: 1f,
-                a: 0.18f
-            ));
-
-        // Clear to tinted: the scrim runs from the clear variant's white floor up to the haze's
-        // own colour and strength, and the adaptive pull eases in alongside it — at 0 this is the
-        // clear variant exactly, at 1 the regular one, and a slider between them moves the
-        // material, not the widget tree. A Tint fainter than the floor is its own floor, so the
-        // dial never runs backwards.
-        float floor = MathF.Min(x: ClearHaze, y: haze.A);
-        float strength = floor + ((haze.A - floor) * Tinted);
-        var colour = Mix(from: Color.White, to: haze, t: Tinted);
-        float adapt = Adapt * Tinted;
+        // Adaptive panes draw the family their backdrop chose; the rest follow the theme. Across
+        // a flip the two families are blended by the eased tone, so nothing in the material jumps
+        // at the halfway point — scrim colour, its strength, the system tint and the contrast pull
+        // all travel together.
+        bool adaptive = Adaptive && Tint is null;
+        if (adaptive) Sample();
+        float tone = adaptive && _adaptiveDark is not null && _toneMotion.Value >= 0f
+            ? Math.Clamp(value: _toneMotion.Value, min: 0f, max: 1f)
+            : _theme.IsDark ? 1f : 0f;
 
         // The gel: hover thickens the lens a touch, press compresses it and squeezes the
         // refraction — the same response Glass.Surface gives the system controls, eased through
@@ -486,44 +689,84 @@ public sealed class LiquidPane : Widget
             max: side * 0.2f
         );
         float pinch = _theme.GlassPinch * _pinchMotion.Value;
-        float scrim = Math.Clamp(
-            value: strength * _scrimMotion.Value,
-            min: 0f,
-            max: 1f
-        );
 
-        // The anchor follows the CONTENT, not the page. With no Tint the content is the theme's
-        // OnGlass ink, so the theme decides: dark under white content, light under dark content.
-        // Deriving that default from the haze's own luminance (the obvious heuristic, and the
-        // first version of this) inverted exactly when it mattered most: dark-mode glass is a
-        // *milky* tint, whose high luminance anchored the backdrop light — lifting a bright album
-        // cover toward white directly underneath white text. An explicit Tint is different: it
-        // declares a family the theme knows nothing about, and its content was chosen against it
-        // (white on dark or accent glass, ink on light) — so there, and only there, the tint's own
-        // luminance is the truth. Clear has no adaptive pull and needs dimming beneath it.
-        bool lightContent = Tint is { } family
-            ? (family.R * 0.299f) + (family.G * 0.587f) + (family.B * 0.114f) < 0.5f
-            : _theme.IsDark;
+        var (tint, toneAdapt) = tone switch {
+            >= 1f => Material(darkGlass: true),
+            <= 0f => Material(darkGlass: false),
+            _ => Blend(dark: Material(darkGlass: true), light: Material(darkGlass: false), t: tone),
+        };
         paint.AddLiquidGlass(
             bounds: Bounds,
-            color: colour.WithAlpha(scrim),
+            color: tint,
             radius: Radius,
             thickness: thickness,
             glowX: _theme.GlassGlowX,
             glowY: _theme.GlassGlowY,
             pinch: pinch,
-            adapt: lightContent ? -adapt : adapt
+            adapt: toneAdapt,
+            probe: adaptive ? _slot : 0u
         );
 
         // No drawn border. The rim light IS the shader's directional specular and fresnel; a flat
         // outline painted over it is exactly what makes glass read as brushed aluminium.
     }
 
+    /// <summary>
+    ///     The lens colour and contrast pull for one glass family. A restrained haze preserves the
+    ///     backdrop's colour; contrast compression handles legibility separately — a large white
+    ///     fill would turn dark glass into a grey slab.
+    /// </summary>
+    private (Color Tint, float Adapt) Material(bool darkGlass)
+    {
+        var haze = Tint ?? new Color(r: 1f, g: 1f, b: 1f, a: darkGlass ? 0.012f : 0.18f);
+
+        // Clear to tinted: the scrim runs from the clear variant's white floor up to the haze's
+        // own colour and strength, and the adaptive pull eases in alongside it — at 0 this is the
+        // clear variant exactly, at 1 the regular one, and a slider between them moves the
+        // material, not the widget tree. A Tint fainter than the floor is its own floor, so the
+        // dial never runs backwards.
+        float floor = MathF.Min(x: ClearHaze, y: haze.A);
+        float strength = floor + ((haze.A - floor) * Tinted);
+        var colour = Mix(from: Color.White, to: haze, t: Tinted);
+        float adapt = Adapt * Tinted;
+        float scrim = Math.Clamp(value: strength * _scrimMotion.Value, min: 0f, max: 1f);
+
+        // The anchor follows the CONTENT, not the page. With no Tint the content is the glass
+        // family's ink: dark glass under white content, light glass under dark content. Deriving
+        // that default from the haze's own luminance (the obvious heuristic, and the first
+        // version of this) inverted exactly when it mattered most: dark-mode glass is a *milky*
+        // tint, whose high luminance anchored the backdrop light — lifting a bright album cover
+        // toward white directly underneath white text. An explicit Tint declares a family the
+        // theme knows nothing about, and its content was chosen against it — so there, and only
+        // there, the tint's own luminance is the truth. Clear has no adaptive pull.
+        bool lightContent = Tint is { } family
+            ? (family.R * 0.299f) + (family.G * 0.587f) + (family.B * 0.114f) < 0.5f
+            : darkGlass;
+        // The OS's Clear/Tinted setting moves regular glass only (clear glass over media stays
+        // clear, as the system's does); Reduce transparency frosts every pane. The family rides
+        // the sign, so a zero-adapt clear pane passes it as a signed epsilon.
+        return Glass.ApplySystem(
+            theme: _theme,
+            tint: colour.WithAlpha(scrim),
+            adapt: lightContent ? -MathF.Max(adapt, 1e-4f) : MathF.Max(adapt, 1e-4f),
+            weight: Tinted
+        );
+    }
+
+    /// <summary>A straight blend of two families, <paramref name="t" /> = 1 being all dark. The
+    ///     contrast pull crosses zero on the way, so the backdrop eases through untouched.</summary>
+    private static (Color Tint, float Adapt) Blend((Color Tint, float Adapt) dark,
+        (Color Tint, float Adapt) light, float t) => (
+        Mix(from: light.Tint, to: dark.Tint, t: t)
+            .WithAlpha(light.Tint.A + ((dark.Tint.A - light.Tint.A) * t)),
+        light.Adapt + ((dark.Adapt - light.Adapt) * t)
+    );
+
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
-        return Child?.HitTest(point) ?? this;
+        return Content()?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_scope ?? Child);
 }

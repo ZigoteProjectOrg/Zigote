@@ -682,10 +682,16 @@ public sealed unsafe class PaintList
     ///     detail as it compresses backdrop contrast toward the anchor. Clear lenses need dimmed
     ///     media beneath them when they carry bright text or symbols.
     /// </param>
+    /// <param name="probe">
+    ///     Adaptive-glass probe slot, 1–63 (0 = none): the renderer measures the content's mean
+    ///     luminance under this pane for <see cref="Engine.ZigoteEngine.GlassProbe" />. Costs one
+    ///     extra tiny pass per frame while any pane is probed, nothing otherwise.
+    /// </param>
     public void AddLiquidGlass(Rect bounds, Color color, float radius, float thickness, float glowX,
         float glowY,
         float pinch,
-        float adapt = 0f)
+        float adapt = 0f,
+        uint probe = 0)
     {
         CheckBounds(bounds);
         CheckColor(color);
@@ -704,6 +710,7 @@ public sealed unsafe class PaintList
             // Scaled by the ambient opacity for the same reason as thickness: the backdrop tone shift
             // must fade with the pane, or glass inside a fade pops in already scrimmed.
             Adapt = Math.Clamp(value: adapt, min: -1f, max: 1f) * _currentAlpha,
+            Probe = probe,
         };
         Write(kind: ZgPaintOp.LiquidGlass, record: glass);
     }

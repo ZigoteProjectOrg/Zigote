@@ -962,7 +962,7 @@ public partial class App : IDisposable
         NativeWindow!.Dispose();
     }
 
-    private void RequestLayoutAllWindows()
+    internal void RequestLayoutAllWindows()
     {
         RequestLayout();
         for (int i = 0; i < _secondaryWindows.Count; i++)

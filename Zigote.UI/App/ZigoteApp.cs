@@ -329,10 +329,20 @@ public class ZigoteApp
         // OnInit may already have changed it (an Adwaita app reading the system appearance).
         _applyTheme(Theme);
 
+        // The OS's Liquid Glass preferences (Clear/Tinted, Reduce transparency) are polled rather
+        // than observed: there is no notification for the first, and a second's latency is fine.
+        SystemGlass.Refresh();
+        long nextGlassPoll = Environment.TickCount64 + 1000;
         while (!uiApp.ShouldQuit)
         {
             try
             {
+                if (Environment.TickCount64 >= nextGlassPoll)
+                {
+                    nextGlassPoll = Environment.TickCount64 + 1000;
+                    if (SystemGlass.Refresh()) uiApp.RequestLayoutAllWindows();
+                }
+
                 OnUpdate(uiApp.DeltaTime);
                 uiApp.Frame();
             }
