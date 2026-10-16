@@ -161,7 +161,12 @@
          built for one machine, or a benchmark. `native` reintroduces the bug on purpose. -->
     <_ZigCpuArch Condition="'$(_RidArch)' != ''">$(_RidArch)</_ZigCpuArch>
     <_ZigCpuArch Condition="'$(_RidArch)' == ''">$(_HostArch)</_ZigCpuArch>
+    <_ZigCpuOS Condition="'$(_RidOS)' != ''">$(_RidOS)</_ZigCpuOS>
+    <_ZigCpuOS Condition="'$(_RidOS)' == ''">$(_HostOS)</_ZigCpuOS>
     <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_ZigCpuArch)' == 'x86_64'">x86_64_v2</ZigCpu>
+    <!-- arm64 macOS only runs on M1 and later, so apple_m1 excludes nobody. Generic aarch64 is ARMv8.0,
+         which lacks LSE: every atomic (spin locks, image_lock) compiles to an LL/SC retry loop. -->
+    <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_ZigCpuArch)' == 'aarch64' And '$(_ZigCpuOS)' == 'macos'">apple_m1</ZigCpu>
     <ZigCpu Condition="'$(ZigCpu)' == ''">baseline</ZigCpu>
     <ZigCpuArg>-Dcpu=$(ZigCpu)</ZigCpuArg>
     <!-- NOTE on glibc: a host-arch Linux build links the BUILD MACHINE's glibc, so libzigote.so
