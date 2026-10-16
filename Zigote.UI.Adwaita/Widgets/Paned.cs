@@ -19,6 +19,7 @@ public sealed class AdwPaned : Widget
     private bool _hovered;
     private float _minPaneSize = 180f;
     private float _position = 0.5f;
+    private bool _positionAssigned; // set by the app → controlled; a rebuild leaves it alone
     private float _positionAtDrag;
     private Widget? _second;
     private Size _size;
@@ -53,7 +54,17 @@ public sealed class AdwPaned : Widget
     public float Position
     {
         get => _position;
-        set => SetLayout(field: ref _position, value: value);
+        set
+        {
+            _positionAssigned = true;
+            SetLayout(field: ref _position, value: value);
+        }
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        if (!_positionAssigned) _position = ((AdwPaned)previous)._position;
+        base.AdoptStateFrom(previous);
     }
 
     /// <summary>Top/bottom split instead of left/right.</summary>

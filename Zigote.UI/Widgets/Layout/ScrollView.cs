@@ -16,6 +16,7 @@ public class ScrollView : Widget
     private readonly Scrollbar _hbar = new();
     private readonly SmoothScroller _sx;
     private readonly SmoothScroller _sy;
+    private ScrollController? _controller;
     private readonly Scrollbar _vbar = new();
 
     private Size _childSize;
@@ -36,6 +37,26 @@ public class ScrollView : Widget
 
     public Widget? Child { get; set; }
     public bool ScrollVertical { get; set; } = true;
+
+    /// <summary>
+    ///     Keeps this scroller's position in a <see cref="ScrollController" /> the app holds, so it
+    ///     survives the widget being replaced and can be driven from code. Drives the vertical axis, or the horizontal one when only that scrolls.
+    /// </summary>
+    public ScrollController? Controller
+    {
+        get => _controller;
+        set
+        {
+            if (ReferenceEquals(objA: _controller, objB: value)) return;
+            if (Mounted) _controller?.Unbind(ControlledAxis);
+            _controller = value;
+            if (Mounted) _controller?.Bind(ControlledAxis);
+        }
+    }
+
+    private SmoothScroller ControlledAxis => ScrollVertical ? _sy : _sx;
+
+    protected override void OnMount() => _controller?.Bind(ControlledAxis);
     public bool ScrollHorizontal { get; set; } = false;
 
     /// <summary>
@@ -395,6 +416,7 @@ public class ScrollView : Widget
     public override void Detach()
     {
         base.Detach();
+        _controller?.Unbind(ControlledAxis);
         _sx.Dispose();
         _sy.Dispose();
     }

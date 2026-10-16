@@ -24,6 +24,9 @@ public abstract class Widget : ITickerProvider
     private bool _focused;
     private List<IDisposable>? _owned;
 
+    // Set by CarryState when the widget this one replaces holds keyboard focus; claimed on Attach.
+    private bool _takeFocusOnAttach;
+
     // Cached single-child snapshot for GetChildren: a collection-expression `[Child]` allocates a
     // wrapper per call, and per-frame tree walks (devtools layers, semantics, hot reload) call
     // GetChildren on every widget. Re-allocated only when the child reference changes; a returned
@@ -143,6 +146,14 @@ public abstract class Widget : ITickerProvider
         Owner = owner;
         Parent = parent;
         EnsureMounted();
+        // Before the outgoing twin detaches (swaps attach the new subtree first), so its detach
+        // finds focus already moved and leaves it alone.
+        if (_takeFocusOnAttach)
+        {
+            _takeFocusOnAttach = false;
+            owner.RequestFocus(this);
+        }
+
         // Snapshot before cascading: attaching a child can run app build code (Watch.EnsureStarted,
         // a lazy ComposedWidget build) that reconciles THIS widget's live child list mid-iteration —
         // GetChildren() returns the actual List for multi-child containers. Children added by such
@@ -705,28 +716,72 @@ public abstract class Widget : ITickerProvider
     public virtual void UpdateFrom(Widget newWidget) { }
 
     /// <summary>
-    ///     Hand transient state (scroll position) from a subtree that a rebuild is replacing to the
-    ///     freshly-built one taking its place. Widgets are matched by position and runtime type, so
-    ///     a build that returns new instances for the same UI — every theme switch — keeps the
-    ///     user where they were. No-op for the same instance or a different type.
+    ///     Hand transient state (scroll offsets, typed text and caret, keyboard focus) from a subtree
+    ///     that a rebuild is replacing to the freshly-built one taking its place. Widgets are matched
+    ///     by <see cref="Key" /> where they have one, otherwise by position and runtime type, so a
+    ///     build that returns new instances for the same UI — every theme switch, every
+    ///     <see cref="Watch" /> recompute — keeps the user where they were. No-op for the same
+    ///     instance or a different type.
     /// </summary>
     protected internal static void CarryState(Widget? from, Widget? to)
     {
         if (from is null || to is null || ReferenceEquals(objA: from, objB: to)) return;
         if (from.GetType() != to.GetType()) return;
+        if (from.Focused)
+        {
+            if (to.Owner is { } app) app.RequestFocus(to);
+            else to._takeFocusOnAttach = true;
+        }
         to.AdoptStateFrom(from);
     }
 
     /// <summary>
+    ///     <see cref="CarryState(Widget?, Widget?)" /> for a slot whose content can change type
+    ///     (a <see cref="Watch" /> flipping between pages, a build returning a different screen):
+    ///     the outgoing subtree is parked in <paramref name="stash" /> by type, and an incoming one
+    ///     whose type was parked earlier takes that state back — so A → B → A returns to A as it
+    ///     was left. Pass <paramref name="next" /> = null to park a subtree that is leaving.
+    ///     ponytail: one parked subtree per type, held until the slot is collected; an LRU if
+    ///     a slot ever cycles through enough page types for that to matter.
+    /// </summary>
+    protected internal static void CarryState(ref Dictionary<Type, Widget>? stash, Widget? previous,
+        Widget? next)
+    {
+        if (previous is not null && previous.GetType() != next?.GetType())
+            (stash ??= [])[previous.GetType()] = previous;
+        if (next is null) return;
+        if (previous?.GetType() == next.GetType()) CarryState(from: previous, to: next);
+        else if (stash?.Remove(key: next.GetType(), value: out var parked) == true)
+            CarryState(from: parked, to: next);
+    }
+
+    /// <summary>
     ///     Take over the transient state of <paramref name="previous" />, the same-typed widget
-    ///     this one replaces. The default pairs the children by index and recurses; a widget with
-    ///     state of its own (a scroller's offset) copies it and calls base.
+    ///     this one replaces. The default pairs keyed children by key and the rest by order, and
+    ///     recurses; a widget with state of its own (a scroller's offset) copies it and calls base.
     /// </summary>
     protected virtual void AdoptStateFrom(Widget previous)
     {
+        Dictionary<(Type, Key), Widget>? keyed = null;
+        foreach (var w in previous.GetChildren())
+        {
+            if (w.Key is { } k) (keyed ??= [])[(w.GetType(), k)] = w;
+        }
+
         using var olds = previous.GetChildren().GetEnumerator();
-        using var news = GetChildren().GetEnumerator();
-        while (olds.MoveNext() && news.MoveNext())
-            CarryState(from: olds.Current, to: news.Current);
+        bool oldsLeft = true;
+        foreach (var n in GetChildren())
+        {
+            if (n.Key is { } k)
+            {
+                if (keyed?.TryGetValue(key: (n.GetType(), k), value: out var match) == true)
+                    CarryState(from: match, to: n);
+                continue;
+            }
+
+            // Next unkeyed old child: a keyed one never pairs by position.
+            while (oldsLeft && (oldsLeft = olds.MoveNext()) && olds.Current.Key is not null) { }
+            if (oldsLeft) CarryState(from: olds.Current, to: n);
+        }
     }
 }

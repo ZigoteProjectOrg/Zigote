@@ -55,6 +55,9 @@ public abstract class ComposedWidget : Widget
     // child to pair it with — see AdoptStateFrom.
     private Widget? _predecessor;
 
+    // Subtrees a build swapped out for a different type, kept so swapping back restores them.
+    private Dictionary<Type, Widget>? _parked;
+
     public override string? TooltipText => _child?.TooltipText;
 
     /// <summary>
@@ -98,7 +101,7 @@ public abstract class ComposedWidget : Widget
         _childCache = _child is not null ? [_child] : null;
 
         // Before the swap detaches it: the outgoing subtree hands its scroll positions over.
-        CarryState(from: previous ?? _predecessor, to: _child);
+        CarryState(stash: ref _parked, previous: previous ?? _predecessor, next: _child);
         _predecessor = null;
 
         SwapChild(previous: previous, next: _child);

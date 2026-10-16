@@ -21,6 +21,7 @@ public class ListView : Widget
     private readonly List<int> _evicted = [];
     private readonly List<Widget> _items = [];
     private readonly SmoothScroller _sy;
+    private ScrollController? _controller;
 
     // Scratch for GetVisibleChildren — see the comment there.
     private readonly List<Widget> _visibleScratch = [];
@@ -30,6 +31,12 @@ public class ListView : Widget
     // window + overscan. _items stays empty.
     private Func<int, Widget>? _builder;
     private int _builderCount;
+
+    // Rows evicted from the window, by index: a row rebuilt at that index takes their state back
+    // (a nested scroll offset, typed text), so scrolling away and back loses nothing.
+    // ponytail: capped at ParkedRowCap, farthest-from-window dropped first by a linear scan.
+    private const int ParkedRowCap = 256;
+    private readonly Dictionary<int, Widget> _parkedRows = [];
     private Func<int, float>? _heightOf;
 
     private float _itemHeight = 36f;
@@ -124,6 +131,26 @@ public class ListView : Widget
     public float MaxScrollExtentY => _sy.Max;
 
     /// <summary>
+    ///     Keeps this scroller's position in a <see cref="ScrollController" /> the app holds, so it
+    ///     survives the widget being replaced and can be driven from code.
+    /// </summary>
+    public ScrollController? Controller
+    {
+        get => _controller;
+        set
+        {
+            if (ReferenceEquals(objA: _controller, objB: value)) return;
+            if (Mounted) _controller?.Unbind(ControlledAxis);
+            _controller = value;
+            if (Mounted) _controller?.Bind(ControlledAxis);
+        }
+    }
+
+    private SmoothScroller ControlledAxis => _sy;
+
+    protected override void OnMount() => _controller?.Bind(ControlledAxis);
+
+    /// <summary>
     ///     Fired each layout with (currentOffsetY, maxOffsetY) — use to drive infinite scroll /
     ///     paging. The same seam <see cref="ScrollView.OnScrolled" /> offers, so a virtualised list
     ///     and a plain scroll view page the same way.
@@ -153,8 +180,10 @@ public class ListView : Widget
     /// <summary>
     ///     Flutter's <c>ListView.builder</c>: rows are built on demand for the visible window only,
     ///     so construction is O(viewport) too — a million-row list costs the same as a ten-row one.
-    ///     Rows leaving the window are detached and dropped, so any state they hold (hover, focus,
-    ///     a nested scroll offset) dies with them — keep row state in your model, not in the widget.
+    ///     Rows leaving the window are detached and dropped; a row rebuilt at the same index later
+    ///     takes back their scroll offsets and typed text (for the last few hundred rows evicted),
+    ///     but hover and focus do not survive — and anything that must outlive that belongs in your
+    ///     model.
     /// </summary>
     public static ListView Builder(int itemCount, Func<int, Widget> itemBuilder,
         double? itemExtent = null)
@@ -166,12 +195,14 @@ public class ListView : Widget
 
     /// <summary>
     ///     Switch the list into builder mode — see <see cref="Builder" />. Call again to change the
-    ///     count or the builder (e.g. after a filter); already-built rows are dropped.
+    ///     count or the builder (e.g. after a filter); already-built rows are dropped. With
+    ///     <paramref name="keepScroll" /> the rows are assumed to keep their indices (a list that grew),
+    ///     so rebuilt rows keep their state too.
     /// </summary>
     public void SetBuilder(int itemCount, Func<int, Widget> itemBuilder, bool keepScroll = false)
     {
         _items.Clear();
-        DropBuilt();
+        DropBuilt(keepState: keepScroll);
         _builder = itemBuilder;
         _builderCount = Math.Max(val1: 0, val2: itemCount);
         InvalidateExtents();
@@ -185,6 +216,7 @@ public class ListView : Widget
         if (_built.TryGetValue(key: i, value: out var w)) return w;
 
         w = _builder(i);
+        if (_parkedRows.Remove(key: i, value: out var parked)) CarryState(from: parked, to: w);
         _built[i] = w;
         if (Owner is not null) w.Attach(owner: Owner, parent: this);
         // Measure here so a row first reached from Layout/Paint (a scroll that outran the measure
@@ -193,10 +225,31 @@ public class ListView : Widget
         return w;
     }
 
-    private void DropBuilt()
+    private void DropBuilt(bool keepState = false)
     {
-        foreach (var w in _built.Values) w.Detach();
+        foreach ((int i, var w) in _built)
+        {
+            w.Detach();
+            if (keepState) _parkedRows[i] = w;
+        }
+
         _built.Clear();
+        if (!keepState) _parkedRows.Clear();
+        TrimParked(0);
+    }
+
+    private void TrimParked(int nearIndex)
+    {
+        while (_parkedRows.Count > ParkedRowCap)
+        {
+            int far = -1;
+            foreach (int i in _parkedRows.Keys)
+            {
+                if (far < 0 || Math.Abs(nearIndex - i) > Math.Abs(nearIndex - far)) far = i;
+            }
+
+            _parkedRows.Remove(far);
+        }
     }
 
     /// <summary>Drop built rows outside the window — the whole point of builder mode.</summary>
@@ -213,8 +266,11 @@ public class ListView : Widget
         foreach (int i in _evicted)
         {
             _built[i].Detach();
+            _parkedRows[i] = _built[i];
             _built.Remove(i);
         }
+
+        TrimParked(first);
     }
 
     /// <summary>
@@ -612,13 +668,24 @@ public class ListView : Widget
 
     protected override void AdoptStateFrom(Widget previous)
     {
-        _sy.AdoptFrom(((ListView)previous)._sy);
-        base.AdoptStateFrom(previous);
+        var old = (ListView)previous;
+        _sy.AdoptFrom(old._sy);
+        if (_builder is null || old._builder is null)
+        {
+            base.AdoptStateFrom(previous);
+            return;
+        }
+
+        // Builder rows pair by index, and this list builds lazily: park the old rows for ItemAt.
+        foreach ((int i, var w) in old._parkedRows) _parkedRows[i] = w;
+        foreach ((int i, var w) in old._built) _parkedRows[i] = w;
+        TrimParked(0);
     }
 
     public override void Detach()
     {
         base.Detach();
+        _controller?.Unbind(ControlledAxis);
         _sy.Dispose();
     }
 

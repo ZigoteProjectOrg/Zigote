@@ -18,12 +18,14 @@ public sealed class AdwEntryRow : ComposedWidget
     private bool _obscure;
     private Widget? _suffix;
     private string _text;
+    private bool _textAssigned; // set by the app → controlled; a rebuild leaves it alone
     private string _title;
 
     public AdwEntryRow(string title = "", string text = "", Action<string>? onChanged = null)
     {
         _title = title;
         _text = text;
+        _textAssigned = text.Length > 0;
         OnChanged = onChanged;
     }
 
@@ -41,6 +43,7 @@ public sealed class AdwEntryRow : ComposedWidget
         set
         {
             _text = value;
+            _textAssigned = true;
             if (_field is null) return;
             _field.Text = value;
             SyncFloat();
@@ -67,6 +70,12 @@ public sealed class AdwEntryRow : ComposedWidget
     {
         get => _suffix;
         set => this.Set(field: ref _suffix, value: value);
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        if (!_textAssigned) _text = ((AdwEntryRow)previous).Text;
+        base.AdoptStateFrom(previous);
     }
 
     protected override Widget Build(BuildContext context)
@@ -172,6 +181,7 @@ public sealed class AdwPasswordEntryRow : ComposedWidget
     private bool _revealed;
     private AdwEntryRow? _row;
     private string _text;
+    private bool _textAssigned; // set by the app → controlled; a rebuild leaves it alone
     private string _title;
 
     public AdwPasswordEntryRow(
@@ -181,6 +191,7 @@ public sealed class AdwPasswordEntryRow : ComposedWidget
     {
         _title = title;
         _text = text;
+        _textAssigned = text.Length > 0;
         OnChanged = onChanged;
     }
 
@@ -201,11 +212,20 @@ public sealed class AdwPasswordEntryRow : ComposedWidget
         set
         {
             _text = value;
+            _textAssigned = true;
             if (_row is not null) _row.Text = value;
         }
     }
 
     public Action<string>? OnChanged { get; set; }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        var old = (AdwPasswordEntryRow)previous;
+        if (!_textAssigned) _text = old.Text;
+        _revealed = old._revealed;
+        base.AdoptStateFrom(previous);
+    }
 
     protected override Widget Build(BuildContext context)
     {

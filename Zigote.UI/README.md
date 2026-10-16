@@ -86,6 +86,11 @@ class Counter : ComposedWidget
 - **`OwnEffect(() => …)`** is the fine-grained path: a signal-tracked effect that writes into retained children,
   allocating nothing. **`Watch`** is for when the tree's *shape* depends on a signal.
 - **`OnMount`/`OnUnmount` + `Own(...)`** scope subscriptions and tickers to the time the widget is actually in the tree.
+- **Transient state survives rebuilds.** When a build, `Watch` or `ListView.Builder` hands back fresh instances,
+  scroll offsets, typed text + caret, focus, expander/pane/carousel positions carry over (paired by `Key`, else by
+  position and type; a page swapped out and back comes back as it was left). Values the app *sets* (`Text`,
+  `Expanded`, …) are treated as controlled and win. For a position that must outlive the widget or be driven from
+  code, hold a `ScrollController` and pass it as `Controller`.
 - **`InheritedWidget`** (`ThemeProvider`, `MediaQuery`) propagates data down the tree; consumers read it with
   `BuildContext.DependOn<T>()` and rebuild only when it changes.
 - **Compose by default** — controls are built from the layout kernel + `DecoratedBox` (background) +

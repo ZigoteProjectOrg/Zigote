@@ -21,10 +21,9 @@ namespace Zigote.UI.Widgets;
 ///         place, and an off-thread change (a timer/async completion setting a signal) is marshalled —
 ///         the loop is woken via <c>RequestLayout</c> and the swap happens in <see cref="Measure" />
 ///         on
-///         the UI thread. Like any rebuild in this retained framework, the new subtree replaces the
-///         old,
-///         so hoist stateful children (or give them keys via a container) if they must survive a
-///         rebuild.
+///         the UI thread. The new subtree replaces the old, but transient state carries over —
+///         scroll offsets, typed text and caret, focus — paired by key, else by position and type,
+///         and a subtree swapped out for another type is restored when it comes back.
 ///     </para>
 /// </summary>
 public sealed class Watch : Widget
@@ -41,6 +40,9 @@ public sealed class Watch : Widget
     // otherwise build its subtree against an empty scope — see BuildContext.CaptureScope.
     private InheritedWidget[] _scope = [];
     private int _scopeDepth;
+    // Subtrees swapped out for a different type, kept so flipping back restores them — and the
+    // live child parked on Detach, so a re-attached Watch rebuilds into the state it left.
+    private Dictionary<Type, Widget>? _parked;
     private Size _size;
     private bool _started;
     private IDisposable? _subscription;
@@ -120,7 +122,7 @@ public sealed class Watch : Widget
         }
 
         _child = next;
-        CarryState(from: previous, to: _child);
+        CarryState(stash: ref _parked, previous: previous, next: _child);
         SwapChild(
             previous: previous,
             next: _child
@@ -179,6 +181,7 @@ public sealed class Watch : Widget
         _computed?.Dispose();
         _computed = null;
         base.Detach(); // detaches _child via GetChildren
+        CarryState(stash: ref _parked, previous: _child, next: null);
         _child = null;
         _started = false;
         _dirty = false;
@@ -187,6 +190,25 @@ public sealed class Watch : Widget
         // subtree's providers alive. Array.Clear rather than a fresh array: the buffer is reused.
         Array.Clear(array: _scope, index: 0, length: _scopeDepth);
         _scopeDepth = 0;
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        if (_child is not null)
+        {
+            base.AdoptStateFrom(previous);
+            return;
+        }
+
+        // Not built yet (the usual case: a fresh Watch from its parent's rebuild): inherit the old
+        // one's subtrees as parked state for the first build to claim.
+        var old = (Watch)previous;
+        if (old._parked is not null)
+        {
+            foreach ((var type, var w) in old._parked) (_parked ??= [])[type] = w;
+        }
+
+        if (old._child is { } c) (_parked ??= [])[c.GetType()] = c;
     }
 
     public override Size Measure(Constraints constraints)

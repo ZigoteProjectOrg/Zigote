@@ -51,6 +51,10 @@ public class AdwTextField : Widget, ITextInputClient
     private int _selectionAnchor = -1; // -1 means no selection
     private Size _size;
     private string _text = string.Empty;
+
+    // Set by any Text write: a field whose text the app supplied is controlled, so a rebuild must
+    // not paste the previous field's text over it.
+    private bool _textAssigned;
     private ThemeData _theme = ThemeData.Dark;
 
     /// <summary>
@@ -109,6 +113,7 @@ public class AdwTextField : Widget, ITextInputClient
         set
         {
             value ??= string.Empty;
+            _textAssigned = true;
             if (value == _text) return;
             _text = value;
 
@@ -532,6 +537,28 @@ public class AdwTextField : Widget, ITextInputClient
             value4: _cursorPos,
             value5: _selectionAnchor
         );
+    }
+
+    // Detach unsubscribes, so a field re-shown after a tab switch would otherwise stop following its
+    // controller. Remove-then-add keeps it to one subscription whether or not it was ever detached.
+    protected override void OnMount()
+    {
+        if (_controller is null) return;
+        _controller.Changed -= OnControllerChanged;
+        _controller.Changed += OnControllerChanged;
+        Text = _controller.Text;
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        var old = (AdwTextField)previous;
+        // An uncontrolled field keeps what the user typed; a controlled one keeps its own value.
+        if (_controller is null && !_textAssigned) _text = old._text;
+        if (_text != old._text) return;
+        _cursorPos = Math.Min(val1: old._cursorPos, val2: _text.Length);
+        _selectionAnchor = old._selectionAnchor <= _text.Length ? old._selectionAnchor : -1;
+        _scrollX = old._scrollX;
+        _scrollY = old._scrollY;
     }
 
     public override void Detach()

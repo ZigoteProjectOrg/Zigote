@@ -27,6 +27,7 @@ public sealed class AdwCarousel : Widget
     internal readonly Signal<int> PositionSignal = new(0);
 
     private readonly SmoothScroller _scroller;
+    private bool _positionAssigned; // set by the app → controlled; a rebuild leaves it alone
     private bool _armed;
     private float _dragStartOffset;
     private float _dragStartX;
@@ -62,7 +63,23 @@ public sealed class AdwCarousel : Widget
     public int Position
     {
         get => PositionSignal.Value;
-        set => GoTo(value);
+        set
+        {
+            _positionAssigned = true;
+            GoTo(value);
+        }
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        var old = (AdwCarousel)previous;
+        if (!_positionAssigned)
+        {
+            PositionSignal.Value = old.PositionSignal.Value;
+            _scroller.AdoptFrom(old._scroller);
+        }
+
+        base.AdoptStateFrom(previous);
     }
 
     public override bool Focusable => Interactive && Pages.Count > 1;

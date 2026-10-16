@@ -13,6 +13,7 @@ namespace Zigote.UI.Adwaita;
 public sealed class AdwExpanderRow : ComposedWidget
 {
     private readonly Signal<bool> _expanded = new(false);
+    private bool _expandedAssigned; // set by the app → controlled; a rebuild leaves it alone
     private bool _enableExpansion = true;
     private bool _enabled = true;
     private Widget? _headerSuffix;
@@ -44,7 +45,17 @@ public sealed class AdwExpanderRow : ComposedWidget
     public bool Expanded
     {
         get => _expanded.Value;
-        set => _expanded.Value = value;
+        set
+        {
+            _expandedAssigned = true;
+            _expanded.Value = value;
+        }
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        if (!_expandedAssigned) _expanded.Value = ((AdwExpanderRow)previous)._expanded.Value;
+        base.AdoptStateFrom(previous);
     }
 
     /// <summary>Widget packed at the end of the header, before the enable switch and chevron.</summary>

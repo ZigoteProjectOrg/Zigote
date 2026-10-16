@@ -101,6 +101,17 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
         Offset = Target = previous.Target;
     }
 
+    /// <summary>
+    ///     Start at <paramref name="offset" /> before the first Layout knows Max — the next
+    ///     <see cref="Reclamp" /> trims it if the content turned out shorter.
+    /// </summary>
+    public void Restore(float offset)
+    {
+        _flingVelocity = 0f;
+        Max = MathF.Max(x: Max, y: offset);
+        Offset = Target = MathF.Max(x: 0f, y: offset);
+    }
+
     /// <summary>Re-clamp current + target after a content/viewport size change (call in Layout).</summary>
     public void Reclamp()
     {
