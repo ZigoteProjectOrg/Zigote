@@ -159,7 +159,6 @@ public sealed class PaintSnapshot
                    live: null,
                    start: prefix,
                    end: prevCount - suffix,
-                   blobSource: this,
                    clips: clips,
                    clipDepth: clipDepth,
                    changed: changed,
@@ -170,7 +169,6 @@ public sealed class PaintSnapshot
                    live: current,
                    start: prefix,
                    end: curCount - suffix,
-                   blobSource: current,
                    clips: clips,
                    clipDepth: clipDepth,
                    changed: changed,
@@ -191,7 +189,7 @@ public sealed class PaintSnapshot
     ///     correctly rejected.
     /// </summary>
     private static bool AccumulateWindow(
-        PaintSnapshot? snapshot, PaintList? live, int start, int end, object blobSource,
+        PaintSnapshot? snapshot, PaintList? live, int start, int end,
         Span<Rect> clips, int clipDepth, Span<Rect> changed, ref int changedCount)
     {
         int transformDepth = 0; // native transforms opened inside this window
@@ -261,7 +259,8 @@ public sealed class PaintSnapshot
             if (!TryRecordBounds(
                     rec: rec,
                     kind: kind,
-                    blobSource: blobSource,
+                    snapshot: snapshot,
+                    live: live,
                     index: i,
                     bounds: out var bounds
                 )) return false;
@@ -294,8 +293,8 @@ public sealed class PaintSnapshot
     ///     Conservative screen bounds of one draw record. False = not boundable (state ops,
     ///     layout-handle text) — the caller degrades to a full repaint, which is always safe.
     /// </summary>
-    private static bool TryRecordBounds(ReadOnlySpan<byte> rec, ZgPaintOp kind, object blobSource,
-        int index, out Rect bounds)
+    private static bool TryRecordBounds(ReadOnlySpan<byte> rec, ZgPaintOp kind,
+        PaintSnapshot? snapshot, PaintList? live, int index, out Rect bounds)
     {
         bounds = Rect.Zero;
         switch (kind)
@@ -389,7 +388,9 @@ public sealed class PaintSnapshot
             }
             case ZgPaintOp.Polygon:
             {
-                byte[]? blob = FindPixelBlob(source: blobSource, index: index);
+                byte[]? blob = snapshot is not null
+                    ? Lookup(blobs: snapshot._pixelBlobs, index: index)
+                    : live!.FindPixelBlob(index);
                 if (blob is null || blob.Length < 16) return false;
                 float minX = float.MaxValue,
                     minY = float.MaxValue,
@@ -450,6 +451,12 @@ public sealed class PaintSnapshot
         var kind = (ZgPaintOp)MemoryMarshal.Read<ZgPaintOpHeader>(ab).Kind;
         if (kind != current.RecordKind(curIdx)) return false;
 
+        // A glyph run's quads (positions + UVs) live in a side array the snapshot does not keep, so
+        // two runs with equal atlas/tint/count can still draw differently — never call them equal.
+        // ponytail: forces clip-bound or full damage for any frame with glyph runs; capture the
+        // quad arrays if AddGlyphRun ever gets a hot caller.
+        if (kind == ZgPaintOp.GlyphRun) return false;
+
         // Pointer fields hold process addresses, not content: a re-encoded blob gets a fresh array
         // for identical text. Compare everything else byte-for-byte and the blobs by content.
         int textPtr = PaintList.TextPtrFieldOffset(kind);
@@ -495,15 +502,22 @@ public sealed class PaintSnapshot
     private static bool RecordBytesEqual(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b, int skipA,
         int skipB)
     {
-        for (int i = 0; i < a.Length; i++)
+        // Compare the (up to three) spans around the skipped fields, lowest skip first.
+        int lo = Math.Min(val1: skipA, val2: skipB), hi = Math.Max(val1: skipA, val2: skipB);
+        int pos = 0;
+        if (lo >= 0)
         {
-            bool skipped = (skipA >= 0 && i >= skipA && i < skipA + 8) ||
-                           (skipB >= 0 && i >= skipB && i < skipB + 8);
-            if (skipped) continue;
-            if (a[i] != b[i]) return false;
+            if (!a[pos..lo].SequenceEqual(b[pos..lo])) return false;
+            pos = lo + 8;
         }
 
-        return true;
+        if (hi >= 0)
+        {
+            if (!a[pos..hi].SequenceEqual(b[pos..hi])) return false;
+            pos = hi + 8;
+        }
+
+        return a[pos..].SequenceEqual(b[pos..]);
     }
 
     private static bool BlobEquals(byte[]? a, byte[]? b)
@@ -511,24 +525,6 @@ public sealed class PaintSnapshot
         if (ReferenceEquals(objA: a, objB: b)) return true;
         if (a is null || b is null) return false;
         return a.AsSpan().SequenceEqual(b);
-    }
-
-    private static byte[]? FindTextBlob(object source, int index)
-    {
-        return source switch {
-            PaintSnapshot s => Lookup(blobs: s._textBlobs, index: index),
-            PaintList l => l.FindTextBlob(index),
-            _ => null,
-        };
-    }
-
-    private static byte[]? FindPixelBlob(object source, int index)
-    {
-        return source switch {
-            PaintSnapshot s => Lookup(blobs: s._pixelBlobs, index: index),
-            PaintList l => l.FindPixelBlob(index),
-            _ => null,
-        };
     }
 
     /// <summary>

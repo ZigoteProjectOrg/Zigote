@@ -1,5 +1,6 @@
 using Xunit;
 using Zigote.Core;
+using Zigote.Core.Native;
 using Zigote.Core.Paint;
 
 namespace Zigote.Tests;
@@ -665,6 +666,33 @@ public class PaintSnapshotDiffTests
         var union = rects.Aggregate(seed: rects[0], func: Rect.Union);
         Assert.True(
             union.Contains(px: 5, py: 5) && union.Contains(px: (23 * 30) + 10, py: (23 * 20) + 5)
+        );
+    }
+
+    [Fact]
+    public void Moved_glyph_run_is_not_identical()
+    {
+        // The quads live outside the record stream: equal atlas/tint/count must not read as equal.
+        PaintList Run(float x) => List(p =>
+            {
+                var quads = new ZgGlyphRunQuad[1];
+                quads[0].X = x;
+                p.AddGlyphRun(
+                    atlasHandle: 1,
+                    quads: quads,
+                    tint: new Color(
+                        r: 1f,
+                        g: 1f,
+                        b: 1f,
+                        a: 1f
+                    )
+                );
+            }
+        );
+
+        Assert.NotEqual(
+            expected: PaintDiffResult.Identical,
+            actual: Diff(prev: Run(10), cur: Run(200), rects: out _)
         );
     }
 }

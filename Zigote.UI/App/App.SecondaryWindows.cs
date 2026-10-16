@@ -135,7 +135,7 @@ public partial class App
             foreach (var evt in _events)
             {
                 DispatchEvent(evt);
-                if (evt is not MouseMoveEvent) discrete = true;
+                if (IsDiscrete(evt)) discrete = true;
             }
 
             _events.Clear();
@@ -170,39 +170,7 @@ public partial class App
 
         // Same rounded-corner clip the main window gets — a devtools or Settings window sitting
         // next to it with square corners is the tell that it is not a real GNOME window.
-        bool csdRounded = CsdRounded;
-        var windowRect = WindowRect;
-
-        InTreeWalk = true;
-        try
-        {
-            if (_repaint.RootDirty)
-            {
-                _paint.Clear();
-                if (csdRounded) _paint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
-                PaintChromeBackdrop();
-                Root.Paint(_paint);
-                PaintCsdOutline(csdRounded);
-                if (csdRounded) _paint.AddClipEnd();
-                _repaint.RootPainted();
-            }
-
-            if (_repaint.OverlayDirty)
-            {
-                _overlayPaint.Clear();
-                if (csdRounded)
-                    _overlayPaint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
-                foreach (var ov in _overlays) ov.Paint(_overlayPaint);
-                if (csdRounded) _overlayPaint.AddClipEnd();
-                _repaint.OverlayPainted();
-            }
-        }
-        finally
-        {
-            InTreeWalk = false;
-        }
-
-        DrainDeferredOverlayOps();
+        PaintDirtyLayers();
 
         NativeWindow.SubmitPaint(_paint);
         NativeWindow.SubmitOverlay(_overlayPaint);

@@ -1523,12 +1523,7 @@ public partial class App : IDisposable
             foreach (var evt in events)
             {
                 DispatchEvent(evt);
-                // Pointer-move floods (mouse or finger) and wheel scrolls are not "discrete": they
-                // must not force a relayout + full repaint per frame. Scrolling (wheel or touch)
-                // repaints via the scroller's own onChanged — bounded to the scroller's region —
-                // and presses via MarkPaintFor.
-                if (evt is not MouseMoveEvent and not TouchMoveEvent and not ScrollEvent)
-                    discrete = true;
+                if (IsDiscrete(evt)) discrete = true;
             }
         }
 
@@ -1635,6 +1630,56 @@ public partial class App : IDisposable
     ///     uncatchable native abort. Log a per-kind breakdown BEFORE the frame reaches the GPU so the
     ///     terminal names the culprit even when the process dies on the very next call.
     /// </summary>
+    /// <summary>
+    ///     Re-walk whichever layers are dirty into their command lists, each inside the CSD corner
+    ///     clip. Shared by the main and secondary window paths.
+    /// </summary>
+    private void PaintDirtyLayers()
+    {
+        if (Root is null) return;
+        bool csdRounded = CsdRounded;
+        var windowRect = WindowRect;
+
+        InTreeWalk = true;
+        try
+        {
+            if (_repaint.RootDirty)
+            {
+                _paint.Clear();
+                if (csdRounded) _paint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
+                PaintChromeBackdrop();
+                Root.Paint(_paint);
+                PaintCsdOutline(csdRounded);
+                if (csdRounded) _paint.AddClipEnd();
+                _repaint.RootPainted();
+            }
+
+            if (_repaint.OverlayDirty)
+            {
+                _overlayPaint.Clear();
+                if (csdRounded)
+                    _overlayPaint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
+                foreach (var ov in _overlays) ov.Paint(_overlayPaint);
+                if (csdRounded) _overlayPaint.AddClipEnd();
+                _repaint.OverlayPainted();
+            }
+        }
+        finally
+        {
+            InTreeWalk = false;
+        }
+
+        DrainDeferredOverlayOps();
+    }
+
+    /// <summary>
+    ///     Pointer-move floods (mouse or finger) and wheel scrolls are not "discrete": they must not
+    ///     force a relayout + full repaint per frame. Scrolling repaints via the scroller's own
+    ///     onChanged — bounded to the scroller's region — and presses via MarkPaintFor.
+    /// </summary>
+    private static bool IsDiscrete(InputEvent evt) =>
+        evt is not MouseMoveEvent and not TouchMoveEvent and not ScrollEvent;
+
     private void WarnIfPaintExplosion(PaintList list, string layer)
     {
         const int threshold = 100_000;
@@ -1681,43 +1726,7 @@ public partial class App : IDisposable
         bool overlayWalked = _repaint.OverlayDirty;
         if (rootWalked || overlayWalked) PaintVersion++;
 
-        bool csdRounded = CsdRounded;
-        var windowRect = WindowRect;
-
-        using (Profiler.Scope("UI.Paint"))
-        {
-            InTreeWalk = true;
-            try
-            {
-                if (_repaint.RootDirty)
-                {
-                    _paint.Clear();
-                    if (csdRounded)
-                        _paint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
-                    PaintChromeBackdrop();
-                    Root.Paint(_paint);
-                    PaintCsdOutline(csdRounded);
-                    if (csdRounded) _paint.AddClipEnd();
-                    _repaint.RootPainted();
-                }
-
-                if (_repaint.OverlayDirty)
-                {
-                    _overlayPaint.Clear();
-                    if (csdRounded)
-                        _overlayPaint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
-                    foreach (var ov in _overlays) ov.Paint(_overlayPaint);
-                    if (csdRounded) _overlayPaint.AddClipEnd();
-                    _repaint.OverlayPainted();
-                }
-            }
-            finally
-            {
-                InTreeWalk = false;
-            }
-        }
-
-        DrainDeferredOverlayOps();
+        using (Profiler.Scope("UI.Paint")) PaintDirtyLayers();
 
         // Partial-frame consistency: a re-walked list reflects CURRENT widget state, but replay only
         // touches the damage rects — any op that changed without marking damage this frame (a missed
@@ -1747,9 +1756,13 @@ public partial class App : IDisposable
                 );
             }
 
-            if (rootWalked) _rootSnapshot.Capture(_paint);
-            if (overlayWalked) _overlaySnapshot.Capture(_overlayPaint);
         }
+
+        // Capture on EVERY walk, not just partial frames: the snapshot must be what is on screen. A
+        // stale one (left over from before a continuous or partial-off stretch) can diff as
+        // Identical against a list that differs from the screen, and the change never repaints.
+        if (rootWalked) _rootSnapshot.Capture(_paint);
+        if (overlayWalked) _overlaySnapshot.Capture(_overlayPaint);
 
         DebugStats.UiPaintCommands = _paint.Count;
         DebugStats.OverlayPaintCommands = _overlayPaint.Count;
