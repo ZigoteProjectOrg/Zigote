@@ -1710,11 +1710,54 @@ public partial class App : IDisposable
         Console.Error.WriteLine(message);
     }
 
+    /// <summary>
+    ///     Dispatch input that arrived while <see cref="PaintAndPresent" /> waited for the swapchain,
+    ///     so it lands in the frame about to be presented. Mirrors FrameCore's dispatch and layout
+    ///     step; tickers already advanced this frame and are not run again.
+    /// </summary>
+    private void DispatchLateInput()
+    {
+        Engine.PollEventsInto(_events);
+        RouteEventsToSecondaryWindows();
+        if (_events.Count == 0) return;
+
+        _pendingRelayout = false;
+        bool discrete = false;
+        using (Profiler.Scope("UI.Dispatch"))
+        {
+            foreach (var evt in _events)
+            {
+                DispatchEvent(evt);
+                if (IsDiscrete(evt)) discrete = true;
+            }
+        }
+
+        if (_needsLayout || _pendingRelayout || discrete)
+        {
+            LayoutTree();
+            if (discrete || _pendingRelayout) _repaint.MarkAll();
+        }
+
+        ProcessPendingAutoFocus();
+    }
+
     private void PaintAndPresent()
     {
         // Hidden: there is no surface to present to, and the GPU work would be thrown away. The
         // damage is left dirty on purpose — Show() repaints everything anyway.
         if (Root is null || Hidden) return;
+
+        // Wait for the display HERE, then read input again — not inside FrameEnd after the frame is
+        // built. With vsync that wait is most of the frame interval, so input read before it was
+        // that much older by the time it reached the screen. Not during a live resize: that frame
+        // runs nested inside the event pump and must not pump again (FrameEnd acquires itself).
+        if (!_inLiveResize)
+        {
+            using (Profiler.Scope("Render.Acquire"))
+            {
+                if (Engine.FrameAcquire()) DispatchLateInput();
+            }
+        }
 
         if (_presentSkipped)
         {

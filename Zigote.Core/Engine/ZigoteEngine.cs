@@ -2883,6 +2883,19 @@ public sealed unsafe class ZigoteEngine : IDisposable
         presentMs = present / 1e6;
     }
 
+    /// <summary>
+    ///     Wait for the main window's next swapchain image and hold it for <see cref="FrameEnd" />.
+    ///     With vsync this is where a frame waits for the display; calling it before reading input,
+    ///     rather than letting <see cref="FrameEnd" /> wait after the frame is built, keeps that wait
+    ///     out of input latency. Optional: <see cref="FrameEnd" /> acquires itself when nothing is held.
+    /// </summary>
+    /// <returns>False when the surface refused the image; <see cref="FrameEnd" /> then drops the frame.</returns>
+    public bool FrameAcquire()
+    {
+        EnsureReady();
+        return NativeEngine.FrameAcquire();
+    }
+
     /// <returns>
     ///     False when the frame was skipped because the swapchain image was unavailable (window
     ///     occluded, surface outdated, acquire timeout): nothing was drawn, so the frame's damage is
