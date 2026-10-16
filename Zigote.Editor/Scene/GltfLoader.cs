@@ -94,7 +94,15 @@ public static class GltfLoader
         report.Scenes = 1;
         report.Meshes = manifest.Counts.Meshes;
         report.Materials = manifest.Counts.Materials;
-        report.Textures = manifest.Counts.Textures;
+        // Counts.Textures is only the EMBEDDED images; external files referenced by path count too.
+        report.Textures = manifest.Materials
+            .SelectMany(m => new[] {
+                m.BaseColorTexture, m.MetallicRoughnessTexture, m.NormalTexture, m.EmissiveTexture,
+                m.OcclusionTexture,
+            })
+            .Where(t => t is not null)
+            .Distinct()
+            .Count();
         report.Nodes = manifest.Counts.Nodes;
         report.Primitives = manifest.Counts.Primitives;
         foreach (string w in manifest.Warnings) report.Warn(w);
@@ -225,6 +233,9 @@ public static class GltfLoader
         if (mat is null) return;
 
         node.MeshColor = new Vec3(x: mat.BaseColor[0], y: mat.BaseColor[1], z: mat.BaseColor[2]);
+        // glTF: alpha is ignored unless the mode is BLEND or MASK.
+        if (mat.AlphaMode is "BLEND" or "MASK" && mat.BaseColor.Length >= 4)
+            node.MeshOpacity = Math.Clamp(value: mat.BaseColor[3], min: 0f, max: 1f);
         if (mat.BaseColorTexture is not null) node.TexturePath = mat.BaseColorTexture;
 
         // Per-pixel metalness/roughness (glTF convention: roughness in G, metallic in B).
@@ -236,22 +247,16 @@ public static class GltfLoader
                 node.MetallicRoughnessTexturePath = mat.MetallicRoughnessTexture;
         }
 
-        // Tangent-space normal map (linear). When a material ships no normal map we fall back to a
-        // plain dielectric — stylised / unlit / MToon surfaces otherwise read as mirror metal from
-        // the glTF metallic=1 default, killing their base colour. (Mirrors the original loader.)
-        if (mat.NormalTexture is not null)
-            node.NormalTexturePath = mat.NormalTexture;
-        else
-        {
-            node.MeshMetallic = 0f;
-            node.MeshRoughness = 0.6f;
-        }
+        // Tangent-space normal map (linear).
+        if (mat.NormalTexture is not null) node.NormalTexturePath = mat.NormalTexture;
 
-        // Mis-export heuristic: a base-colour texture but no MR map yet metallic ~1 (the unset glTF
-        // default) is almost always stylised/dielectric art — force dielectric so its albedo shows.
+        // Mis-export heuristic: a base-colour texture but no MR map and metallic exactly 1 (the unset
+        // glTF default) is almost always stylised/dielectric art — force dielectric so its albedo
+        // shows. Anything below 1 was authored on purpose and is kept, as is every value on a
+        // material without a base-colour texture.
         if (node.MetallicRoughnessTexturePath is null &&
             node.TexturePath is not null &&
-            node.MeshMetallic > 0.5f)
+            node.MeshMetallic >= 0.999f)
         {
             node.MeshMetallic = 0f;
             if (node.MeshRoughness > 0.9f) node.MeshRoughness = 0.6f;
@@ -323,6 +328,10 @@ public static class GltfLoader
             node.MeshAlphaMode = 3; // glass: refractive + reflective, depth-sorted
             node.MeshTransmission = mat.Transmission > 0f ? mat.Transmission : 1f;
             node.MeshMetallic = 0f;
+            // The glass path composites the background itself and has no coverage alpha, so fold the
+            // alpha into the transmission tint instead: a black film at alpha 0.6 lets 40% through.
+            node.MeshColor = Vec3.One.Lerp(b: node.MeshColor, t: node.MeshOpacity);
+            node.MeshOpacity = 1f;
             // Honour authored roughness (frosted glass); the no-MR default would read frosty.
             if (!mat.HasMetallicRoughness) node.MeshRoughness = 0.05f;
             else node.MeshRoughness = mat.Roughness;

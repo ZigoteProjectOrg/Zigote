@@ -384,6 +384,7 @@ public sealed class EditorState : IDisposable
             }
 
             engine.SetRenderSettings3D(s);
+            engine.RenderSetEditorGrid(!IsPlaying); // authoring aid only; play mode shows the game
         }
         catch (Exception ex)
         {

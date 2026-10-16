@@ -560,6 +560,20 @@ public sealed partial class InspectorPanel : Widget
                 )
             );
             _rows.Add(
+                PropRow.Float(
+                    label: "Opacity",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshOpacity,
+                        setter: (n, v) => n.MeshOpacity = v
+                    ),
+                    theme: _theme,
+                    min: 0f,
+                    max: 1f
+                )
+            );
+            _rows.Add(
                 PropRow.Toggle(
                     label: "Double-Sided",
                     value: _shown.MeshDoubleSided,

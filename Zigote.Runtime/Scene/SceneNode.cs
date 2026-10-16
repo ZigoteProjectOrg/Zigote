@@ -71,6 +71,7 @@ public sealed class SceneNode : IEcsSceneNode
         _pSpecular,
         _pIor,
         _pTransmission,
+        _pOpacity,
         _pOcclusionStrength,
         _pAlphaCutoff,
         _pLightIntensity,
@@ -264,6 +265,9 @@ public sealed class SceneNode : IEcsSceneNode
 
     /// <summary>Transmission factor 0..1 (KHR_materials_transmission). >0 routes to the glass path.</summary>
     public float MeshTransmission { get; set; }
+
+    /// <summary>Base-colour alpha 0..1 (glTF baseColorFactor.a); multiplies the texture alpha.</summary>
+    public float MeshOpacity { get; set; } = 1f;
 
     /// <summary>Render both faces (no back-face culling). glTF doubleSided.</summary>
     public bool MeshDoubleSided { get; set; }
@@ -784,6 +788,7 @@ public sealed class SceneNode : IEcsSceneNode
             MeshSpecular = MeshSpecular,
             MeshIor = MeshIor,
             MeshTransmission = MeshTransmission,
+            MeshOpacity = MeshOpacity,
             MeshDoubleSided = MeshDoubleSided,
             MeshAlphaCutoff = MeshAlphaCutoff,
             MeshOcclusionStrength = MeshOcclusionStrength,
@@ -1055,6 +1060,7 @@ public sealed class SceneNode : IEcsSceneNode
                     _pClearcoatRoughness != MeshClearcoatRoughness ||
                     _pSpecular != MeshSpecular ||
                     _pIor != MeshIor || _pTransmission != MeshTransmission ||
+                    _pOpacity != MeshOpacity ||
                     _pDoubleSided != MeshDoubleSided ||
                     _pOcclusionStrength != MeshOcclusionStrength ||
                     _pEmissive != MeshEmissive ||
@@ -1076,6 +1082,7 @@ public sealed class SceneNode : IEcsSceneNode
                         emissiveB: MeshEmissive.Z,
                         ior: MeshIor,
                         transmission: MeshTransmission,
+                        opacity: MeshOpacity,
                         occlusionStrength: MeshOcclusionStrength,
                         alphaCutoff: MeshAlphaCutoff,
                         effect: (uint)MeshEffect,
@@ -1090,6 +1097,7 @@ public sealed class SceneNode : IEcsSceneNode
                     _pSpecular = MeshSpecular;
                     _pIor = MeshIor;
                     _pTransmission = MeshTransmission;
+                    _pOpacity = MeshOpacity;
                     _pDoubleSided = MeshDoubleSided;
                     _pOcclusionStrength = MeshOcclusionStrength;
                     _pEmissive = MeshEmissive;

@@ -1547,6 +1547,13 @@ public sealed unsafe class ZigoteEngine : IDisposable
         NativeEngine.RenderSetFrustumCull(enabled: enabled ? 1u : 0u);
     }
 
+    /// <summary>Show/hide the world-space editor grid on floor-like surfaces near y=0 (off by default).</summary>
+    public void RenderSetEditorGrid(bool enabled)
+    {
+        ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
+        NativeEngine.RenderSetEditorGrid(enabled: enabled ? 1u : 0u);
+    }
+
     // ── Game controllers (SDL gamepad, up to 8 player slots) ─────────────────────
 
     /// <summary>Number of connected controllers (0-8); slots are packed from 0. Hotplug-aware.</summary>

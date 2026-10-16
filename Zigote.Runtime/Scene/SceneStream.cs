@@ -128,7 +128,7 @@ internal sealed class SceneStream
         float metallic, float roughness,
         float clearcoat, float clearcoatRoughness, float specular,
         float emissiveR, float emissiveG, float emissiveB,
-        float ior, float transmission, float occlusionStrength,
+        float ior, float transmission, float opacity, float occlusionStrength,
         float alphaCutoff, uint effect, uint alphaMode, bool doubleSided
     ) =>
         Write(
@@ -148,6 +148,7 @@ internal sealed class SceneStream
                 EmissiveB = emissiveB,
                 Ior = ior,
                 Transmission = transmission,
+                Transparency = 1f - Math.Clamp(value: opacity, min: 0f, max: 1f),
                 OcclusionStrength = occlusionStrength,
                 AlphaCutoff = alphaCutoff,
                 Effect = effect,
