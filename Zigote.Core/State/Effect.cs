@@ -66,13 +66,21 @@ public sealed class Effect : Reaction, IDisposable
 
     /// <summary>An effect with no cleanup.</summary>
     public Effect(Action body, EffectAffinity affinity = EffectAffinity.Inline) : this(
+        body: body,
+        named: body,
+        affinity: affinity
+    ) { }
+
+    /// <summary>An effect with no cleanup, listed in diagnostics under <paramref name="named" />.</summary>
+    internal Effect(Action body, Delegate named,
+        EffectAffinity affinity = EffectAffinity.Inline) : this(
         body: () =>
         {
             body();
             return Noop;
         },
         affinity: affinity,
-        named: body // name the effect after the caller's body, not the wrapper declared right here
+        named: named // name the effect after the caller's body, not the wrapper declared right here
     ) { }
 
     /// <summary>An effect whose body returns a cleanup thunk (run before each re-run and on dispose).</summary>
@@ -107,7 +115,9 @@ public sealed class Effect : Reaction, IDisposable
             if (Disposed) return;
             Disposed = true;
             DetachFromSources();
-            _cleanup();
+            // Untracked like BeforeExecute: disposed from inside another reaction's body, the
+            // cleanup's reads would otherwise become dependencies of that reaction.
+            Reactive.UntrackedInvoke(_cleanup);
             _cleanup = Noop;
         }
     }

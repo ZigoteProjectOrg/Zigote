@@ -83,6 +83,25 @@ public class WatchTests
         Assert.Equal(expected: 1, actual: builds);
     }
 
+    [Fact]
+    public void Watch_recovers_after_its_builder_throws()
+    {
+        var count = new Signal<int>(0);
+        var root = new Watch(() => count.Value == 1
+            ? throw new InvalidOperationException("boom")
+            : new Label($"{count.Value}")
+        );
+        root.Attach(owner: null!, parent: null);
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
+
+        // The failed build surfaces to the writer (no OnError installed) — but the reads that led
+        // to it must stay tracked, or the Watch would be stuck on the failure forever.
+        Assert.Throws<InvalidOperationException>(() => count.Value = 1);
+
+        count.Value = 2;
+        Assert.Equal(expected: "2", actual: Find<Label>(root)!.Text);
+    }
+
     private static T? Find<T>(Widget w) where T : Widget
     {
         if (w is T match) return match;

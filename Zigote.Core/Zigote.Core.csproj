@@ -35,6 +35,10 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>Zigote.Tests</_Parameter1>
         </AssemblyAttribute>
+        <!-- Watch is one Effect named after its builder (diagnostics) and runs its swap untracked. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Zigote.UI</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 
     <ItemGroup>

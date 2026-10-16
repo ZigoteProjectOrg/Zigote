@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.Core.State;
@@ -15,9 +16,8 @@ namespace Zigote.UI.Widgets;
 ///   new Watch(() => new Label($"Count: {count.Value}"))
 /// </code>
 ///     <para>
-///         The builder is wrapped in a <see cref="Computed{T}" /> that auto-tracks whatever it reads,
-///         so
-///         there is no dependency list. A change recomputes the subtree; on the UI thread it swaps in
+///         The builder runs inside an <see cref="Effect" /> that auto-tracks whatever it reads,
+///         so there is no dependency list. A change recomputes the subtree; on the UI thread it swaps in
 ///         place, and an off-thread change (a timer/async completion setting a signal) is marshalled —
 ///         the loop is woken via <c>RequestLayout</c> and the swap happens in <see cref="Measure" />
 ///         on
@@ -29,10 +29,15 @@ namespace Zigote.UI.Widgets;
 public sealed class Watch : Widget
 {
     private readonly Func<Widget> _build;
+
+    // The latest build and its failure, written by the effect under the graph lock and read by
+    // Apply under it — an off-thread rebuild hands them to the UI thread through here.
+    private Widget? _built;
     private Widget? _child;
-    private Computed<Widget>? _computed;
     private bool _detached;
     private bool _dirty;
+    private Effect? _effect;
+    private ExceptionDispatchInfo? _error;
     private bool _measuredOnce;
 
     // The inherited-widget scope (theme, media query, localisations) this Watch was last measured
@@ -45,7 +50,6 @@ public sealed class Watch : Widget
     private Dictionary<Type, Widget>? _parked;
     private Size _size;
     private bool _started;
-    private IDisposable? _subscription;
     private int _uiThread;
 
     public Watch(Func<Widget> build) => _build = build;
@@ -67,20 +71,39 @@ public sealed class Watch : Widget
         if (_started) return;
         _started = true;
         _uiThread = Environment.CurrentManagedThreadId;
-        _computed =
-            Computed.From(_build); // eager first build (on the UI thread), auto-tracks its reads
-
-        // Observe FIRST, then materialise. The order is load-bearing: a signal that changes between
-        // the computed's evaluation and this subscription is handled inside Observe's first effect
-        // run — Track() connects the computed, Connect() sees the stale version and silently
-        // recomputes — but the `first` flag suppresses the callback for that run, so nothing tells
-        // the Watch. Applying AFTER the subscription reads that recomputed value and swaps it in;
-        // applying before it reads the stale one, and with the change already consumed nothing ever
-        // invalidates again — the Watch shows its first build forever. In an app that is a screen
-        // stuck on its spinner because the load landed while the first layout pass was mounting it
-        // (Mahou.Tests.WatchRaceTests reproduced 3232 lost swaps in 5000 with the old order).
-        _subscription = _computed.Observe(OnChanged);
+        // One reaction both builds and subscribes, in a single run under the graph lock — so no write
+        // can land between the first build and the subscription and be lost (a screen stuck on its
+        // spinner because the load landed while the first layout pass was mounting it). Named after
+        // the builder, so the diagnostics table says which screen rebuilds, not "Watch.Rebuild".
+        _effect = new Effect(body: Rebuild, named: _build);
         Apply();
+    }
+
+    // The effect body: build under tracking, then hand the result to the UI side.
+    private void Rebuild()
+    {
+        Widget? next = null;
+        ExceptionDispatchInfo? error = null;
+        try
+        {
+            next = _build();
+        }
+        catch (Exception ex)
+        {
+            // Caught, not thrown: a body that throws keeps only its old dependencies, so the reads
+            // that led here would never re-run it. The failure surfaces from Apply instead.
+            error = ExceptionDispatchInfo.Capture(ex);
+        }
+
+        // Same widget back (a builder that mutates and returns one retained widget): nothing to
+        // swap, and no reason to dirty ancestors from an off-thread tick.
+        if (ReferenceEquals(objA: next, objB: _built) && error is null && _error is null) return;
+        _built = next;
+        _error = error;
+
+        // The constructor's run is the first build — EnsureStarted applies that one itself. The swap
+        // runs untracked: what it measures must not become a dependency of this Watch.
+        if (_effect is not null) Reactive.UntrackedInvoke(OnChanged);
     }
 
     /// <summary>
@@ -111,7 +134,15 @@ public sealed class Watch : Widget
     // Swap in the freshly-built subtree (UI thread only).
     private void Apply(bool inPlace = false)
     {
-        var next = _computed!.Value;
+        Widget? next;
+        ExceptionDispatchInfo? error;
+        using (Reactive.Hold())
+        {
+            next = _built;
+            error = _error;
+        }
+
+        error?.Throw();
         if (ReferenceEquals(objA: next, objB: _child)) return;
 
         var previous = _child;
@@ -176,10 +207,10 @@ public sealed class Watch : Widget
     public override void Detach()
     {
         _detached = true;
-        _subscription?.Dispose();
-        _subscription = null;
-        _computed?.Dispose();
-        _computed = null;
+        _effect?.Dispose();
+        _effect = null; // Dispose took the graph lock, so no run is in flight past this point
+        _built = null;
+        _error = null;
         base.Detach(); // detaches _child via GetChildren
         CarryState(stash: ref _parked, previous: _child, next: null);
         _child = null;

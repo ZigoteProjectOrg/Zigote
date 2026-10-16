@@ -682,7 +682,7 @@ public static class Reactive
 
     /// <summary>
     ///     Reaction bodies executed since start: every <see cref="Computed{T}" /> recompute and every
-    ///     <see cref="Effect" /> run, including the computed behind each <c>Watch</c>.
+    ///     <see cref="Effect" /> run, including the effect behind each <c>Watch</c> rebuild.
     ///     <para>
     ///         The rebuild counter, graph-wide. Read the <em>per-second delta</em>, not the absolute: a
     ///         number that climbs while the screen is idle means something is re-deriving for nothing —
