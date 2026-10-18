@@ -241,7 +241,7 @@ public sealed class VideoPlayerView : VideoChrome, IDismissableOverlay
             duration: 0.18f,
             child: Glass
                 ? LiquidPane.Interactive(
-                    pane: LiquidPane.Clear(child: centreBody, radius: 34f, elevation: 6f),
+                    pane: LiquidPane.Clear(child: centreBody, radius: 34f, elevation: 6f, adaptive: true),
                     onPressed: Refocus(_surface.TogglePlay),
                     semantics: "Play"
                 )

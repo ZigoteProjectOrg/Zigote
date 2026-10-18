@@ -46,7 +46,6 @@ public static class GltfLoader
             ".dxf",
             ".off",
             ".3mf",
-            ".gltf",
         };
 
     private static readonly JsonSerializerOptions JsonOpts = new() {
@@ -155,6 +154,14 @@ public static class GltfLoader
             }
         }
 
+        // Architecture-sized models (rooms, buildings) get a reflection probe over their bounds, so
+        // their interiors are lit by what the rooms actually see — windows, walls — not the open sky.
+        if (BuildProbe(manifest.Bounds) is { } probe)
+        {
+            root.AddChild(probe);
+            report.Warn("Added a reflection probe over the model so its interior is lit by its own rooms.");
+        }
+
         // KHR_lights_punctual (and equivalents in other formats) — imported as Light nodes.
         foreach (var light in manifest.Lights)
             root.AddChild(BuildLightNode(light));
@@ -223,6 +230,22 @@ public static class GltfLoader
         };
     }
 
+    // Smallest footprint (metres, both horizontal axes) that reads as a room rather than a prop or car.
+    private const float MinProbeFootprint = 4f;
+
+    private static SceneNode? BuildProbe(float[] b)
+    {
+        if (b.Length < 6) return null;
+        var min = new Vec3(x: b[0], y: b[1], z: b[2]);
+        var max = new Vec3(x: b[3], y: b[4], z: b[5]);
+        var half = (max - min) * 0.5f;
+        if (MathF.Min(half.X, half.Z) * 2f < MinProbeFootprint) return null;
+        return new SceneNode(name: "Interior Probe", kind: NodeKind.ReflectionProbe) {
+            Position = (min + max) * 0.5f,
+            ProbeExtents = half,
+        };
+    }
+
     // ── Material ──────────────────────────────────────────────────────────────
 
     private static ModelMaterial? MaterialAt(ModelMaterial[] mats, int idx) =>
@@ -249,21 +272,6 @@ public static class GltfLoader
 
         // Tangent-space normal map (linear).
         if (mat.NormalTexture is not null) node.NormalTexturePath = mat.NormalTexture;
-
-        // Mis-export heuristic: a base-colour texture but no MR map and metallic exactly 1 (the unset
-        // glTF default) is almost always stylised/dielectric art — force dielectric so its albedo
-        // shows. Anything below 1 was authored on purpose and is kept, as is every value on a
-        // material without a base-colour texture.
-        if (node.MetallicRoughnessTexturePath is null &&
-            node.TexturePath is not null &&
-            node.MeshMetallic >= 0.999f)
-        {
-            node.MeshMetallic = 0f;
-            if (node.MeshRoughness > 0.9f) node.MeshRoughness = 0.6f;
-            report.Warn(
-                $"Material '{mat.Name}' looked fully metallic with no metallic-roughness map; treated as dielectric so its albedo shows."
-            );
-        }
 
         // Unlit (KHR_materials_unlit) — flat-shaded toon/VRM materials route through the unlit effect.
         if (mat.Unlit) node.MeshEffect = RenderEffect.Unlit;

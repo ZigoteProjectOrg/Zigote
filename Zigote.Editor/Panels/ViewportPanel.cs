@@ -62,6 +62,9 @@ public sealed partial class ViewportPanel : Widget
     // frame adapters are active (auto-exposure, the edit-mode physical-camera focus pull), because
     // once frozen nothing re-triggers them (their state is invisible to the signature).
     private const int SettleFrames = 20;
+
+    // 6 faces × 4 cubes: enough bounces for a captured probe to converge after a change.
+    private const int ProbeSettleFrames = 24;
     private const int MaxSettleFrames = 240;
 
     // ── Transform snapping (rotate/scale) ──────────────────────────────────────
@@ -211,6 +214,20 @@ public sealed partial class ViewportPanel : Widget
         {
             _cameraMode = CameraNavigationMode.TwoD;
             Enter2DMode();
+        }
+
+        // ZIGOTE_VIEW_CAM="x,y,z,yawRad,pitchRad" opens in fly mode at that pose — the capture hook for
+        // comparing renders of one viewpoint across builds.
+        if (Environment.GetEnvironmentVariable("ZIGOTE_VIEW_CAM")?.Split(',') is { Length: 5 } cam)
+        {
+            float[] c = Array.ConvertAll(
+                array: cam,
+                converter: s => float.Parse(s: s, provider: System.Globalization.CultureInfo.InvariantCulture)
+            );
+            _cameraMode = CameraNavigationMode.Fly;
+            _flyPosition = new Vec3(x: c[0], y: c[1], z: c[2]);
+            _orbitYaw = c[3];
+            _orbitPitch = c[4];
         }
 
         _flyTicker = new Ticker(TickFlyCamera);
@@ -583,6 +600,10 @@ public sealed partial class ViewportPanel : Widget
                 )
             );
         }
+
+        // A captured reflection probe refreshes one cube face per rendered frame and needs a few full
+        // cubes for its light bounces to settle.
+        if (FindActiveProbe(_state.Scene.Root) is not null) frames = Math.Max(val1: frames, val2: ProbeSettleFrames);
 
         return Math.Min(val1: frames, val2: MaxSettleFrames);
     }

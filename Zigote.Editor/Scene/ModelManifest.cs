@@ -18,6 +18,7 @@ internal sealed class ModelManifest
     public ModelMeshNode[] MeshNodes { get; set; } = [];
     public ModelMaterial[] Materials { get; set; } = [];
     public ModelLight[] Lights { get; set; } = [];
+    public float[] Bounds { get; set; } = []; // static geometry AABB: min xyz, max xyz
     public ModelAnimation[] Animations { get; set; } = [];
 }
 

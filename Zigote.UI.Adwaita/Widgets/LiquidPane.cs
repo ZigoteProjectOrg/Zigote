@@ -377,12 +377,13 @@ public sealed class LiquidPane : Widget
     ///     does not adapt to the backdrop. Supply a dimming layer beneath it and use bright ink.
     /// </summary>
     public static LiquidPane Clear(
-        Widget child, float radius = AdwMetrics.Pill, float elevation = 0f) =>
+        Widget child, float radius = AdwMetrics.Pill, float elevation = 0f, bool adaptive = false) =>
         new() {
             Child = child,
             Radius = radius,
             Elevation = elevation,
             Tinted = 0f,
+            Adaptive = adaptive,
         };
 
     /// <summary>
