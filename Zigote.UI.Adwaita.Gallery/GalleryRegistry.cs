@@ -241,6 +241,12 @@ internal static class GalleryRegistry
                     Build: () => new SpinnerPage()
                 ),
                 new GalleryEntry(
+                    Title: "Pull to Refresh",
+                    Subtitle: "Pull past the top of a list to reload it",
+                    IconName: MaterialIcons.Refresh,
+                    Build: () => new PullToRefreshPage()
+                ),
+                new GalleryEntry(
                     Title: "Status Pages",
                     Subtitle: "Empty, error and welcome states",
                     IconName: MaterialIcons.Info,

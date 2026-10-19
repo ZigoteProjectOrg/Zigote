@@ -29,9 +29,11 @@ public static class AdwMetrics
     /// <summary>
     ///     Window / sheet corner radius — <c>--window-radius: $button_radius + 6</c>. GNOME 51
     ///     rounded this up from the 12px of earlier releases; anything else reads as "nearly Adwaita"
-    ///     against real GNOME windows next to it.
+    ///     against real GNOME windows next to it. On macOS 27+ it is the system's own 16pt, uniform
+    ///     across window styles (measured via NSWindow's corner radius), so a CSD window sits flush
+    ///     with the native ones beside it — the traffic lights already follow that release.
     /// </summary>
-    public const float WindowRadius = 15f;
+    public static readonly float WindowRadius = OperatingSystem.IsMacOSVersionAtLeast(27) ? 16f : 15f;
 
     /// <summary>Alert dialogs — <c>$alert_radius</c>, rounder than an ordinary dialog.</summary>
     public const float AlertRadius = 18f;
