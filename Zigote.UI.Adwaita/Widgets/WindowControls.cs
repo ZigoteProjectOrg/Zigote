@@ -130,24 +130,53 @@ public sealed class AdwWindowControls : ComposedWidget
     /// </summary>
     private sealed class MacTrafficLights(App app) : Widget
     {
-        private const float Diameter = 12f;
-        private const float Gap = 8f;
+        // macOS 27 geometry (measured off native windows at 2x): 14pt lights on a 23pt pitch,
+        // the first centred 16pt in from the frame. Older releases drew 12pt lights; they get the
+        // same footprint here so the cluster reads the same size on every release.
+        private const float Diameter = 14f;
+        private const float Gap = 9f;
 
-        /// <summary>Bar padding → first light. macOS puts its centre 20px in from the frame.</summary>
-        private const float Lead = 8f;
+        /// <summary>Bar padding → first light: 7 + 2 puts its left edge 9pt in from the frame.</summary>
+        private const float Lead = 2f;
 
-        private static readonly Color[] Hues = [
-            Color.Rgb(r: 255, g: 95, b: 87), // close
-            Color.Rgb(r: 254, g: 188, b: 46), // minimize
-            Color.Rgb(r: 40, g: 200, b: 64), // zoom
+        /// <summary>macOS 27 redrew the lights: a top→bottom lightening fill, a 0.5pt dark rim, bolder glyphs.</summary>
+        private static readonly bool Modern = OperatingSystem.IsMacOSVersionAtLeast(27);
+
+        /// <summary>Flat hues through macOS 26; on 27 the TOP of each light's gradient.</summary>
+        private static readonly Color[] Hues = Modern
+            ? [
+                Color.Rgb(r: 250, g: 106, b: 97), // close
+                Color.Rgb(r: 251, g: 184, b: 49), // minimize
+                Color.Rgb(r: 93, g: 198, b: 42), // zoom
+            ]
+            : [
+                Color.Rgb(r: 255, g: 95, b: 87),
+                Color.Rgb(r: 254, g: 188, b: 46),
+                Color.Rgb(r: 40, g: 200, b: 64),
+            ];
+
+        /// <summary>macOS 27 only: the BOTTOM of each light's gradient.</summary>
+        private static readonly Color[] HuesBottom = [
+            Color.Rgb(r: 248, g: 143, b: 135),
+            Color.Rgb(r: 255, g: 212, b: 73),
+            Color.Rgb(r: 158, g: 223, b: 127),
         ];
 
-        /// <summary>Hover-glyph inks: each the system's darker shade of its light's hue.</summary>
-        private static readonly Color[] GlyphHues = [
-            Color.Rgb(r: 77, g: 0, b: 0), // close ✕
-            Color.Rgb(r: 153, g: 87, b: 0), // minimize ─
-            Color.Rgb(r: 0, g: 101, b: 0), // zoom triangles
-        ];
+        /// <summary>Hover-glyph inks: each the system's darker shade of its light's hue (also the 27 rim).</summary>
+        private static readonly Color[] GlyphHues = Modern
+            ? [
+                Color.Rgb(r: 163, g: 0, b: 0), // close ✕
+                Color.Rgb(r: 193, g: 68, b: 1), // minimize ─
+                Color.Rgb(r: 54, g: 136, b: 1), // zoom triangles
+            ]
+            : [
+                Color.Rgb(r: 77, g: 0, b: 0),
+                Color.Rgb(r: 153, g: 87, b: 0),
+                Color.Rgb(r: 0, g: 101, b: 0),
+            ];
+
+        /// <summary>Bands in the 27 gradient: ~4px each at 2x, below a visible step.</summary>
+        private const int GradientBands = 7;
 
         private bool _hovered;
         private int _pressed = -1;
@@ -189,29 +218,78 @@ public sealed class AdwWindowControls : ComposedWidget
             bool inactive = !app.WindowFocused && !showGlyphs;
             for (int i = 0; i < 3; i++)
             {
-                var color = inactive ? _theme.Control : Hues[i];
-                if (i == _pressed) color = Darken(color);
                 var circle = LightRect(i);
-                paint.AddRect(bounds: circle, color: color, radius: Diameter / 2f);
+                if (inactive)
+                    paint.AddRect(bounds: circle, color: _theme.Control, radius: Diameter / 2f);
+                else if (Modern)
+                    PaintModernLight(paint: paint, index: i, circle: circle, pressed: i == _pressed);
+                else
+                    paint.AddRect(
+                        bounds: circle,
+                        color: i == _pressed ? Darken(Hues[i]) : Hues[i],
+                        radius: Diameter / 2f
+                    );
                 if (showGlyphs) PaintGlyph(paint: paint, index: i, circle: circle);
             }
         }
 
         /// <summary>
-        ///     One hover glyph, centred in its light: ✕ / ─ / the fullscreen triangle pair, sized
-        ///     to the same ~55% of the circle the native lights use.
+        ///     A macOS 27 light: banded top→bottom gradient under a circular clip, then the 0.5pt
+        ///     rim in a translucent shade of the glyph ink.
+        /// </summary>
+        private static void PaintModernLight(PaintList paint, int index, Rect circle, bool pressed)
+        {
+            paint.AddClipStart(bounds: circle, radius: Diameter / 2f);
+            float band = circle.Height / GradientBands;
+            Color top = Hues[index], bottom = HuesBottom[index];
+            for (int i = 0; i < GradientBands; i++)
+            {
+                float t = i / (GradientBands - 1f);
+                var c = new Color(
+                    r: top.R + ((bottom.R - top.R) * t),
+                    g: top.G + ((bottom.G - top.G) * t),
+                    b: top.B + ((bottom.B - top.B) * t)
+                );
+                if (pressed) c = Darken(c);
+                // +0.5 overlap so band seams never show the bar through.
+                paint.AddRect(
+                    bounds: new Rect(
+                        x: circle.X,
+                        y: circle.Y + (i * band),
+                        width: circle.Width,
+                        height: band + 0.5f
+                    ),
+                    color: c
+                );
+            }
+
+            paint.AddClipEnd();
+            var ink = GlyphHues[index];
+            paint.AddBorder(
+                bounds: circle,
+                color: new Color(r: ink.R, g: ink.G, b: ink.B, a: 0.55f),
+                radius: Diameter / 2f,
+                width: 0.5f
+            );
+        }
+
+        /// <summary>
+        ///     One hover glyph, centred in its light: ✕ / ─ / the fullscreen triangle pair. Through
+        ///     macOS 26 the 12pt-era glyphs scaled up to the 14pt light; on 27 the bolder strokes
+        ///     measured off the native ones.
         /// </summary>
         private static void PaintGlyph(PaintList paint, int index, Rect circle)
         {
             float cx = circle.X + (circle.Width / 2f);
             float cy = circle.Y + (circle.Height / 2f);
             var ink = GlyphHues[index];
+            const float s = Diameter / 12f; // legacy glyphs were drawn for a 12pt light
             switch (index)
             {
                 case 0: // ✕ — two diagonal strokes, each a fan-safe quad
                 {
-                    const float arm = 2.6f; // centre → stroke end, per axis
-                    const float o = 0.57f; // half stroke thickness, per axis (0.8 / √2)
+                    float arm = Modern ? 2.9f : 2.6f * s; // centre → stroke end, per axis
+                    float o = Modern ? 0.63f : 0.57f * s; // half stroke thickness, per axis (t / 2√2)
                     Span<Offset> quad = stackalloc Offset[4];
                     quad[0] = new Offset(x: cx - arm - o, y: cy - arm + o);
                     quad[1] = new Offset(x: cx + arm - o, y: cy + arm + o);
@@ -226,21 +304,25 @@ public sealed class AdwWindowControls : ComposedWidget
                     break;
                 }
                 case 1: // ─
+                {
+                    float hw = Modern ? 4f : 4f * s;
+                    float hh = Modern ? 1f : 0.8f * s;
                     paint.AddRect(
                         bounds: new Rect(
-                            x: cx - 4f,
-                            y: cy - 0.8f,
-                            width: 8f,
-                            height: 1.6f
+                            x: cx - hw,
+                            y: cy - hh,
+                            width: hw * 2f,
+                            height: hh * 2f
                         ),
                         color: ink,
-                        radius: 0.8f
+                        radius: hh
                     );
                     break;
+                }
                 default: // zoom: two triangles split along the ↗ diagonal, pointing apart
                 {
-                    const float h = 3f; // half of the glyph box
-                    const float g = 1.1f; // hypotenuse pull-back that opens the split
+                    float h = Modern ? 3.25f : 3f * s; // half of the glyph box
+                    float g = Modern ? 1.05f : 1.1f * s; // hypotenuse pull-back that opens the split
                     Span<Offset> tri = stackalloc Offset[3];
                     tri[0] = new Offset(x: cx - h, y: cy - h);
                     tri[1] = new Offset(x: cx + h - g, y: cy - h);
