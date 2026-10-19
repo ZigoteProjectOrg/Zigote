@@ -22,7 +22,7 @@ namespace Zigote.UI.Adwaita;
 ///         <see cref="OnTextInput" /> even though it isn't a <c>AdwTextField</c>.
 ///     </para>
 /// </summary>
-public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
+public sealed partial class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 {
     private const int TabWidth = 4;
     private const string Openers = "([{\"'`";
@@ -531,6 +531,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         OnChanged?.Invoke(Text);
         EnsureCaretVisible();
+        AfterEdit();
         MarkNeedsLayout();
     }
 
@@ -1908,6 +1909,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
         paint.AddClipEnd();
 
+        PaintMarkers(paint, first, last);
+
         // ── Line numbers ────────────────────────────────────────────────────────
         paint.AddClipStart(gutterRect);
         for (int visual = first; visual <= last; visual++)
@@ -1969,6 +1972,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         }
 
         if (_find is not null) PaintFindBar(paint);
+        PaintSignature(paint);
+        PaintCompletion(paint);
 
         // No focus ring: a text view's focus cue is its caret.
     }
@@ -2107,6 +2112,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     public override void OnPointerDown(Offset point)
     {
         App.Active?.RequestFocus(this);
+        if (CompletionPointerDown(point)) return;
 
         // Scrollbar thumbs take priority over caret placement (drag to scroll).
         var vbar = VBar();
@@ -2209,6 +2215,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 
     public override void OnPointerMove(Offset point)
     {
+        TrackHover(point);
         if (_barDrag == 1)
         {
             DragVBar(point.Y);
@@ -2252,9 +2259,18 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
             dy = 0f;
         }
 
-        _targetY -= dy * _lineHeight * 3f;
+        float beforeY = _targetY;
+        float wantY = dy * _lineHeight * 3f;
+        _targetY -= wantY;
         _targetX -= dx * _charWidth * 6f;
         ClampTargets();
+        // Whatever the editor could not use (it hit an edge, or has nothing to scroll) chains to
+        // the enclosing scroll view, so an editor embedded in a page doesn't trap the wheel.
+        if (wantY != 0f)
+        {
+            float leftover = 1f - ((beforeY - _targetY) / wantY);
+            if (leftover > 0.001f) ScrollParent?.OnScroll(dx: 0f, dy: dy * leftover);
+        }
         if (App.DebugScrollLog)
         {
             Console.Error.WriteLine(
@@ -2321,7 +2337,17 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         menu.ShowAt(point);
     }
 
-    protected override void OnFocusChanged(bool focused) => MarkNeedsPaint();
+    protected override void OnFocusChanged(bool focused)
+    {
+        // Completion and parameter hints belong to the caret: they go when focus does.
+        if (!focused)
+        {
+            CloseCompletion();
+            CloseSignature();
+        }
+
+        MarkNeedsPaint();
+    }
 
     // ── Keyboard input ────────────────────────────────────────────────────────
 
@@ -2345,6 +2371,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
         }
         else
             InsertText(text: text, kind: EditKind.Typing);
+        AfterTextInput(text);
     }
 
     /// <summary>
@@ -2430,6 +2457,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
         if (!down) return;
+        if (OnKeyDown?.Invoke(keyChar, scancode, mods) == true) return;
+        if (CompletionKey(scancode, mods)) return;
 
         const uint scBackspace = 42;
         const uint scDelete = 76;
