@@ -63,10 +63,18 @@ public sealed class Pressable : Widget, IPointerCapture
     /// <summary>Tab/segment selected state — <c>null</c> for a control with no selection concept.</summary>
     public bool? SelectedState { get; set; }
 
+    // An icon-only control is named by the tooltip that explains it (the nearest one up the tree).
+    private string? TooltipLabel()
+    {
+        for (var w = Parent; w is not null; w = w.Parent)
+            if (w.TooltipText is { } text) return text;
+        return null;
+    }
+
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
         config.Role = Role;
-        config.Label = SemanticsLabel;
+        config.Label = SemanticsLabel ?? TooltipLabel();
         config.IsLeaf = true; // the decorative child (box + label/glyph) is not its own node
         config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
         config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled);

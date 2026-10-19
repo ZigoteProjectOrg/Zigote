@@ -191,10 +191,16 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void Quit() => ShouldQuit = true;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void LogThunk(int level, byte* msg) => _logAction?.Invoke(
-        arg1: level,
-        arg2: Marshal.PtrToStringUTF8((nint)msg) ?? ""
-    );
+    private static void LogThunk(int level, byte* msg)
+    {
+        string text = Marshal.PtrToStringUTF8((nint)msg) ?? "";
+        if (level == 0) _shaderErrors?.Add(text); // non-null only inside RegisterShader
+        _logAction?.Invoke(arg1: level, arg2: text);
+    }
+
+    // Errors the engine logged while RegisterShader was compiling — wgpu reports an invalid module
+    // through its uncaptured-error callback, synchronously, and still hands back a pipeline object.
+    [ThreadStatic] private static List<string>? _shaderErrors;
 
     /// <summary>
     ///     Raised (on the main thread) from the native resize event-watch while the user drags a window
@@ -2951,15 +2957,34 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         var engine = RequireInstance();
         byte[] bytes = Encoding.UTF8.GetBytes(wgsl);
-        fixed (byte* ptr = bytes)
+        var errors = _shaderErrors = [];
+        try
         {
-            return NativeEngine.RegisterShader(
-                id: id,
-                wgslPtr: ptr,
-                wgslLen: (nuint)bytes.Length
-            ) == ZgResult.Ok;
+            fixed (byte* ptr = bytes)
+            {
+                // wgpu answers invalid WGSL with an error object, not a failure: the call returns Ok
+                // and the pipeline silently draws nothing. The errors it logged on the way are the
+                // only signal, so they decide the result.
+                bool ok = NativeEngine.RegisterShader(
+                    id: id,
+                    wgslPtr: ptr,
+                    wgslLen: (nuint)bytes.Length
+                ) == ZgResult.Ok && errors.Count == 0;
+                LastShaderError = ok ? null : string.Join('\n', errors);
+                return ok;
+            }
+        }
+        finally
+        {
+            _shaderErrors = null;
         }
     }
+
+    /// <summary>
+    ///     Why the last <see cref="RegisterShader" /> returned false — the WGSL compiler's messages,
+    ///     or null after a success. UI thread only, like the call it describes.
+    /// </summary>
+    public static string? LastShaderError { get; private set; }
 
     // ── Text layout handles ───────────────────────────────────────────────────
 

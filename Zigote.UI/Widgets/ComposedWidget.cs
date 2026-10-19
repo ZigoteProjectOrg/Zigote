@@ -86,7 +86,9 @@ public abstract class ComposedWidget : Widget
 
         // Mark this widget as the build owner so DependOn<T>() inside Build registers it as a
         // dependent of any inherited widget it reads (theme, media query, …).
-        var ctx = BuildContext.Current;
+        // Build gets this widget's anchored context: identical during the walk, and still able to
+        // find ancestors when the code it builds keeps it for a click handler.
+        var ctx = BuildContext.For(this);
         var prevOwner = ctx.BuildOwner;
         ctx.BuildOwner = this;
         try

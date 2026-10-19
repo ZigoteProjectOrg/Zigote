@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.Core.Engine;
 using Zigote.Core.Paint;
 using Zigote.UI.Semantics;
 using Zigote.UI.TextShaping;
@@ -38,6 +39,13 @@ public sealed class TextSpan
 
     /// <summary>Optional highlight painted behind the span's glyphs (inline code, search hits).</summary>
     public Color? Background { get; set; }
+
+    /// <summary>
+    ///     Makes the span a link: invoked when a press starts and ends on this span. The owning
+    ///     <see cref="RichText" /> shows the pointer cursor over it. Style it yourself (colour,
+    ///     <see cref="Underline" />) — the span's appearance is not changed.
+    /// </summary>
+    public Action? OnTap { get; set; }
 }
 
 /// <summary>
@@ -261,6 +269,49 @@ public class RichText : LeafWidget
 
         if (needsClip) paint.AddClipEnd();
     }
+
+    // ── Tappable spans ────────────────────────────────────────────────────────
+
+    // Span index under the press that started on a tappable span, or -1.
+    private int _pressedSpan = -1;
+
+    /// <summary>The index of the span drawn at <paramref name="point" />, or -1.</summary>
+    internal int SpanIndexAt(Offset point)
+    {
+        for (int i = 0; i < RunCount; i++)
+        {
+            ref readonly var run = ref Runs[i];
+            var line = Lines[run.Line];
+            float x = Bounds.X + LineAlignOffset(run.Line) + run.X;
+            float top = Bounds.Y + line.Top;
+            if (point.X >= x && point.X < x + run.Width && point.Y >= top && point.Y < top + line.Height)
+                return run.Span;
+        }
+
+        return -1;
+    }
+
+    private Action? TapAt(Offset point) =>
+        SpanIndexAt(point) is var i and >= 0 ? _spans[i].OnTap : null;
+
+    public override MouseCursor? GetCursor(Offset point) => TapAt(point) is null ? null : MouseCursor.Pointer;
+
+    public override void OnPointerDown(Offset point)
+    {
+        int i = SpanIndexAt(point);
+        _pressedSpan = i >= 0 && _spans[i].OnTap is not null ? i : -1;
+    }
+
+    public override void OnPointerUp(Offset point)
+    {
+        int pressed = _pressedSpan;
+        _pressedSpan = -1;
+        // A press that started on a link fires it only if it also ends on that same link — the
+        // platform rule that lets a user slide off to cancel.
+        if (pressed >= 0 && SpanIndexAt(point) == pressed) _spans[pressed].OnTap?.Invoke();
+    }
+
+    public override void OnPointerCancel() => _pressedSpan = -1;
 
     // ── Layout construction (cold path — allocation here is fine, and only here) ──
 

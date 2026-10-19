@@ -48,6 +48,25 @@ public sealed class AnimatedBuilder(
     /// </summary>
     public Widget? Child { get; set; } = child;
 
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    // A tick must invalidate THIS widget: the controller's own frame request only raises the
+    // app-wide layout flag, and a cached ancestor (any ComposedWidget) then skips re-measuring the
+    // subtree, so the builder never re-ran and the animation stood still. Subscribed per mount.
+    protected override void OnMount()
+    {
+        var animation = Animation;
+        animation.OnTick += MarkNeedsLayout;
+        Own(new Unsubscribe(() => animation.OnTick -= MarkNeedsLayout));
+    }
+
+    private sealed class Unsubscribe(Action undo) : IDisposable
+    {
+        public void Dispose() => undo();
+    }
+
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_built);
+
     // ── Widget protocol ───────────────────────────────────────────────────────
 
     public override Size Measure(Constraints c)
@@ -88,8 +107,10 @@ public sealed class AnimatedBuilder(
         float v = Animation.Value;
         if (float.IsNaN(_lastValue) || Math.Abs(v - _lastValue) > 0.001f)
         {
-            _built = Builder(arg1: BuildContext.Current, arg2: Child);
+            var previous = _built;
+            _built = Builder(arg1: BuildContext.For(this), arg2: Child);
             _lastValue = v;
+            SwapChild(previous: previous, next: _built); // attach the new subtree, detach the old
         }
     }
 }

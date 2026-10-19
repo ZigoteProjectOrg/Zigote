@@ -357,6 +357,11 @@ public class ZigoteApp
                     Child = WidgetPreview.Failure(target: _preview, error: e),
                 };
             }
+            catch (Exception e)
+            {
+                if (!OnFrameError(e)) throw;
+                uiApp.RequestLayoutAllWindows();
+            }
         }
 
         OnQuit();
@@ -364,6 +369,13 @@ public class ZigoteApp
         App = null;
         RootNavigator = null;
     }
+
+    /// <summary>
+    ///     An exception escaped a frame (a <c>Build</c>, layout, paint or input handler). Return true
+    ///     after repairing the tree to keep the loop running; the default false rethrows. For hosts
+    ///     that run code they did not write — a playground swapping a broken example for its error.
+    /// </summary>
+    protected virtual bool OnFrameError(Exception error) => false;
 
     /// <summary>
     ///     Swap the theme by name for the inspect socket's <c>theme</c> command. Understands

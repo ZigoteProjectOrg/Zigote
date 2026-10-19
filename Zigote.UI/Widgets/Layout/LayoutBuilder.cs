@@ -27,7 +27,7 @@ public sealed class LayoutBuilder : Widget
                 minHeight: c.MinHeight,
                 maxHeight: c.MaxHeight
             );
-            var next = _builder(arg1: BuildContext.Current, arg2: bc);
+            var next = _builder(arg1: BuildContext.For(this), arg2: bc);
             // A builder that hands back the SAME widget is asking to be re-laid-out, not rebuilt.
             // Detaching and re-attaching it would restart its animations and re-defer the build of
             // any Watch inside it (Watch postpones swaps while the tree walk is running) — once per

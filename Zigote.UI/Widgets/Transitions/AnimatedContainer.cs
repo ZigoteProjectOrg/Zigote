@@ -92,6 +92,9 @@ public sealed class AnimatedContainer : Widget
             b: _beginColor.B + ((_endColor.B - _beginColor.B) * t),
             a: _beginColor.A + ((_endColor.A - _beginColor.A) * t)
         );
+        // The size moves too: the controller's frame request alone lets a cached ancestor skip
+        // re-measuring this widget, so the width/height never changed — only the colour did.
+        MarkNeedsLayout();
     }
 
     public override Size Measure(Constraints c)

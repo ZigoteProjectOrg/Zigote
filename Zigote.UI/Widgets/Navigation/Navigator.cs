@@ -47,7 +47,7 @@ internal sealed class NavigatorBody : Widget
         {
             // Every route keeps its content built and attached (state preservation) — only the
             // measure itself is skipped for covered routes.
-            var content = routes[i].EnsureContent(BuildContext.Current);
+            var content = routes[i].EnsureContent(BuildContext.For(this));
             if (content.Owner is null && Owner is not null)
                 content.Attach(owner: Owner, parent: this);
             if (i >= first) content.Measure(tight);

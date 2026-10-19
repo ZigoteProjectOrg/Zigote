@@ -37,6 +37,9 @@ public abstract class Widget : ITickerProvider
     public App? Owner { get; set; }
     public Key? Key { get; set; }
 
+    /// <summary>The context this widget hands its builders — see <see cref="BuildContext.For" />.</summary>
+    internal BuildContext? AnchoredContext;
+
     // Invalidation/Dirty flags
     public bool NeedsBuild { get; set; } = true;
     public bool NeedsLayout { get; set; } = true;

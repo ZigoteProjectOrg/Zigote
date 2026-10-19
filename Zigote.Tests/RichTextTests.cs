@@ -365,4 +365,31 @@ public class RtlLayoutTests
         Assert.Equal(expected: 0f, actual: child.Bounds.X, precision: 2);
         Assert.Equal(expected: 20f, actual: pad.Insets.Right, precision: 2);
     }
+
+    // ── Tappable spans (headless widths: 5.5 px per char at font size 10) ──
+
+    [Fact]
+    public void TapOnLinkSpan_InvokesIt_ButNotTheText()
+    {
+        int taps = 0;
+        // "Go to " is 6 chars = 33 px; the link spans 33..55 px.
+        var rt = new RichText(new TextSpan("Go to "), new TextSpan("link") { OnTap = () => taps++ }) {
+            FontSize = 10f,
+            LineHeight = 1.2f,
+        };
+        rt.Measure(new Constraints(maxWidth: 500f, maxHeight: 600f));
+        rt.Layout(Offset.Zero);
+
+        rt.OnPointerDown(new Offset(40f, 5f));
+        rt.OnPointerUp(new Offset(40f, 5f));
+        Assert.Equal(expected: 1, actual: taps);
+
+        rt.OnPointerDown(new Offset(10f, 5f));     // plain text
+        rt.OnPointerUp(new Offset(10f, 5f));
+        Assert.Equal(expected: 1, actual: taps);
+
+        rt.OnPointerDown(new Offset(40f, 5f));     // press on the link, slide off, release
+        rt.OnPointerUp(new Offset(10f, 5f));
+        Assert.Equal(expected: 1, actual: taps);
+    }
 }

@@ -84,6 +84,15 @@ public sealed class Watch : Widget
     {
         Widget? next = null;
         ExceptionDispatchInfo? error = null;
+        // A rebuild runs wherever the signal was written — a click handler, a worker thread — where
+        // the ambient inherited stack is empty or someone else's. Re-enter the scope this Watch was
+        // last measured under, so lookups in the builder (context.Tr, ThemeProvider.Of, MediaQuery)
+        // resolve as they did on the first build. Empty before the first measure: the first build
+        // runs inside the walk and sees the live stack. BuildContext is per-thread, so an off-thread
+        // rebuild pushes onto its own thread's stack.
+        var ctx = BuildContext.Current;
+        int depth = _scopeDepth;
+        ctx.EnterScope(buffer: _scope, count: depth);
         try
         {
             next = _build();
@@ -93,6 +102,10 @@ public sealed class Watch : Widget
             // Caught, not thrown: a body that throws keeps only its old dependencies, so the reads
             // that led here would never re-run it. The failure surfaces from Apply instead.
             error = ExceptionDispatchInfo.Capture(ex);
+        }
+        finally
+        {
+            ctx.ExitScope(depth);
         }
 
         // Same widget back (a builder that mutates and returns one retained widget): nothing to

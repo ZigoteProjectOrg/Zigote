@@ -86,7 +86,7 @@ public sealed class AdaptiveBuilder : Widget
         var cls = WindowSize.ClassFor(c.MaxWidth);
         if (_lastClass != cls)
         {
-            _switcher.Child = _builder(arg1: BuildContext.Current, arg2: cls);
+            _switcher.Child = _builder(arg1: BuildContext.For(this), arg2: cls);
             _lastClass = cls;
         }
 
