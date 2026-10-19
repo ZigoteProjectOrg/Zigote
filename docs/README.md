@@ -8,6 +8,7 @@ retained mode is the one idea everything else follows from.
 
 | Document | What is in it |
 |---|---|
+| [`../Zigote.Playground/README.md`](../Zigote.Playground/README.md) | The interactive docs app: introduction to renderer, native interop and engine, with live examples you edit and re-run in place. |
 | [`../Zigote.UI/README.md`](../Zigote.UI/README.md) | The widget framework in depth: frame phases, widget kinds, invalidation, theming, focus. |
 | [`sdk.md`](sdk.md) | The SDK as packages — one version string for the managed and native halves, which RID an app builds for, and building against a checkout instead. |
 | [`architecture.md`](architecture.md) | How the whole solution fits together — layering, the reactive core, threading, diagnostics. |

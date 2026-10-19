@@ -94,7 +94,7 @@ A method. `BooleanToVisibilityConverter` and friends have no analogue because th
 convert *to*:
 
 ```csharp
-new Watch(() => _isBusy.Value ? new Spinner() : (Widget)_content)
+new Watch(() => _isBusy.Value ? new AdwSpinner() : (Widget)_content)
 ```
 
 ### Two-way (`{Binding Foo, Mode=TwoWay}`)
@@ -229,10 +229,10 @@ The biggest single adjustment: **there is no `Grid`** — no `RowDefinitions`, n
 | `DockPanel` | `Column` / `Row` with `Expanded` on the fill child |
 | `Canvas` + `Canvas.Left` | `Stack` + `Positioned(left:, top:)` |
 | `WrapPanel` | `Wrap` |
-| `UniformGrid` | `GridView.Count`, `GridView.Builder` (virtualized), `ResponsiveGrid` |
+| `UniformGrid` | `GridView.Count`, `GridView.Builder` (virtualized), `AdwResponsiveGrid` |
 | `Border` | `DecoratedBox`, or `Container(decoration:)` |
 | `ScrollViewer` | `SingleChildScrollView` / `ScrollView` |
-| `GridSplitter` | `SplitPane` |
+| `GridSplitter` | `AdwPaned` |
 | `Viewbox` | `Transform`, `AspectRatio` |
 | `Margin` | `new Padding(EdgeInsets.All(8), child)` |
 | `Padding` | the control's own `Padding` property, or a wrapped `Padding` |

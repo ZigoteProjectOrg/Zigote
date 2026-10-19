@@ -132,7 +132,7 @@ object per stage. If a wrapper stack gets deep enough to hurt readability, facto
 | `LazyVerticalGrid` | `GridView.Builder` (lazy); `AdwResponsiveGrid` (materialized) |
 | `Text` | `Label` (or `Text`, an alias taking a `TextStyle`) |
 | `Button` / `OutlinedButton` / `TextButton` | `AdwButton` with `Style` = `Regular` / `Flat` / `Suggested` (or the kernel `Button`) |
-| `Icon` / `IconButton` | `Icon` / `IconButton` |
+| `Icon` / `IconButton` | `Icon` / `AdwButton { IconName = …, Circular = true }` |
 | `TextField` / `OutlinedTextField` | `AdwEntry` (`Zigote.UI.Adwaita`) |
 | `Checkbox` / `RadioButton` / `Switch` / `Slider` | `AdwCheckButton` / `AdwRadioButton` / `AdwSwitch` / `AdwSlider` |
 | `Scaffold` / `TopAppBar` / `FAB` | `AdwToolbarView` / `AdwHeaderBar` / `AdwButton` |
@@ -228,7 +228,8 @@ The builder lambda replaces `items(list) { … }`, and carries the same rule Com
 that leaves the window is destroyed, so its widget-held state (hover, focus, a nested scroll offset)
 goes with it. Keep item state in your model — there is no `rememberSaveable` here.
 
-`SetItems` is the eager alternative: every row materialized and kept alive, at roughly 8 µs each.
+`SetItems` is the eager alternative: every row materialized and kept alive, at a few microseconds
+each (more for rich rows).
 
 Under a few hundred rows this is invisible. Above that, if you need eager rows, fill across frames —
 `Background.Slice` owns the per-frame budget and supersedes any fill already running for the same
@@ -253,8 +254,8 @@ private void ShowTracks(ImmutableArray<Track> tracks)
 }
 ```
 
-`Slice` advances only when the app grants the frame loop a budget — `RunFrame(budget)` once per
-frame; the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows the wiring.
+`Slice` advances within each frame's budget; the app's frame loop drains `App.Background` and its
+child scopes for you, so there is nothing to wire (see the [cookbook](cookbook.md#background-work-without-hitching-the-frame)).
 
 Variable-height rows: set `HeightOf` and the list keeps a prefix-sum table and binary-searches the
 visible window.

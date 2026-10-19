@@ -151,7 +151,7 @@ Measure(Constraints) → Layout(Offset) → DispatchEvents → Paint(PaintList)
 - **Measure** is bottom-up and returns a `Size`, cached per widget.
 - **Layout** is top-down and sets each widget's absolute `Bounds`.
 - **Events** dispatch after layout, so `Bounds` is valid for hit-testing.
-- **Paint** emits flat `ZgPaintCommand` structs into a reused buffer — zero allocation on the
+- **Paint** appends compact tagged records to a reused byte stream (`PaintList`) — zero allocation on the
   steady path.
 
 Measure and Layout only run when something marked the tree dirty. A mouse-move repaints; it never
@@ -191,6 +191,10 @@ var isPhone = media.SizeClass == WindowSizeClass.Compact;
 ```
 
 `DependOn<T>()` registers a dependency and rebuilds the reading widget when the data changes.
+The `ctx` a widget's `Build` receives is anchored to that widget, so code that closes over it — a
+click handler, an async continuation — can keep using it: `ctx.Push(...)` from an `onPressed`
+finds the navigator the widget sits under. Only lookups made during a build register a rebuild
+dependency; a lookup in a handler just reads the current value.
 `Read<T>()` / `FindAncestor<T>()` look up without subscribing. Write your own by subclassing
 `InheritedWidget` and overriding `UpdateShouldNotify`.
 

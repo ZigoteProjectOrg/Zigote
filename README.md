@@ -79,7 +79,8 @@ Or run something that already exists:
 
 ```sh
 dotnet run --project Zigote.UI.HelloWorld        # smallest complete app — start here
-dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 49 pages
+dotnet run --project Zigote.Playground          # the docs as an app: edit and run every example
+dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 51 pages
 dotnet run --project Zigote.UI.FSharp.Gallery    # the same framework from F#
 ```
 
@@ -116,7 +117,12 @@ sealed class CounterPage : ComposedWidget
 ```
 
 `ZigoteApp` boots the engine, opens the window, installs the theme and wraps `Home` in a root
-`Navigator`, so `context.Push` / `context.Pop` work anywhere in the tree.
+`Navigator`, so `context.Push` / `context.Pop` work anywhere in the tree — in `Build`, and from the
+click handlers and async continuations that close over the `context` it was given.
+
+The fastest way to learn the rest is **[Zigote.Playground](Zigote.Playground/README.md)**: the
+documentation as an app, with live examples you edit and re-run in place
+(`dotnet run --project Zigote.Playground`).
 
 ---
 
@@ -226,7 +232,7 @@ built from the kernel's primitives, sharing its theming, focus, semantics and ho
 
 | | |
 | --- | --- |
-| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 147 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
+| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 148 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
 
 <table>
 <tr>
@@ -308,7 +314,10 @@ tests.
 
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world and a counter in one
   annotated file. The place to start.
-- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 49 pages of the GNOME
+- **[`Zigote.Playground`](Zigote.Playground/README.md)** — the documentation as an app: 32 pages from
+  widgets to shaders, plugins and the engine, each with live examples compiled in-process, plus a
+  `--self-test` that compiles every one.
+- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 51 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.
 - **`examples/PorscheDemo`** — a full 3D driving demo. It carries large binary assets, so it is
@@ -345,7 +354,7 @@ worth reading first.
 
 | Project | Purpose |
 | --- | --- |
-| `Zigote.Core` | Reactive primitives, background work, native FFI (`[LibraryImport]` into `libzigote`), scene graph, assets, diagnostics. |
+| `Zigote.Core` | Reactive primitives, background work, platform channels and plugins, native FFI (generated `[DllImport]` into `libzigote`), scene graph, assets, diagnostics. |
 | `Zigote.Engine` | The native Zig + wgpu backend — wgpu, SDL3, HarfBuzz + FreeType, Jolt, flecs, miniaudio, Assimp, behind a C ABI (git submodule). |
 | `Zigote.Generators` | Roslyn source generators (FFI bindings, DSL codegen). |
 | `Zigote.Cli` | The whole loop: `zigote create` / `zigote add android|ios` scaffolds an app and its heads; `zigote run` runs it (attached phone or simulator if there is one, else this machine, `--widget` for a single widget, `--inspect` for the devtools protocol) and reloads edits into it; `zigote build apk|aab|ipa|exe|app|appimage` produces the shippable artifact with icons, one version and signing; `zigote test --update-goldens`, `zigote logs`, `zigote doctor --fix`. |

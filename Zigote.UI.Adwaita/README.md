@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita
 
-The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 147 `Adw*` types, both appearances, the nine
+The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 148 `Adw*` types, both appearances, the nine
 system accents, the boxed-list row vocabulary, adaptive navigation, and client-side decorations the app draws itself.
 Tokens and metrics track **libadwaita 1.10 (GNOME 51)** — every colour, radius and state fill here has a line of
 `src/stylesheet/` behind it.
@@ -15,7 +15,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 > widgets are Zigote widgets, laid out and painted by Zigote's own renderer. An Adwaita app therefore
 > builds and runs unchanged on macOS and Windows; the screenshot above is macOS.
 
-**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 49 pages, one per widget family
+**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 51 pages, one per widget family
 ([gallery README](../Zigote.UI.Adwaita.Gallery/README.md)).
 
 ---

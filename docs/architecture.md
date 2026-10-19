@@ -162,9 +162,12 @@ second tap while busy" is a guard at the top of an override rather than a policy
 new Watch(() => new Label($"{bloc.State.Value.Count}"))
 ```
 
-Wraps the builder in a `Computed<Widget>` and swaps the subtree when a signal it read changes. On the
+Runs the builder inside one `Effect` — building and subscribing in a single pass under the graph
+lock, so no write can slip between them — and swaps the subtree when a signal it read changes. On the
 UI thread it swaps in place; an off-thread change (or one arriving mid-walk) is flagged and applied
-in the next `Measure`. F# apps use the same widget through `watch`.
+in the next `Measure`. A rebuild re-enters the inherited scope the `Watch` was last measured under,
+so `ThemeProvider.Of`, `MediaQuery.Of` and `ctx.Tr` in a builder resolve the same on every run. F#
+apps use the same widget through `watch`.
 
 ---
 
@@ -216,8 +219,7 @@ goes to the thread pool, in order, with no priorities. `async`/`await` in a bloc
 correct for work the handler awaits.
 
 ```csharp
-var background = new Background(app.Post, app.RequestLayout);   // root, at the composition root
-var library    = background.Child("library");                   // one per feature or screen
+var library = app.Background.Child("library");                  // the app's root scope → one per feature
 
 library.Run(() => Storage.Save(file, snapshot));                // fire and forget; failures reported
 library.Run(() => Load(path), data => bloc.Add(new Loaded(data)));           // → UI thread
@@ -240,7 +242,8 @@ search.Run(ct => Filter(query, ct), Emit, delay: 120.ms);       // debounced, la
 **Above the floor** — the parts that are not a re-implementation of `CoroutineScope`:
 
 - **Frame-aware delivery.** `Deliver.WhenIdle` results and `Slice` work run against a per-frame time
-  budget: the host calls `RunFrame(budget)` once per frame before layout, each queue makes at least
+  budget: the app's frame loop drains `App.Background` once per frame before layout (`RunFrame`,
+  with the budget left after a reserve for layout and paint), each queue makes at least
   one unit of progress, and whatever does not fit asks for another frame and continues there, in
   order. Four hundred results landing at once become several frames of filling in rather than one
   dropped frame. A general-purpose runtime cannot offer this, because it does not know what a frame
@@ -298,7 +301,7 @@ reactive graph.
 |---|---|
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
 | `Zigote.UI` | Widgets, layout, theming, navigation (Navigator 2.0), focus, semantics, `Watch` |
-| `Zigote.UI.Adwaita` | The GNOME Adwaita design system and the framework's control library, over the kernel — 147 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system and the framework's control library, over the kernel — 148 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
 | `Zigote.UI.Charts`, `.Localizations`, `.BottomSheet` | Charting, i18n, draggable sheets |
 | `Zigote.UI.Functional` | Components as plain functions, via one widget: `View` ([README](../Zigote.UI.Functional/README.md)) |
 | `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` ([README](../Zigote.UI.FSharp/README.md)) |

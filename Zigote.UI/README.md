@@ -4,7 +4,7 @@ A **declarative, retained-mode widget framework** in C#. Widgets are long-lived 
 mutate properties per frame — hover, press, focus, scroll, and animation state live on the widgets themselves, so there
 is no diff/reconcile pass to re-derive it. It renders through the Zig/wgpu backend via `Zigote.Core` and depends on
 **nothing above the GPU** — no scenes, scripting, or editor — so it is usable standalone and headless-testable (build a
-tree, lay it out, dispatch synthetic input, assert the emitted `ZgPaintCommand`s; no native window required).
+tree, lay it out, dispatch synthetic input, assert the emitted paint commands; no native window required).
 
 The design language is **flat, minimalist macOS**: opaque surfaces layered by elevation, a small accent-tinted palette,
 the SF-style type ramp, an 8-pt spacing grid, and soft low-opacity shadows. Translucency ("Liquid Glass") is opt-in.
@@ -20,7 +20,7 @@ Measure(Constraints) → Layout(Offset) → DispatchEvents → Paint(PaintList)
 - **Measure** — bottom-up; returns a `Size`, cached internally.
 - **Layout** — top-down; sets each widget's absolute `Bounds`.
 - **DispatchEvents** — after layout, so `Bounds` is valid for hit-testing.
-- **Paint** — emits flat `ZgPaintCommand` structs into a reused buffer (0 B/frame on the steady path).
+- **Paint** — appends compact tagged records to the frame's `PaintList` byte stream (0 B/frame on the steady path).
 
 **Never recreate widgets each frame** — fields on a widget *are* its state.
 
@@ -44,13 +44,21 @@ new ZigoteApp
 ```
 
 `ZigoteApp` boots the engine, injects `ThemeProvider` + `MediaQuery` as root context, and wraps `Home`
-in a root `Navigator` so `context.Push`/`Pop` work anywhere. For a raw loop, use `UiApp`:
+in a root `Navigator` so `context.Push`/`Pop` work anywhere. For a raw loop, use `App`:
 
 ```csharp
-using var app = new UiApp("Title", 1024, 720) { Theme = ThemeData.Dark };
+using var app = new App("Title", 1024, 720) { Theme = ThemeData.Dark };
 app.Root = new ColoredBox(app.Theme.Background) { Child = /* tree */ };
 while (!app.ShouldQuit) app.Frame();   // Measure → Layout → Events → Paint
 ```
+
+> **The `context` a widget is given stays valid.** The `BuildContext` passed to `Build` (and to
+> `LayoutBuilder`/`AdaptiveBuilder`/`AnimatedBuilder` callbacks and route builders) is anchored to
+> that widget, so a click handler or async continuation that closes over it can still call
+> `context.Push(...)`, `ThemeProvider.Of(context)` or `context.Tr(...)` long after the build:
+> outside the layout walk, lookups follow the widget's real ancestors. Lookups made outside `Build`
+> read the current value but register no rebuild dependency. `BuildContext.Current`, the shared
+> walk context, is the exception — it answers only during the walk; don't keep it.
 
 > **Root background must be opaque** — wgpu clears with alpha 0, so wrap your root in
 > `ColoredBox(theme.Background)` or the window is transparent on macOS.
@@ -182,5 +190,5 @@ Alongside them: **[`Zigote.UI.Charts`](../Zigote.UI.Charts/README.md)** (declara
 ## Testing
 
 Everything is headless-testable — build a tree, lay it out, dispatch synthetic input, and assert widget state or emitted
-`ZgPaintCommand`s. See `Zigote.Tests` (layout, reconciler, navigator, focus, hot-path-allocation). Don't reference
+paint commands (`PaintList.DebugCommands`). See `Zigote.Tests` (layout, reconciler, navigator, focus, hot-path-allocation). Don't reference
 `Zigote.Editor` from tests — it initialises the native engine.

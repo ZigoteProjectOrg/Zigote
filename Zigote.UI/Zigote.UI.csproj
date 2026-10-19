@@ -6,6 +6,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.UI</RootNamespace>
         <AssemblyName>Zigote.UI</AssemblyName>
+        <!-- The XML doc comments ship next to the DLL: IDEs show them, and Zigote.Playground's widget
+             catalog is generated from them. CS1591 (undocumented public member) is not a defect. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- ponytail: the doc-comment checks below (bad cref/param/paramref) were never on before and
+             fire ~80 times; silenced so builds stay quiet. Drop them from NoWarn to fix the backlog. -->
+        <NoWarn>$(NoWarn);CS1591;CS1574;CS1573;CS1734;CS0419;CS1572</NoWarn>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>

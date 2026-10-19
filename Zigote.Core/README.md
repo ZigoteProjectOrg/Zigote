@@ -15,13 +15,16 @@ the BCL.
 | Area           | Contents                                                                                                                                                                                                                                              |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Engine/`      | `ZigoteEngine` — the high-level facade over the native engine (init, frame loop, paint submission, text/clipboard/menu/audio/gamepad/window FFI). `NativeWindow`, `MacMenu`, `MouseCursor`. **Never expose `NativeEngine` members — wrap them here.** |
-| `Native/`      | `NativeEngine` (`internal unsafe partial` — all `[LibraryImport]`), `ZgStructs` (FFI struct layouts pinned to Zig), `NativeMenu`                                                                                                                      |
-| `Paint/`       | `PaintList` (accumulates `ZgPaintCommand`s for a frame; clip/transform/opacity stacks, NaN validation, UTF-8 memoisation), `PaintCommand`, `TextLayout`                                                                                               |
+| `Native/`      | `NativeEngine` (`internal unsafe partial` — `[DllImport]` bindings source-generated from the Zig exports), `ZgStructs` (FFI struct layouts pinned to Zig), `NativeMenu`                                                                                                                      |
+| `Paint/`       | `PaintList` (the frame's tagged paint-op byte stream; clip/transform/opacity stacks, NaN validation, UTF-8 memoisation), `PaintCommandView` (decoded view for tests), `TextLayout`                                                                                               |
 | `Events/`      | `InputEvent` hierarchy, `Key`/`KeyCode`, `KeyChord`/`Keymap`, `EventPool`                                                                                                                                                                             |
 | `Math3D/`      | `Vec2/3/4`, `Mat4`, `Quat`, `Ray`, `Transform3D`, `Frustum`, `Tolerance` — all `readonly struct` with operator overloading, backed by `System.Numerics`                                                                                               |
 | `Types/`       | Geometry + design primitives: `Offset`, `Size`, `Rect`, `Constraints`, `EdgeInsets`, `Duration`, `Color`/`Colors`/`MaterialColor`, `ColorTemperature`                                                                                                 |
 | `Animation/`   | `AnimationController`, `Ticker`, `Curves`, `Tween` (`FloatTween`/`ColorTween`/`OffsetTween`/`SizeTween`)                                                                                                                                              |
 | `State/`       | Reactive primitives: `Signal<T>`, `Trigger`, `Computed<T>`, `LinkedSignal<T>`, `Effect`, and the `Reactive` runtime (graph lock, batching, deferred drain)                                                                                            |
+| `Threading/`   | `Background` (structured background work: `Run`, `Latest`, `Slice`, `Deliver.WhenIdle`), drained per frame by the app                                                                                                                                 |
+| `Platform/`    | `PlatformChannel` (named app↔platform channels), `JsonChannel`/`JsonEvents` (typed), `PluginHost` + `IPlatformPlugin`                                                                                                                                 |
+| `Licenses/`    | `LicenseRegistry` — runtime third-party notices                                                                                                                                                                                                       |
 | `Assets/`      | `AssetId` (GUID-backed stable identity), `AssetRegistry`, `AssetManager`, `AssetHandle`, `IAssetLoader`/`FileBytesLoader`, streaming load states                                                                                                      |
 | `Physics/`     | `PhysicsWorld` + `PhysicsBodySettings` (the C# side of the native Jolt bridge)                                                                                                                                                                        |
 | `Rendering/`   | `RenderBackend`/`RendererCaps`, `RenderSettings`, `RendererAbiInfo` (ABI version guard)                                                                                                                                                               |
@@ -58,15 +61,15 @@ when building a custom host. For the zero-GC steady-state frame, drain events wi
 
 The C#↔Zig boundary is the reason this project is `unsafe`. A few invariants that cost real debugging time when broken:
 
-- **`[LibraryImport]` only, never `[DllImport]`.** P/Invoke lives in `Native/NativeEngine.cs` as
-  `internal unsafe partial static`; the public surface is `ZigoteEngine`.
-- **FFI struct layouts must match Zig exactly.** `ZgPaintCommand` (112 B) and `ZgEvent` (44 B) have their field offsets
-  pinned on both sides (comptime `@offsetOf` asserts in Zig + `AbiLayoutTests` in C#). Changing field order or size
-  means bumping `RendererAbiInfo.ExpectedAbiVersion` and the Zig
-  `zigote_get_renderer_abi_info` (currently **9**).
-- **Bindings are generated** from the Zig `export fn`s — don't hand-write P/Invokes against the convention; regenerate.
-  Adding a binding is: `export fn` in `ffi/root.zig` → generated
-  `NativeEngine` entry → wrap publicly in `ZigoteEngine`.
+- **Bindings are generated, never hand-written.** `Zigote.Generators/ZigoteBindingGenerator` is a Roslyn source
+  generator that reads every `export fn` in `Zigote.Engine/src/ffi/*.zig` (and the enums in `src/abi.zig`) on each
+  build and emits `[DllImport]` entries into the `internal unsafe partial` `NativeEngine` class. (`[DllImport]` is
+  deliberate: the SDK's `LibraryImport` generator cannot process another generator's output.) The public surface is
+  `ZigoteEngine`; adding a binding is `export fn` → build → wrap it in `ZigoteEngine`.
+- **FFI struct layouts must match Zig exactly.** The wire contract is `Zigote.Engine/src/abi.zig`: paint commands cross
+  as a tagged stream (`ZgPaintOpHeader` + per-kind records) and `ZgEvent` is 44 B. Offsets are pinned by `comptime`
+  asserts in Zig, and `AbiManifestTests` checks the C# mirrors against `zig build ffi-manifest`. A layout change means
+  bumping `RendererAbiInfo.ExpectedAbiVersion` and the Zig `abi_version` (currently **100**, the V2 contract).
 - **Native (Zig/shader) changes require a full process restart** to take effect — they apply at load, not via hot
   reload.
 
@@ -89,5 +92,5 @@ var hasSelection = Computed.From(selected, n => n is not null);
   paint + events + a window) as the thinnest possible Zigote host.
 - The design-token *scales* (spacing, typography, radii) live in `Zigote.UI/Theme/`, not here; this project holds only
   the appearance-independent primitives (`Color`, `Rect`, `EdgeInsets`, …).
-- See the root [CLAUDE.md](../CLAUDE.md) for the full architecture guide (FFI struct tables, ABI rules, the widget model
-  built on top, and the coding guide).
+- See [docs/architecture.md](../docs/architecture.md) for how the solution layers, and
+  [Zigote.Engine/docs/ffi-reference.md](../Zigote.Engine/docs/ffi-reference.md) for the FFI contract in full.

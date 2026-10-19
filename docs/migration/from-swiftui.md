@@ -163,21 +163,21 @@ helper method (your `.buttonStyle`).
 | `Text` | `Label` (or `Text`, an alias taking a `TextStyle`) |
 | `.font(.title2)` | `new Label(s) { Style = … }`, or `new Text(s, style: Typography.Title2)` |
 | `Button` | `AdwButton` (`Style` picks suggested / flat / destructive), or the kernel `Button` |
-| `Image` / `AsyncImage` | `Image` / `AsyncImage` |
+| `Image` / `AsyncImage` | `Image` / `AdwAsyncImage` |
 | `Label("Title", systemImage:)` | `Row` of `Icon` + `Label`; icons are `MaterialIcons.*` string constants |
 | `TextField` / `SecureField` | `AdwEntry` / `AdwPasswordEntry` (`Zigote.UI.Adwaita`) |
 | `Toggle` | `AdwSwitch` |
 | `Slider` / `Stepper` | `AdwSlider` / `AdwSpinButton`, `AdwNumberInput` |
 | `Picker` (menu) | `AdwDropDown` |
-| `Picker` (`.segmented`) | `SegmentedControl` |
-| `ProgressView` (determinate) | `ProgressBar` |
-| `ProgressView` (indeterminate) | `Spinner` |
+| `Picker` (`.segmented`) | `AdwToggleGroup` |
+| `ProgressView` (determinate) | `AdwProgressBar` |
+| `ProgressView` (indeterminate) | `AdwSpinner` |
 | `Divider` | `AdwSeparator` |
 | `ScrollView` | `SingleChildScrollView` / `ScrollView` |
 | `List` / `ForEach` | `ListView.Builder` / `SetItems` — see [Lists](#list-and-foreach) |
-| `LazyVGrid` | `GridView.Builder` (lazy), `GridView.Count`, `ResponsiveGrid` |
+| `LazyVGrid` | `GridView.Builder` (lazy), `GridView.Count`, `AdwResponsiveGrid` |
 | `Form` / `Section` | `AdwPreferencesPage` / `AdwPreferencesGroup` / `AdwActionRow` (Adwaita), or `Column` + `Card` |
-| `.searchable` | `SearchField`, `AutoSuggestField` |
+| `.searchable` | `AdwSearchEntry`, `AdwSuggestionEntry` |
 | `TabView` | `AdwViewSwitcher` + `AdwViewStack` |
 | `NavigationStack` / `NavigationLink` | `Navigator` — `await ctx.Push(page)`, `ctx.Pop(result)` |
 | `NavigationSplitView` | `AdwNavigationSplitView` |
@@ -272,7 +272,8 @@ of cells at a time and scrolls itself.
 Laziness costs the same here as in SwiftUI: a row that scrolls out is gone, and so is anything it
 held (hover, focus, a nested scroll offset). Keep row state in your model.
 
-`SetItems` is the eager alternative — every row materialized and kept alive, at roughly 8 µs each.
+`SetItems` is the eager alternative — every row materialized and kept alive, at a few microseconds
+each (more for rich rows).
 Under a few hundred rows the difference is invisible. Above that, if you need eager rows, fill across
 frames — `Background.Slice` owns the per-frame budget and supersedes any fill already running for the
 same key:
@@ -296,8 +297,8 @@ private void Show(ImmutableArray<Track> tracks)
 }
 ```
 
-`Slice` advances only when the app grants the frame loop a budget — `RunFrame(budget)` once per
-frame; the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows the wiring.
+`Slice` advances within each frame's budget; the app's frame loop drains `App.Background` and its
+child scopes for you, so there is nothing to wire (see the [cookbook](cookbook.md#background-work-without-hitching-the-frame)).
 (`_env` is your own services record, injected at the root — see concepts.md §7.)
 
 Variable-height rows — the analogue of a `List` with mixed cell heights:

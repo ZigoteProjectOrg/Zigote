@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita.Gallery
 
-The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **49 pages**, one per widget family, every
+The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **51 pages**, one per widget family, every
 one of them live. No screenshots, no mock rows: what you see is the widget doing the thing.
 
 ```sh

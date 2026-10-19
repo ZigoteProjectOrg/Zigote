@@ -83,7 +83,7 @@ public sealed class ProfilePage(ProfileBloc bloc, int userId) : ComposedWidget
 
         return new Watch(() => bloc.State.Value switch
         {
-            { Busy: true }            => new Center(new Spinner()),
+            { Busy: true }            => new Center(new AdwSpinner()),
             { Error: { } message }    => Retry(ctx, message),
             { User: { } user }        => Content(user),
             _                         => SizedBox.Shrink(),
@@ -111,7 +111,7 @@ new `Future`. `FutureBuilder<T>` is fine for a genuinely one-shot load with no r
 new FutureBuilder<User>(api.GetAsync(userId), (ctx, snap) =>
     snap switch
     {
-        { IsWaiting: true } => new Spinner(),
+        { IsWaiting: true } => new AdwSpinner(),
         { HasError: true }  => new Label(snap.Error!.Message),
         { HasData: true }   => new Label(snap.Data!.Name),
         _                   => SizedBox.Shrink(),
@@ -184,8 +184,10 @@ time, and it scrolls itself.
 The trade is that **a row scrolled out is destroyed**: hover, focus, a nested scroll offset, a
 running animation. Keep row state in your model and read it in the builder.
 
-When rows must stay alive, `SetItems` materializes them — at roughly 8 µs each, so fifty thousand is
-a frozen window, and on a media app a long enough freeze is audible.
+When rows must stay alive, `SetItems` materializes them all at once on the UI thread. A simple
+label row costs a microsecond or two (30,000 took ~45 ms on an Apple-silicon Mac); real rows with
+icons and layout cost several times that — so fifty thousand is a visibly stalled window, and on a
+media app a long enough stall is audible.
 
 `Background.Slice` fills across frames within a per-frame budget, and supersedes any fill already
 running under the same key:
@@ -214,9 +216,10 @@ public static class ProgressiveRows
 }
 ```
 
-`Slice` runs its first chunk inline and parks the rest for the frame loop — the fill advances only
-if your app calls `Background.RunFrame(budget)` once per frame. See
-[Background work](#background-work-without-hitching-the-frame) for the two lines that wire it.
+`Slice` runs its first chunk inline and parks the rest for the frame loop, which advances it within
+each frame's budget — the app's own loop drains `App.Background` for you, so pass
+`app.Background` (or a `Child` of it) and nothing else needs wiring. See
+[Background work](#background-work-without-hitching-the-frame).
 
 Variable-height rows — set `HeightOf` and the list keeps a prefix-sum offset table and
 binary-searches the visible window, so cost stays O(viewport) rather than O(count):
@@ -399,11 +402,12 @@ Note `_valid.Value ? Submit : null` — a null callback disables the button. Tha
 
 ## Background work without hitching the frame
 
-`Background` is the worker pool. It marshals results back to the UI thread for you. There is no
-ambient instance — build one at the composition root and pass it (or a named `Child` scope) down:
+`Background` is the worker pool. It marshals results back to the UI thread for you. Every `App`
+owns a root scope, `App.Background`; hand a named `Child` of it to each feature or screen (a widget
+reaches it through `Owner.Background`), and dispose the child when the feature goes away:
 
 ```csharp
-var background = new Background(app.Post, app.RequestLayout);   // once, at the root
+var background = app.Background.Child("library");   // once per feature
 ```
 
 ```csharp
@@ -426,16 +430,11 @@ var latest = background.Latest();
 background.Slice(key, count, i => DoOne(i), onDone: () => _status.Text = "Done");
 ```
 
-`Slice` chunks and `Deliver.WhenIdle` results advance **only** when the frame loop grants them a
-budget — without this call a sliced fill stops after its first chunk, silently. Grant it in your
-app's `OnUpdate`:
-
-```csharp
-protected override void OnUpdate(float dt)
-{
-    _background.RunFrame(TimeSpan.FromMilliseconds(4));   // a quarter of a 60 Hz frame
-}
-```
+`Slice` chunks and `Deliver.WhenIdle` results advance once per frame, against the time left after a
+reserve for layout and paint (`App.FrameReserveMs`). The app's frame loop does this for
+`App.Background` and every child scope — there is nothing to call. (A host that builds its own
+`new Background(post, wake)` outside an `App` must call `RunFrame(budget)` itself.)
+`App.BackgroundMaxDeferralMs` lets late frames skip the work entirely, within that bound.
 
 Writing a `Signal` from a worker thread is legal — the loop is woken and the subtree swap lands on
 the UI thread in the next `Measure`. You only need `Post` when you are mutating widgets directly.
@@ -454,6 +453,7 @@ if (confirmed is true) _bloc.Add(new LibraryEvent.Delete(item.Id));
 ```csharp
 public sealed class ConfirmPage(string question) : ComposedWidget
 {
+    // ctx stays valid in the handlers below: it is anchored to this page.
     protected override Widget Build(BuildContext ctx) => new Center(new Column(
         mainAxisSize: MainAxisSize.Min,
         spacing: Spacing.Lg,

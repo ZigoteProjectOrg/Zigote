@@ -32,9 +32,10 @@ new AdwaitaApp(
 ```
 
 `AdwaitaApp` is a named-argument constructor over `ZigoteApp`. It boots the engine, injects
-`ThemeProvider` + `MediaQuery`, and wraps `Home` in a root `Navigator`, so `context.Push` / `Pop`,
-`Routes`, `InitialRoute`, `OnGenerateRoute` and declarative `Pages` / `OnPopPage` all work the way
-you expect. `ZigoteApp` is the same thing with object-initializer syntax.
+`ThemeProvider` + `MediaQuery`, and wraps `Home` in a root `Navigator`, so push/pop, `Routes`,
+`InitialRoute`, `OnGenerateRoute` and declarative `Pages` / `OnPopPage` all work the way you expect.
+As in Flutter, the `context` passed to `Build` can be kept by the callbacks you create there —
+`onPressed: () => context.Push(...)` works. `ZigoteApp` is the same thing with object-initializer syntax.
 
 ---
 
@@ -137,7 +138,7 @@ widget, not a separate base class.
 | `Text` | `Label`, or `Text` | `Text` is an alias over `Label` taking a `TextStyle` |
 | `RichText`/`TextSpan` | `RichText` | |
 | `Icon(Icons.add)` | `new Icon(MaterialIcons.Add)` | Icon names are strings; `MaterialIcons` is generated |
-| `Image.network` | `AsyncImage` | `Image` for local/decoded |
+| `Image.network` | `AdwAsyncImage`, or `Image.LoadAsync` | `Image` for local/decoded |
 | `GestureDetector` | `GestureDetector` | `OnTap`, `OnDoubleTap`, `OnLongPressed`, hover callbacks |
 | `InkWell` | `Pressable` | The composable interaction primitive |
 | `SingleChildScrollView` | `SingleChildScrollView` / `ScrollView` | |
@@ -145,7 +146,7 @@ widget, not a separate base class.
 | `ListView.builder` | `ListView.Builder(count, i => …)` | Virtualizes construction too — rows built on demand |
 | `GridView` | `GridView.Count(...)`, `AdwResponsiveGrid` | Sizes to content; wrap in a scroll view |
 | `GridView.builder` | `GridView.Builder(cols, count, i => …)` | Virtualized and self-scrolling |
-| `ReorderableListView` | `ReorderableList` | |
+| `ReorderableListView` | `AdwReorderableList` | |
 | `Draggable`/`DragTarget` | `Draggable<T>`/`DragTarget<T>` | Also handles OS file/text drops |
 | `Scaffold`/`AppBar`/`FAB` | `AdwToolbarView`/`AdwHeaderBar`/`AdwButton` | `Zigote.UI.Adwaita`; the header bar hosts the window controls |
 | `TextField`/`TextEditingController` | `AdwEntry`, or `AdwTextField`/`AdwTextEditingController` | `Zigote.UI.Adwaita`; IME wired end to end |
@@ -272,8 +273,8 @@ var grid = GridView.Builder(crossAxisCount: 4, itemCount: photos.Count,
 The cost of laziness is the same one Flutter pays: **a row scrolled out is destroyed.** Anything the
 row widget itself holds — hover, focus, a nested scroll offset, a running animation — dies with it.
 Keep row state in your model and read it in the builder. When rows own state you cannot move out,
-use `SetItems` with materialized widgets instead: that keeps every row alive, at ~8 µs each to build
-and the memory of the whole set.
+use `SetItems` with materialized widgets instead: that keeps every row alive, at a few microseconds
+each to build (more for rich rows) and the memory of the whole set.
 
 For a materialized list too big to build in one frame, fill across frames with `Background.Slice`:
 
@@ -287,10 +288,8 @@ else
     background.Slice(list, count, i => list.AddItem(build(i)));
 ```
 
-`Slice` advances only when your app grants the frame loop a budget —
-`background.RunFrame(TimeSpan.FromMilliseconds(4))` once per `OnUpdate`; without it the fill stops
-after the first chunk (the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows
-the wiring).
+`Slice` advances within each frame's budget; the app's frame loop drains `App.Background` and its
+child scopes for you, so there is nothing to wire (see the [cookbook](cookbook.md#background-work-without-hitching-the-frame)).
 
 For variable-height rows, set `HeightOf` (index → height) and the list keeps a prefix-sum table and
 binary-searches the visible window — still O(viewport), and it works in builder mode, since the

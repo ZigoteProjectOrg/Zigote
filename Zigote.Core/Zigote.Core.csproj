@@ -6,6 +6,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Core</RootNamespace>
         <AssemblyName>Zigote.Core</AssemblyName>
+        <!-- The XML doc comments ship next to the DLL: IDEs show them, and Zigote.Playground's widget
+             catalog is generated from them. CS1591 (undocumented public member) is not a defect.
+             ponytail: the doc-comment checks after it were never on and fire on bad crefs/params;
+             silenced so builds stay quiet. Drop them from NoWarn to fix the backlog. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591;CS1574;CS1573;CS1734;CS0419;CS1572;CS1587;CS1570</NoWarn>
     </PropertyGroup>
 
     <!-- Native Zig engine build + per-RID copy + Enable3D rebuild guard. -->

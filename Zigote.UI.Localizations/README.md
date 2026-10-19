@@ -59,6 +59,12 @@ protected override Widget Build(BuildContext ctx) => new Column
 };
 ```
 
+`ctx.SetLocale` works from a click handler: the context a widget's `Build` receives keeps finding
+its own `LocalizationsScope` after the build, so with nested scopes each handler switches the scope
+its widget sits under. Read translations (`Tr`, `FormatX`) in `Build` or a `Watch` builder so the
+widget rebuilds when the locale changes; a `Tr` in a handler returns the current text but registers
+no dependency.
+
 ## Message format (ICU-lite)
 
 | Form               | Example                                                                       |
