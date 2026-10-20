@@ -1006,6 +1006,7 @@ public partial class App : IDisposable
         TextMeasure.Invalidate();
         BuildContext.Current.BumpGeneration();
         RequestLayoutAllWindows();
+        _repaint.MarkAll(); // same family name, same op bytes, different glyphs: invisible to the diff
         return true;
     }
 
@@ -1021,13 +1022,17 @@ public partial class App : IDisposable
         TextMeasure.Invalidate();
         BuildContext.Current.BumpGeneration();
         RequestLayoutAllWindows();
+        _repaint.MarkAll();
     }
 
     public void RequestLayout()
     {
         _needsLayout = true;
         _semanticsDirty = true;
-        _repaint.MarkAll();
+        // Everything a relayout changes on screen is a change in the paint lists, so the diff
+        // after the walk finds the region (an animation tick on one switch used to repaint the
+        // whole window through here, since AnimationController requests a relayout per frame).
+        _repaint.MarkAllForDiff();
     }
 
     /// <summary>
@@ -1280,8 +1285,8 @@ public partial class App : IDisposable
     ///         <c>OnPointerMove</c>), and hover styling crossing between widgets — each routes its own
     ///         <see cref="Widget.MarkNeedsPaint" /> through <see cref="RequestPaintFor" /> so only that
     ///         widget's region is damaged. A frame that also relays out or handles a discrete (non-move)
-    ///         event still full-clears (see the <c>MarkAll</c> after <c>LayoutTree</c> in <c>Frame</c>),
-    ///         which is why partial damage is only ever seen on mouse-move / idle frames.
+    ///         event adds whatever the paint-list diff finds (<see cref="RepaintTracker.MarkAllForDiff" />);
+    ///         only a resize, a font swap or an unboundable change still full-clears.
     ///     </para>
     /// </summary>
     private void MarkPaintFor(Widget? w)
@@ -1574,7 +1579,10 @@ public partial class App : IDisposable
             // Layout requested via RequestLayout already carries full damage (it MarkAlls); only
             // the discrete-event and mid-frame-resize paths need to force it here. Scroll-driven
             // layout (RequestLayoutFor) keeps its bounded damage — that's the entire point.
-            if (discrete || _pendingRelayout) _repaint.MarkAll();
+            // A resize reallocates the scene texture, so nothing is preserved to diff against. A
+            // discrete event's effect, missed marks included, is resolved by the paint-list diff.
+            if (_pendingRelayout) _repaint.MarkAll();
+            else if (discrete) _repaint.MarkAllForDiff();
         }
 
         // Auto-focus the first control inside any overlay pushed this frame, now that it is laid out.
@@ -1738,7 +1746,8 @@ public partial class App : IDisposable
         if (_needsLayout || _pendingRelayout || discrete)
         {
             LayoutTree();
-            if (discrete || _pendingRelayout) _repaint.MarkAll();
+            if (_pendingRelayout) _repaint.MarkAll();
+            else if (discrete) _repaint.MarkAllForDiff();
         }
 
         ProcessPendingAutoFocus();
@@ -1784,7 +1793,8 @@ public partial class App : IDisposable
         if (PartialRepaintEnabled && !ContinuousUpdate && !ForceContinuousRender)
         {
             using var _ = Profiler.Scope("UI.Damage");
-            if (rootWalked && _repaint.DamageCount > 0)
+            // DamageFromDiff: the region was left for this diff to find (layout, discrete input).
+            if (rootWalked && (_repaint.DamageCount > 0 || _repaint.DamageFromDiff))
             {
                 WidenDamageFromPaintDiff(
                     snapshot: _rootSnapshot,
@@ -1793,7 +1803,7 @@ public partial class App : IDisposable
                 );
             }
 
-            if (overlayWalked && _repaint.DamageCount > 0)
+            if (overlayWalked && (_repaint.DamageCount > 0 || _repaint.DamageFromDiff))
             {
                 WidenDamageFromPaintDiff(
                     snapshot: _overlaySnapshot,

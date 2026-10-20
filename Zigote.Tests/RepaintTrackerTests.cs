@@ -494,4 +494,35 @@ public class RepaintTrackerTests
         Assert.False(t.FullDamage);
         Assert.Equal(expected: 1, actual: t.DamageCount);
     }
+
+    [Fact]
+    public void MarkAllForDiff_DirtiesBothLayers_AndLeavesTheRegionToTheDiff()
+    {
+        var t = new RepaintTracker();
+        PaintFrame(t);
+        t.ResetDamage();
+
+        t.MarkAllForDiff();
+        Assert.True(t.RootDirty);
+        Assert.True(t.OverlayDirty);
+        Assert.False(t.FullDamage); // a relayout / click no longer clears the whole scene up front
+        Assert.True(t.DamageFromDiff);
+
+        t.AddDamageBoundsOnly(new Rect(x: 10, y: 10, width: 20, height: 20)); // what the diff found
+        Assert.Equal(expected: 1, actual: t.DamageCount);
+
+        t.ResetDamage();
+        Assert.False(t.DamageFromDiff); // per frame, not sticky
+    }
+
+    [Fact]
+    public void MarkAll_OverridesMarkAllForDiff()
+    {
+        var t = new RepaintTracker();
+        t.ResetDamage();
+        t.MarkAllForDiff();
+        t.MarkAll(); // a font swap in the same frame: the diff cannot see it
+        Assert.True(t.FullDamage);
+        Assert.False(t.DamageFromDiff);
+    }
 }

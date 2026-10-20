@@ -33,6 +33,9 @@ namespace Zigote.UI.Host;
 ///         <see cref="AddDamageRoot" />/<see cref="AddDamageOverlay" /> path (fed by
 ///         <c>App.MarkPaintFor</c>) produces partial damage. So a dirty frame always has either
 ///         <see cref="FullDamage" /> or at least one damage rect — never a dirty layer with no region.
+    ///         The exception is <see cref="MarkAllForDiff" />: the region is left for the paint-list
+    ///         diff to find, the way Flutter's partial repaint and Chromium's damage tracker derive
+    ///         damage from what changed in the display list rather than from who asked.
 ///     </para>
 ///     <para>
 ///         Rects are kept pairwise non-overlapping (overlapping additions are merged into their
@@ -92,6 +95,28 @@ public sealed class RepaintTracker
         OverlayDirty = true;
         FullDamage = true;
     }
+
+    /// <summary>
+    ///     Mark both layers dirty with an unknown region that the post-paint diff against the
+    ///     on-screen snapshot will resolve (<see cref="DamageFromDiff" />) — for layout, discrete
+    ///     input and animation ticks, whose every visible effect is a change in the paint lists.
+    ///     A change that lives outside them (a font face swapped under the same family name, a
+    ///     texture rewritten in place without its widget marking) must use <see cref="MarkAll" />.
+    /// </summary>
+    public void MarkAllForDiff()
+    {
+        RootDirty = true;
+        OverlayDirty = true;
+        _fromDiff = true;
+    }
+
+    private bool _fromDiff;
+
+    /// <summary>
+    ///     This frame's damage is whatever the paint-list diff finds (plus any precise rects). A diff
+    ///     that finds nothing leaves <see cref="Damage" /> empty, which native treats as a full repaint.
+    /// </summary>
+    public bool DamageFromDiff => _fromDiff && !FullDamage;
 
     /// <summary>Mark the root layer dirty with an unknown region — forces a full-frame repaint.</summary>
     public void MarkRoot()
@@ -197,6 +222,7 @@ public sealed class RepaintTracker
     public void ResetDamage()
     {
         FullDamage = false;
+        _fromDiff = false;
         _damageCount = 0;
     }
 }
