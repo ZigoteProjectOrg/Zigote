@@ -34,7 +34,7 @@ public static partial class Tools
         public override string ToString() => $"{Name} [{F(X)},{F(Y)} {F(W)}x{F(H)}]";
     }
 
-    private sealed record Run(string Text, double X, double Baseline, double Size, double W, int Weight, string Color)
+    private sealed record Run(string Text, double X, double Baseline, double Size, double W, int Weight, string Color, double[]? Clip = null)
     {
         public bool Icon => Text == "icon";
 
@@ -62,7 +62,8 @@ public static partial class Tools
         if (reply?["error"] is { } error)
             throw new ToolError($"{error} — an app built before the `text` command needs a rebuild");
         return [.. (reply?["runs"] as JsonArray ?? []).OfType<JsonObject>().Select(n => new Run(
-            S(n, "t") ?? "", N(n, "x"), N(n, "baseline"), N(n, "size"), N(n, "w"), (int)N(n, "weight"), S(n, "color") ?? ""))];
+            S(n, "t") ?? "", N(n, "x"), N(n, "baseline"), N(n, "size"), N(n, "w"), (int)N(n, "weight"), S(n, "color") ?? "",
+            n["clip"] is JsonArray { Count: 4 } c ? [.. c.Select(v => v!.GetValue<double>())] : null))];
     }
 
     private static Box Resolve(int port, string spec, List<Run> runs)

@@ -21,23 +21,7 @@ public static class Png
     /// </summary>
     public static byte[] FromBmp(byte[] bmp, (int X, int Y, int W, int H)? crop = null)
     {
-        if (bmp.Length < 54 || bmp[0] != 'B' || bmp[1] != 'M')
-            throw new ToolError("the capture reply was not a BMP");
-
-        int dataOffset = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(10));
-        int width = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(18));
-        int rawHeight = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(22));
-        short bpp = BinaryPrimitives.ReadInt16LittleEndian(bmp.AsSpan(28));
-
-        int height = Math.Abs(rawHeight);
-        bool bottomUp = rawHeight > 0;
-        if (width <= 0 || height == 0 || bpp is not (24 or 32))
-            throw new ToolError($"unsupported BMP shape: {width}x{rawHeight} at {bpp}bpp");
-
-        int bytesPerPixel = bpp / 8;
-        int stride = ((width * bytesPerPixel) + 3) & ~3;
-        if (dataOffset < 54 || dataOffset + ((long)stride * height) > bmp.Length)
-            throw new ToolError("truncated BMP");
+        (int dataOffset, int width, int height, bool bottomUp, int bytesPerPixel, int stride) = Layout(bmp);
 
         int left = 0, top = 0, fullHeight = height;
         if (crop is { } c)
@@ -83,6 +67,47 @@ public static class Png
         Chunk(png: png, type: "IDAT", data: idat.ToArray());
         Chunk(png: png, type: "IEND", data: []);
         return png.ToArray();
+    }
+
+    /// <summary>The image as packed 0xRRGGBB, top-down — for sampling colours, not for display.</summary>
+    public static (int W, int H, int[] Rgb) Pixels(byte[] bmp)
+    {
+        (int dataOffset, int width, int height, bool bottomUp, int bytesPerPixel, int stride) = Layout(bmp);
+        int[] rgb = new int[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            int srcRow = dataOffset + ((bottomUp ? height - 1 - y : y) * stride);
+            for (int x = 0; x < width; x++)
+            {
+                int src = srcRow + (x * bytesPerPixel);
+                rgb[(y * width) + x] = (bmp[src + 2] << 16) | (bmp[src + 1] << 8) | bmp[src];
+            }
+        }
+
+        return (width, height, rgb);
+    }
+
+    private static (int DataOffset, int Width, int Height, bool BottomUp, int BytesPerPixel, int Stride) Layout(byte[] bmp)
+    {
+        if (bmp.Length < 54 || bmp[0] != 'B' || bmp[1] != 'M')
+            throw new ToolError("the capture reply was not a BMP");
+
+        int dataOffset = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(10));
+        int width = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(18));
+        int rawHeight = BinaryPrimitives.ReadInt32LittleEndian(bmp.AsSpan(22));
+        short bpp = BinaryPrimitives.ReadInt16LittleEndian(bmp.AsSpan(28));
+
+        int height = Math.Abs(rawHeight);
+        bool bottomUp = rawHeight > 0;
+        if (width <= 0 || height == 0 || bpp is not (24 or 32))
+            throw new ToolError($"unsupported BMP shape: {width}x{rawHeight} at {bpp}bpp");
+
+        int bytesPerPixel = bpp / 8;
+        int stride = ((width * bytesPerPixel) + 3) & ~3;
+        if (dataOffset < 54 || dataOffset + ((long)stride * height) > bmp.Length)
+            throw new ToolError("truncated BMP");
+
+        return (dataOffset, width, height, bottomUp, bytesPerPixel, stride);
     }
 
     private static void Chunk(MemoryStream png, string type, byte[] data)

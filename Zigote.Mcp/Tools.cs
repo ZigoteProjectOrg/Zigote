@@ -79,6 +79,35 @@ public static partial class Tools
             Run: args => Text(AppHost.Stop(Int(args: args, name: "pid")))
         )),
 
+        ("build", new Tool(
+            Description:
+            "dotnet build a project and return only its diagnostics: errors as `file:line code " +
+            "message`, warnings counted by code (warnings=true lists them), each once. Cheaper " +
+            "than reading build output, and the way to check a change compiles before `launch`.",
+            Schema: Schema(
+                Opt(name: "project", prop: Prop(type: "string", description: ".csproj, .sln/.slnf or directory (default '.')")),
+                Opt(name: "configuration", prop: Prop(type: "string", description: "Debug (default) or Release")),
+                Opt(name: "warnings", prop: Prop(type: "boolean", description: "list warnings instead of counting them")),
+                Opt(
+                    name: "args",
+                    prop: Prop(type: "array", description: "extra dotnet build args, e.g. [\"-p:ZigoteContainer=true\"]", items: "string")
+                ),
+                Opt(name: "timeout_seconds", prop: Prop(type: "integer", description: "default 600"))
+            ),
+            Run: Build
+        )),
+
+        ("doctor", new Tool(
+            Description:
+            "Check this machine for what Zigote development needs (.NET SDK, native engine, zig, " +
+            "Android workload, JDK, Android SDK…) — the passing checks in one line, every problem " +
+            "with its fix. Run it first when a build or launch fails for a reason the code does not explain.",
+            Schema: Schema(
+                Opt(name: "dir", prop: Prop(type: "string", description: "app directory (default: working directory)"))
+            ),
+            Run: Doctor
+        )),
+
         ("logs", new Tool(
             Description:
             "What a launched app printed — build errors, log output, unhandled exceptions. Works " +
@@ -365,6 +394,22 @@ public static partial class Tools
                 PortProp()
             ),
             Run: Measure
+        )),
+
+        ("audit", new Tool(
+            Description:
+            "Accessibility and polish lint of what is on screen, one line per finding: text and " +
+            "icon contrast below WCAG AA (measured against the pixels actually behind each run), " +
+            "controls smaller than min_target, interactive widgets with no label for a screen " +
+            "reader, and text clipped, ellipsized or running off the window. Run per theme.",
+            Schema: Schema(
+                Opt(
+                    name: "min_target",
+                    prop: Prop(type: "number", description: "smallest hit size in points (default 24, WCAG AA; 44 for touch)")
+                ),
+                PortProp()
+            ),
+            Run: AuditUi
         )),
 
         ("tap", new Tool(
@@ -1494,17 +1539,7 @@ public static partial class Tools
     private static JsonObject[] ShotContent(int port, double scale,
         (double X, double Y, double W, double H)? crop)
     {
-        Settle(port);
-        string reply = Send(port: port, command: $"shot {F(scale)}");
-        var parsed = Parse(reply) as JsonObject
-                     ?? throw new ToolError(
-                         $"unexpected shot reply: {reply[..Math.Min(val1: reply.Length, val2: 120)]}"
-                     );
-
-        byte[] bmp = Convert.FromBase64String(
-            S(node: parsed, field: "data") ?? throw new ToolError("shot reply had no image data")
-        );
-        double density = N(node: parsed, field: "scale");
+        (byte[] bmp, double density, var parsed) = Capture(port: port, scale: scale);
         string size = $"{parsed["w"]}x{parsed["h"]} layout points";
         (int X, int Y, int W, int H)? pixels = null;
         if (crop is { } c)
@@ -1524,6 +1559,22 @@ public static partial class Tools
             },
             TextItem(size),
         ];
+    }
+
+    /// <summary>The settled frame as the engine's BMP, its pixel density, and the reply's sizes.</summary>
+    private static (byte[] Bmp, double Density, JsonObject Reply) Capture(int port, double scale)
+    {
+        Settle(port);
+        string reply = Send(port: port, command: $"shot {F(scale)}");
+        var parsed = Parse(reply) as JsonObject
+                     ?? throw new ToolError(
+                         $"unexpected shot reply: {reply[..Math.Min(val1: reply.Length, val2: 120)]}"
+                     );
+        byte[] bmp = Convert.FromBase64String(
+            S(node: parsed, field: "data") ?? throw new ToolError("shot reply had no image data")
+        );
+        parsed.Remove("data"); // megabytes nobody reads again
+        return (bmp, N(node: parsed, field: "scale"), parsed);
     }
 
     /// <summary>The wire is one command per line, so text with a newline cannot be sent as-is.</summary>

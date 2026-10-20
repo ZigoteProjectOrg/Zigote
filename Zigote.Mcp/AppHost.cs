@@ -98,7 +98,7 @@ public static class AppHost
     ///     <c>DOTNET_ROOT_&lt;ARCH&gt;</c>, and that SDK is the one global.json was satisfied with —
     ///     the PATH one may be older and refuse the pinned version.
     /// </summary>
-    private static string DotnetHost()
+    public static string DotnetHost()
     {
         string arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
         string exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
@@ -188,9 +188,12 @@ public static class AppHost
         {
             if (process.HasExited)
             {
+                // A compile error is the usual cause; its diagnostics are what to read, not the tail.
+                string? diagnostics;
+                lock (app.Log) diagnostics = Tools.Diagnostics(app.Log);
                 throw new ToolError(
                     $"the app exited (code {process.ExitCode}) before announcing an inspect port. " +
-                    $"Recent output:\n{Tail(app: app, lines: 40)}"
+                    (diagnostics ?? $"Recent output:\n{Tail(app: app, lines: 40)}")
                 );
             }
 

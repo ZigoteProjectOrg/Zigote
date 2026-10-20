@@ -118,7 +118,9 @@ public static class Program
                 "`wait_for`). Save round trips: mutating tools take screenshot:true, and `batch` " +
                 "runs a whole sequence in one call. Coordinates are layout points. When a tap " +
                 "does nothing, `widget_at` says what took it; after anything unexpected, `logs` " +
-                "(filter: 'error|exception') has the app's own output.",
+                "(filter: 'error|exception') has the app's own output. `build` checks a change " +
+                "compiles without the build chatter; `doctor` explains environment failures; " +
+                "`audit` lints contrast, target size, labels and cut-off text.",
         };
     }
 
