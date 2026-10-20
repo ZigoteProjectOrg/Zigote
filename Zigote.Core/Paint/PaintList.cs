@@ -102,6 +102,69 @@ public sealed unsafe class PaintList
         }
     }
 
+    /// <summary>One drawn text run as the inspector measures it: where its baseline sits and what clips it.</summary>
+    public readonly record struct DebugTextRun(
+        string Text,
+        float BaselineX,
+        float BaselineY,
+        float FontSize,
+        FontWeight Weight,
+        float LetterSpacing,
+        string? Family,
+        Color Color,
+        Rect? Clip
+    );
+
+    /// <summary>
+    ///     Every text record of this frame with the clip it is drawn under — diagnostics only
+    ///     (allocates). Drop shadows are skipped; a run inside a transform reports its untransformed
+    ///     position. <c>ponytail:</c> transforms are not applied; track the matrix stack if
+    ///     measuring scaled/rotated text ever matters.
+    /// </summary>
+    public List<DebugTextRun> DebugTextRuns()
+    {
+        var runs = new List<DebugTextRun>();
+        var clips = new Stack<Rect?>();
+        Rect? clip = null;
+        for (int i = 0; i < _offsets.Count; i++)
+        {
+            switch (RecordKind(i))
+            {
+                case ZgPaintOp.ClipStart:
+                {
+                    var c = PaintCommandView.Decode(rec: Record(i), kind: ZgPaintOp.ClipStart);
+                    var r = new Rect(x: c.RectX, y: c.RectY, width: c.RectW, height: c.RectH);
+                    clips.Push(clip);
+                    clip = clip is { } outer ? Rect.Intersect(a: outer, b: r) : r;
+                    break;
+                }
+                case ZgPaintOp.ClipEnd:
+                    clip = clips.Count > 0 ? clips.Pop() : null;
+                    break;
+                case ZgPaintOp.Text:
+                {
+                    var t = MemoryMarshal.Read<ZgPaintText>(Record(i));
+                    if (t.IsShadow != 0 || FindTextBlob(i) is not { } bytes) break;
+                    byte[]? family = FindPixelBlob(i);
+                    runs.Add(new DebugTextRun(
+                        Text: Encoding.UTF8.GetString(bytes),
+                        BaselineX: t.BaselineX,
+                        BaselineY: t.BaselineY,
+                        FontSize: t.FontSize,
+                        Weight: (FontWeight)t.FontWeight,
+                        LetterSpacing: t.LetterSpacing,
+                        Family: family is null ? null : Encoding.UTF8.GetString(family),
+                        Color: new Color(r: t.Color.R, g: t.Color.G, b: t.Color.B, a: t.Color.A),
+                        Clip: clip
+                    ));
+                    break;
+                }
+            }
+        }
+
+        return runs;
+    }
+
     // ── PaintSnapshot access (frame-to-frame diff for partial repaint) ────────
 
     /// <summary>Number of records in this frame.</summary>

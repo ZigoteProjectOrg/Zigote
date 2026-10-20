@@ -70,16 +70,10 @@ public sealed class AdwButtonContent : ComposedWidget
 
         if (Label.Length > 0)
         {
-            row.Children.Add(
-                new Padding(
-                    padding: EdgeInsets.Only(right: 2f),
-                    child: new LabelWidget(
-                        text: Label,
-                        style: AdwTypography.Heading,
-                        color: _color
-                    ) { MaxLines = 1 }
-                )
-            );
+            Widget label = new LabelWidget(text: Label, style: AdwTypography.Heading, color: _color) { MaxLines = 1 };
+            // The 2px belongs to the icon+label pairing only: a text-only GTK button is a bare
+            // label, and padding one side of it pushed every label 1px left of centre.
+            row.Children.Add(IconName is null ? label : new Padding(padding: EdgeInsets.Only(right: 2f), child: label));
         }
 
         return row;

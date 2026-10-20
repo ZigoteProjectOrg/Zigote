@@ -207,24 +207,27 @@ public class RichText : LeafWidget
             ref readonly var run = ref Runs[i];
             var line = Lines[run.Line];
             float x = Bounds.X + LineAlignOffset(run.Line) + run.X;
-            float top = Bounds.Y + line.Top;
             float baseline = Bounds.Y + line.Baseline;
 
             var span = _spans[run.Span];
+            float fs = SpanFs(span);
             if (span.Background is { } bg)
             {
+                // A chip around the glyphs, not a slab the height of the line: the em box
+                // (Inter's ascent/descent, as TextBaseline) plus a little air, rounded. The side
+                // air overhangs the neighbours slightly rather than reflowing the line.
                 paint.AddRect(
                     bounds: new Rect(
-                        x: x,
-                        y: top,
-                        width: run.Width,
-                        height: line.Height
+                        x: x - 1.5f,
+                        y: baseline - (fs * 0.97f) - 1f,
+                        width: run.Width + 3f,
+                        height: (fs * 1.21f) + 2f
                     ),
-                    color: bg
+                    color: bg,
+                    radius: 4f
                 );
             }
 
-            float fs = SpanFs(span);
             var color = span.Color ?? Color ?? ThemeRef.Label1;
             paint.AddText(
                 text: run.Slice,

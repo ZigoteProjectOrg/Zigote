@@ -94,6 +94,27 @@ public static class AppHost
     }
 
     /// <summary>
+    ///     The dotnet this server itself was started with: <c>dotnet run</c> hands its child
+    ///     <c>DOTNET_ROOT_&lt;ARCH&gt;</c>, and that SDK is the one global.json was satisfied with —
+    ///     the PATH one may be older and refuse the pinned version.
+    /// </summary>
+    private static string DotnetHost()
+    {
+        string arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
+        string exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        foreach (string? root in new[] {
+                     Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { } host ? Path.GetDirectoryName(host) : null,
+                     Environment.GetEnvironmentVariable($"DOTNET_ROOT_{arch}"),
+                     Environment.GetEnvironmentVariable("DOTNET_ROOT"),
+                 })
+        {
+            if (root is { Length: > 0 } && File.Exists(Path.Combine(root, exe))) return Path.Combine(root, exe);
+        }
+
+        return "dotnet";
+    }
+
+    /// <summary>
     ///     <c>dotnet run</c> (or <c>dotnet watch run</c>) the project with the inspect socket on,
     ///     wait for the announced port, and remember the process. <c>-v q --nologo</c> keeps the
     ///     build's own chatter out of the stdout being scanned — the same trick Zigote.Cli uses
@@ -102,7 +123,7 @@ public static class AppHost
     public static (int Port, int Pid) Launch(string project, string? preview, bool watch,
         int waitSeconds, IReadOnlyDictionary<string, string> env)
     {
-        var start = new ProcessStartInfo("dotnet") {
+        var start = new ProcessStartInfo(DotnetHost()) {
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

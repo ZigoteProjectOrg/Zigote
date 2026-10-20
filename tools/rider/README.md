@@ -237,6 +237,7 @@ a free port and prints it; loopback only, and off unless asked for.
 | `props ID` | `{"id","type","props":{…},"x","y","w","h"}` |
 | `stats` | `{"fps","fps_min","fps_max","frame_ms","cpu_pct","mem_mb","gc_mb","ui_paint_commands","overlay_paint_commands"}` — the sample DevTools keeps; frame pace is only meaningful under `ZIGOTE_CONTINUOUS=1` |
 | `hit X Y` | `{"hit":{"id","type","desc","x","y","w","h"}\|null,"path":[…]}` — what a click there would land on, and up to eight enclosing widget types |
+| `text [X Y W H]` | `{"runs":[{"t","x","baseline","size","w","weight","family","color","clip"?},…]}` — every visible text run of the last frame (icon glyphs as `"icon"`), optionally only those whose baseline origin is in the region |
 | `info` | `{"w","h","preview_size","theme","locale","animating","paint_version","widgets","depth","pointer","focused","hovered","overlays"}` — the app's state in one object |
 
 Injected input takes the exact pipeline OS input does — hit-testing, focus, shortcuts — so a scripted

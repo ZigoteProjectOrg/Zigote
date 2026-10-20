@@ -14,7 +14,7 @@ class Demo : ComposedWidget
                 new AdwButton(label: "With icon", onPressed: () => _said.Value = "With icon") { IconName = MaterialIcons.Download },
                 new AdwButton(onPressed: () => _said.Value = "Circular") { IconName = MaterialIcons.Favorite, Circular = true },
                 new AdwButton(label: "Disabled"),   // no onPressed: disabled
-            ]),
+            ]) { CrossAlignment = CrossAxisAlignment.Center },  // the pill is taller than the rest
             new Watch(() => new Label(_said.Value, fontSize: 13)),
         ]));
 }

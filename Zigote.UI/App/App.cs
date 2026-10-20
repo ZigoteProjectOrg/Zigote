@@ -678,6 +678,9 @@ public partial class App : IDisposable
     /// </summary>
     internal Size? PreviewSize { get; set; }
 
+    /// <summary>The last frame's text runs, root first then overlays — what the inspector's <c>text</c> command measures.</summary>
+    internal List<PaintList.DebugTextRun> DebugTextRuns() => [.. _paint.DebugTextRuns(), .. _overlayPaint.DebugTextRuns()];
+
     internal float LayoutWidth => PreviewSize?.Width ?? HostLogicalWidth;
     internal float LayoutHeight => PreviewSize?.Height ?? HostLogicalHeight;
 

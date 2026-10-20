@@ -117,13 +117,14 @@ internal sealed class DocPage(List<Block> blocks) : ComposedWidget
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 spacing: Spacing.Sm,
                 children: [
+                    // RichText like the item itself, so both lines share a baseline (a single-line
+                    // Label sizes to the font, not to LineHeight, and sat 1.75pt high).
                     new SizedBox(
                         width: 20f,
-                        child: new Label(
-                            text: list.Numbered ? $"{i + 1}." : "•",
-                            style: AdwTypography.Body,
-                            color: theme.TextSecondary
-                        ) { LineHeight = 1.5f }
+                        child: new RichText(new TextSpan(list.Numbered ? $"{i + 1}." : "•") { Color = theme.TextSecondary }) {
+                            FontSize = AdwTypography.Body.Size,
+                            LineHeight = 1.5f,
+                        }
                     ),
                     new Expanded(Prose(list.Items[i], codeBg)),
                 ]

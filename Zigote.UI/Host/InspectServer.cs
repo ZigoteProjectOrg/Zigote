@@ -449,6 +449,9 @@ public static class InspectServer
             case "hit":
                 return Hit(app: app, argument: argument);
 
+            case "text":
+                return TextRuns(app: app, argument: argument);
+
             case "info":
                 return InfoJson(app);
 
@@ -726,6 +729,65 @@ public static class InspectServer
         }
 
         return json.Append("]}").ToString();
+    }
+
+    /// <summary>
+    ///     <c>text [X Y W H]</c> — every text run the last frame drew (optionally only those whose
+    ///     baseline origin falls in the region): its string, baseline origin, size, weight, family,
+    ///     shaped advance width and the clip it is visible through. Runs clipped out entirely are
+    ///     dropped. This is the ground truth for typographic measurement — baselines, left edges,
+    ///     optical centering — which widget bounds alone cannot answer.
+    /// </summary>
+    private static string TextRuns(App app, string argument)
+    {
+        Rect? region = null;
+        if (argument.Length > 0)
+        {
+            float[] n = [.. argument.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : float.NaN)];
+            if (n.Length != 4 || n.Any(float.IsNaN)) return Error($"text wants nothing or X Y W H, got '{argument}'");
+            region = new Rect(x: n[0], y: n[1], width: n[2], height: n[3]);
+        }
+
+        var window = new Rect(x: 0, y: 0, width: app.LayoutWidth, height: app.LayoutHeight);
+        var json = new StringBuilder("{\"runs\":[");
+        bool first = true;
+        foreach (var run in app.DebugTextRuns())
+        {
+            if (string.IsNullOrWhiteSpace(run.Text)) continue;
+            var visible = run.Clip is { } c ? Rect.Intersect(a: c, b: window) : window;
+            var width = app.Engine.MeasureText(text: run.Text, fontSize: run.FontSize, weight: run.Weight,
+                letterSpacing: run.LetterSpacing, fontFamily: run.Family).Width;
+            var box = new Rect(x: run.BaselineX, y: run.BaselineY - run.FontSize, width: width, height: run.FontSize);
+            if (!visible.Overlaps(box)) continue;
+            if (region is { } r && !r.Contains(px: run.BaselineX, py: run.BaselineY)) continue;
+
+            if (!first) json.Append(',');
+            first = false;
+            json.Append("{\"t\":");
+            Quote(json: json, text: run.Family == Theme.Icons.Family ? "icon" : run.Text);
+            json.Append(",\"x\":").Append(Round(run.BaselineX));
+            json.Append(",\"baseline\":").Append(Round(run.BaselineY));
+            json.Append(",\"size\":").Append(Round(run.FontSize));
+            json.Append(",\"w\":").Append(Round(width));
+            json.Append(",\"weight\":").Append((int)run.Weight);
+            json.Append(",\"family\":");
+            Quote(json: json, text: run.Family);
+            json.Append(",\"color\":\"#").Append(Hex(run.Color.R)).Append(Hex(run.Color.G)).Append(Hex(run.Color.B));
+            if (run.Color.A < 1f) json.Append(Hex(run.Color.A));
+            json.Append('"');
+            if (run.Clip is { } clip)
+            {
+                json.Append(",\"clip\":[").Append(Round(clip.X)).Append(',').Append(Round(clip.Y)).Append(',')
+                    .Append(Round(clip.Width)).Append(',').Append(Round(clip.Height)).Append(']');
+            }
+
+            json.Append('}');
+        }
+
+        return json.Append("]}").ToString();
+
+        static string Hex(float v) => ((int)MathF.Round(Math.Clamp(v, 0f, 1f) * 255f)).ToString("x2", CultureInfo.InvariantCulture);
     }
 
     /// <summary>

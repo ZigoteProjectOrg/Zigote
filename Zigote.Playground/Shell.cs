@@ -31,7 +31,7 @@ internal sealed class Shell : ComposedWidget
     private readonly Dictionary<SharedExample, Widget> _sharedPages = [];
 
     private readonly AdwToggleGroup _mode;
-    private readonly AdwSearchEntry _search = new() { Placeholder = "Search the docs or paste a link" };
+    private readonly AdwSearchEntry _search = new() { Placeholder = "Search or paste a link" };
     private readonly AnimatedSwitcher _sidebarSwitcher;
     private readonly AdwNavigationSplitView _split = new() { AutoCollapseBelow = 720f, SidebarWidth = 260f };
     private readonly AnimatedSwitcher _switcher;
@@ -62,7 +62,7 @@ internal sealed class Shell : ComposedWidget
             {
                 if (!_syncing) Navigate(_location.Peek() with { Catalog = i == 1, TypePage = null, Shared = null });
             }
-        );
+        ) { Homogeneous = true };
 
         _search.OnChanged = query =>
         {
@@ -88,7 +88,7 @@ internal sealed class Shell : ComposedWidget
             _split.ShowContent = true;
         };
         _mode.Active = start.Catalog ? 1 : 0;
-        _search.Placeholder = start.Catalog ? $"Search {WidgetCatalog.Entries.Length} widgets" : "Search the docs or paste a link";
+        _search.Placeholder = start.Catalog ? $"Search {WidgetCatalog.Entries.Length} widgets" : "Search or paste a link";
         _location.Changed += Apply;
     }
 
@@ -139,7 +139,7 @@ internal sealed class Shell : ComposedWidget
         {
             _mode.Active = loc.Catalog ? 1 : 0;
             _sidebarSwitcher.Child = loc.Catalog ? _catalogSidebar : _docSidebar;
-            _search.Placeholder = loc.Catalog ? $"Search {WidgetCatalog.Entries.Length} widgets" : "Search the docs or paste a link";
+            _search.Placeholder = loc.Catalog ? $"Search {WidgetCatalog.Entries.Length} widgets" : "Search or paste a link";
             if (loc.Catalog) _catalogSidebar.Selected = loc.Widget;
             else _docSidebar.Selected = loc.Doc;
         }

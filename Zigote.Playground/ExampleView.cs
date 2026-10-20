@@ -232,16 +232,23 @@ internal sealed class ExampleView : ComposedWidget
             spacing: Spacing.Xs,
             children: [
                 new IconGlyph(glyph: MaterialIcons.Code, size: 16f, color: theme.TextSecondary),
-                new Label(text: "Live example", style: AdwTypography.Heading, color: theme.TextSecondary),
-                new SizedBox(width: Spacing.Sm),
-                new Expanded(new Watch(() => new Label(
-                        text: _notice.Value ?? Status(_state.Value),
-                        style: AdwTypography.Caption,
-                        color: _notice.Value is not null ? theme.Accent
-                            : _state.Value is { Crash: not null } or { Result.Create: null, Busy: false, Result: not null } ? theme.Error
-                            : theme.TextMuted
-                    ) { Overflow = TextOverflow.Ellipsis, MaxLines = 1 }
-                )),
+                // One text run for title and status: two Labels of different sizes centred in a Row
+                // sit on different baselines.
+                // A narrow card drops the title before the status: "Live…" says nothing.
+                new Expanded(new LayoutBuilder((_, c) => new Watch(() => new RichText([
+                        new TextSpan(c.MaxWidth < 200f ? "" : "Live example   ") {
+                            FontSize = AdwTypography.Heading.Size,
+                            Weight = AdwTypography.Heading.Weight,
+                            Color = theme.TextSecondary,
+                        },
+                        new TextSpan(_notice.Value ?? Status(_state.Value)) {
+                            FontSize = AdwTypography.Caption.Size,
+                            Color = _notice.Value is not null ? theme.Accent
+                                : _state.Value is { Crash: not null } or { Result.Create: null, Busy: false, Result: not null } ? theme.Error
+                                : theme.TextMuted,
+                        },
+                    ]) { Overflow = TextOverflow.Ellipsis, MaxLines = 1 }
+                ))),
                 Toggle(RunAsYouType, MaterialIcons.Bolt, "Run as you type"),
                 Toggle(SideBySide, MaterialIcons.VerticalSplit, "Editor beside the preview"),
                 Toggle(_flipTheme, theme.IsDark ? MaterialIcons.LightMode : MaterialIcons.DarkMode, theme.IsDark ? "Preview in light" : "Preview in dark"),

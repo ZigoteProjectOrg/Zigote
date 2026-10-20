@@ -224,7 +224,8 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
 
         return new Padding(
             padding: EdgeInsets.Only(
-                left: Spacing.Md,
+                // On the rows' content edge, so the caption lines up with the icons under it.
+                left: AdwMetrics.SidebarRowPaddingX,
                 top: first ? Spacing.Xs : Spacing.Md,
                 // A suffix needs breathing room from the list's right edge; a bare caption does not.
                 right: suffix is null ? 0f : Spacing.Md,

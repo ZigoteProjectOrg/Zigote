@@ -19,7 +19,7 @@ namespace Zigote.Mcp;
 ///         tokens (<c>raw_command</c> still returns the JSON when a script wants it).
 ///     </para>
 /// </summary>
-public static class Tools
+public static partial class Tools
 {
     private const int MaxMatches = 30;
 
@@ -333,6 +333,38 @@ public static class Tools
                     hit.Length > 0 ? hit : "this app predates the `hit` command — rebuild it"
                 );
             }
+        )),
+
+        ("measure", new Tool(
+            Description:
+            "Typographic and spacing measurements for design review, from the frame's own text " +
+            "runs (exact baselines, not pixels). With `a` and `b`: both boxes, the gap between " +
+            "them, every edge/center delta, and — when one sits inside the other — its insets " +
+            "and how far off-center it is (text by cap height, icons by em box). Without them: " +
+            "an audit of every visible text run (or those in `region`) — position, baseline, " +
+            "size/weight, the box it sits in and its centering error — followed by near-misses: " +
+            "neighbours whose baselines differ, left edges a pixel or three apart.",
+            Schema: Schema(
+                Opt(
+                    name: "a",
+                    prop: Prop(
+                        type: "string",
+                        description:
+                        "semantic label, 'text:Run' for a text run, '#id' for a widget, or 'x,y,w,h'"
+                    )
+                ),
+                Opt(name: "b", prop: Prop(type: "string", description: "same forms as a")),
+                Opt(
+                    name: "region",
+                    prop: Prop(
+                        type: "array",
+                        description: "audit only runs whose baseline origin is in [x, y, w, h]",
+                        items: "number"
+                    )
+                ),
+                PortProp()
+            ),
+            Run: Measure
         )),
 
         ("tap", new Tool(

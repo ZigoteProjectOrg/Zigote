@@ -28,6 +28,7 @@ public sealed class AdwToggleGroup : ComposedWidget
     private Action? _applyColors;
     private bool _enabled = true;
     private bool _flat;
+    private bool _homogeneous;
     private bool _round;
 
     public AdwToggleGroup(IReadOnlyList<AdwToggle> toggles, int active = 0,
@@ -74,6 +75,17 @@ public sealed class AdwToggleGroup : ComposedWidget
     }
 
     /// <summary>
+    ///     Every segment gets an equal share of the width the group is given — libadwaita's
+    ///     <c>homogeneous</c>. For a group stretched across a pane (a sidebar's mode switch); the group
+    ///     needs a bounded width, since the shares are of it.
+    /// </summary>
+    public bool Homogeneous
+    {
+        get => _homogeneous;
+        set => this.Set(field: ref _homogeneous, value: value);
+    }
+
+    /// <summary>
     ///     Insensitive group: segments stop reacting and the whole control drops to 50% opacity,
     ///     the way Adwaita dims a disabled widget wholesale rather than restyling its parts.
     /// </summary>
@@ -104,7 +116,7 @@ public sealed class AdwToggleGroup : ComposedWidget
         var pressables = new Pressable[_toggles.Count];
         var separators = new Container[_toggles.Count];
 
-        var row = new Row(mainAxisSize: MainAxisSize.Min);
+        var row = new Row(mainAxisSize: Homogeneous ? MainAxisSize.Max : MainAxisSize.Min);
         for (int i = 0; i < _toggles.Count; i++)
         {
             if (i > 0)
@@ -149,11 +161,10 @@ public sealed class AdwToggleGroup : ComposedWidget
                 },
                 OnStateChanged = () => _applyColors!.Invoke(),
             };
-            row.Children.Add(
-                toggle.Tooltip is { } tip
-                    ? new Tooltip(message: tip, child: pressables[i])
-                    : pressables[i]
-            );
+            Widget segment = toggle.Tooltip is { } tip
+                ? new Tooltip(message: tip, child: pressables[i])
+                : pressables[i];
+            row.Children.Add(Homogeneous ? new Expanded(segment) : segment);
         }
 
         var pill = new SelectionPill(child: row, segments: boxes, index: Active) {

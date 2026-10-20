@@ -107,11 +107,13 @@ public class AdwCompactControlTests
         Assert.Equal(expected: AdwMetrics.ButtonHeight, actual: label.Height, precision: 3);
         Assert.Equal(expected: AdwMetrics.PillHeight, actual: pill.Height, precision: 3);
 
-        // Same label; the icon adds its glyph + gap but the frame tightens by 8px a side, so an
-        // icon+label button is NOT simply the text button plus the icon's width.
+        // Same label; the icon adds its glyph + gap (and buttoncontent's 2px trailing label pad,
+        // which a text-only button has no reason to carry — it pushed the label off-centre) but
+        // the frame tightens by 8px a side, so an icon+label button is NOT simply the text button
+        // plus the icon's width.
         float tightening = (AdwMetrics.ButtonPaddingX - AdwMetrics.ImageTextPaddingX) * 2f;
         Assert.Equal(
-            expected: label.Width + AdwMetrics.IconSize + 6f - tightening,
+            expected: label.Width + AdwMetrics.IconSize + 6f + 2f - tightening,
             actual: iconText.Width,
             precision: 1
         );
