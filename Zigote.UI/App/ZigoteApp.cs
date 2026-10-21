@@ -245,7 +245,7 @@ public class ZigoteApp
 
     private void RunCore()
     {
-        using var uiApp = new App(
+        var uiApp = new App(
             title: Title,
             width: Width,
             height: Height,
@@ -253,6 +253,9 @@ public class ZigoteApp
             fontName: FontName,
             transparentWindow: TransparentWindow
         );
+        // In the browser the page owns the app (RunCore returns while it keeps running, see the
+        // frame loop below); everywhere else it lives exactly as long as this call.
+        using var ownedApp = OperatingSystem.IsBrowser() ? null : uiApp;
         App = uiApp;
         uiApp.Theme = Theme;
 
@@ -333,7 +336,21 @@ public class ZigoteApp
         // than observed: there is no notification for the first, and a second's latency is fine.
         SystemGlass.Refresh();
         long nextGlassPoll = Environment.TickCount64 + 1000;
-        while (!uiApp.ShouldQuit)
+        if (OperatingSystem.IsBrowser())
+        {
+            Zigote.Core.Engine.ZigoteEngine.RunBrowserFrameLoop(Step);
+            return;
+        }
+
+        while (!uiApp.ShouldQuit) Step();
+
+        OnQuit();
+        _applyTheme = null;
+        App = null;
+        RootNavigator = null;
+        return;
+
+        void Step()
         {
             try
             {
@@ -363,11 +380,6 @@ public class ZigoteApp
                 uiApp.RequestLayoutAllWindows();
             }
         }
-
-        OnQuit();
-        _applyTheme = null;
-        App = null;
-        RootNavigator = null;
     }
 
     /// <summary>

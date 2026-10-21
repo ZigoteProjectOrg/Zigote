@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+    <!--
+      Browser head for Hello World: compiles the SAME sources as the desktop app against browser-wasm.
+
+        dotnet build Zigote.UI.HelloWorld.Web -p:ZigTargetRid=browser-wasm
+
+      then serve bin/…/wwwroot (or `dotnet run` the project with the same property).
+
+      See build/Zigote.Web.targets.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="..\Zigote.UI.HelloWorld\**\*.cs"
+                 Exclude="..\Zigote.UI.HelloWorld\bin\**;..\Zigote.UI.HelloWorld\obj\**"/>
+    </ItemGroup>
+
+    <Import Project="..\build\Zigote.Web.targets"/>
+
+</Project>

@@ -60,13 +60,15 @@ ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
 # for. Debian 12's arm64 cross libc is the same 2.36 floor as the native one. Windows is the GNU ABI
 # (mingw-w64), matching what the Zig side cross-builds — the MSVC ABI needs Microsoft's SDK. Apple
 # and Android targets are absent because their SDKs are: see build/macos-vm.sh for the former.
+# wasm32-unknown-emscripten (the browser) needs no linker here: the crate is built as a static
+# archive and the .NET wasm SDK's emcc links it (build/Zigote.Svg.targets).
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
         gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 \
     && rm -rf /var/lib/apt/lists/* \
     && curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
        | sh -s -- -y --no-modify-path --profile minimal \
             --default-toolchain "$RUST_VERSION" --component rustfmt,clippy \
-    && rustup target add aarch64-unknown-linux-gnu x86_64-pc-windows-gnu \
+    && rustup target add aarch64-unknown-linux-gnu x86_64-pc-windows-gnu wasm32-unknown-emscripten \
     && chmod -R a+rwX /opt/rustup /opt/cargo
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 

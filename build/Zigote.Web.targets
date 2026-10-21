@@ -1,0 +1,61 @@
+<Project>
+  <!--
+    The browser head of a Zigote UI app (Microsoft.NET.Sdk.WebAssembly, browser-wasm). Import it from
+    a head project that compiles the app's own sources, the way the iOS/Android heads do:
+
+      dotnet build MyApp.Web -p:ZigTargetRid=browser-wasm
+
+    ZigTargetRid must be on the COMMAND LINE: it is how build/Zigote.Native.targets (imported by
+    Zigote.Core) learns to build the engine for wasm32-emscripten — a csproj property would not reach
+    the referenced project's evaluation. That build leaves static archives in
+    Zigote.Engine/zig-out/web/lib; this file links them, plus the WebGPU implementation in
+    Zigote.Engine/web/*.js, into dotnet.native.wasm, and ships the fonts in the virtual filesystem.
+    The head's own wwwroot holds the page: index.html plus main.js, which requests the WebGPU
+    adapter and device before starting the runtime (copy them from Zigote.UI.HelloWorld.Web).
+
+    Single-threaded: Mono on the browser's main thread, the frame loop driven by
+    requestAnimationFrame (zigote_web_main_loop). Needs a WebGPU browser.
+  -->
+  <PropertyGroup>
+    <_ZigoteEngineDir>$(MSBuildThisFileDirectory)..\Zigote.Engine</_ZigoteEngineDir>
+    <_ZigoteWebLib>$(_ZigoteEngineDir)\zig-out\web\lib</_ZigoteWebLib>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WasmBuildNative>true</WasmBuildNative>
+    <!-- The atlas, glyph caches and image decodes live in linear memory; start roomy. -->
+    <WasmInitialHeapSize Condition="'$(WasmInitialHeapSize)' == ''">268435456</WasmInitialHeapSize>
+  </PropertyGroup>
+
+  <!-- The archives exist only once Zigote.Core's BuildZigEngine ran, which is after evaluation —
+       so they are collected in a target (as the iOS head does), not by an evaluation-time glob. -->
+  <Target Name="AddZigoteWebArchives" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(ZigTargetRid)' != 'browser-wasm'"
+           Text="Build web heads with -p:ZigTargetRid=browser-wasm on the command line (see build/Zigote.Web.targets)." />
+    <ItemGroup>
+      <NativeFileReference Include="$(_ZigoteWebLib)\libzigote.a" />
+      <_ZigoteWebDepArchive Include="$(_ZigoteWebLib)\*.a" Exclude="$(_ZigoteWebLib)\libzigote.a" />
+      <NativeFileReference Include="@(_ZigoteWebDepArchive)" ScanForPInvokes="false" />
+      <!-- resvg (SvgPicture), built for the browser by build/Zigote.Svg.targets via Zigote.UI. -->
+      <NativeFileReference Include="$(MSBuildThisFileDirectory)..\native\zigote-svg\target\wasm32-unknown-emscripten\release\libzigote_svg.a" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <!-- The WebGPU implementation, as emcc JS libraries. Content with a Kind is how the wasm SDK takes
+         link-time JS: it passes it to emcc as a JS library AND counts the file as a link input, so an edit relinks
+         (EmccExtraLDFlags would not). -->
+    <Content Include="$(_ZigoteEngineDir)\web\zigote_webgpu_layout.js;$(_ZigoteEngineDir)\web\zigote_webgpu.js"
+             Kind="js-library" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" Pack="false" />
+
+    <!-- The fonts. On desktop they flow as Content from Zigote.UI; the browser has only a virtual
+         filesystem, which the WebAssembly SDK does not populate — so they ride in the head assembly
+         and App unpacks every "Fonts/…" resource to the Fonts/ directory it probes. -->
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf" LogicalName="Fonts/Inter-Regular.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Medium.ttf" LogicalName="Fonts/Inter-Medium.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Inter\static\Inter_18pt-SemiBold.ttf" LogicalName="Fonts/Inter-SemiBold.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Bold.ttf" LogicalName="Fonts/Inter-Bold.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Inter\static\Inter_18pt-ExtraBold.ttf" LogicalName="Fonts/Inter-ExtraBold.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc" LogicalName="Fonts/Iosevka-Regular.ttc" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf" LogicalName="Fonts/NotoEmoji-Regular.ttf" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf" LogicalName="Fonts/MaterialIcons-Regular.ttf" />
+  </ItemGroup>
+</Project>

@@ -7,7 +7,11 @@ namespace Zigote.Core.Native;
 /// </summary>
 internal static partial class NativeEngine
 {
-#if ZIGOTE_STATIC_NATIVE
+#if ZIGOTE_WEB
+    // The browser: the engine archives are linked into dotnet.native.wasm, and the wasm SDK keys
+    // each P/Invoke module by the archive's file name. See build/Zigote.Web.targets.
+    private const string Lib = "libzigote";
+#elif ZIGOTE_STATIC_NATIVE
     // iOS (and any statically-linked host): the engine is linked into the executable itself —
     // dynamic library loading is prohibited there — and "__Internal" tells the runtime to
     // resolve the symbols from the main binary. Defined by the mobile publish profile.

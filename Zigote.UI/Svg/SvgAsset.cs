@@ -162,7 +162,12 @@ public sealed class SvgAsset : IDisposable
 /// <summary>resvg's C ABI (native/zigote-svg/src/lib.rs).</summary>
 internal static unsafe partial class NativeSvg
 {
+#if ZIGOTE_WEB
+    // The browser links the static archive; the wasm SDK keys the module by its file name.
+    private const string Lib = "libzigote_svg";
+#else
     private const string Lib = "zigote_svg";
+#endif
 
     [LibraryImport(Lib, EntryPoint = "zgsvg_parse")]
     internal static partial nint Parse(byte* data, nuint len, float* outW, float* outH);

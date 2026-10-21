@@ -58,6 +58,13 @@
     <_RidOS Condition="$(_Rid.StartsWith('android'))">android</_RidOS>
     <_RidOS Condition="$(_Rid.StartsWith('ios'))">ios</_RidOS>
     <_RidOS Condition="'$(_RidOS)' == '' And $(_Rid.StartsWith('linux'))">linux</_RidOS>
+    <!-- The browser (browser-wasm): the engine becomes static archives that the .NET wasm SDK's
+         emcc link puts into dotnet.native.wasm, with WebGPU supplied by Zigote.Engine/web/*.js. It
+         lands in its own zig-out/web prefix so a web build never clobbers the desktop library.
+         See build/Zigote.Web.targets for the app side. -->
+    <_RidOS Condition="$(_Rid.StartsWith('browser'))">emscripten</_RidOS>
+    <ZigOutLib Condition="'$(_RidOS)' == 'emscripten'">$(ZigEngineDir)\zig-out\web\lib</ZigOutLib>
+    <ZigPrefixArg Condition="'$(_RidOS)' == 'emscripten'">-p zig-out/web</ZigPrefixArg>
     <!-- The iOS simulator is a distinct platform from the device (separate SDK, separate zig ABI
          suffix, separate wgpu prebuilt) — same _RidOS, different triple + SDK below. -->
     <_IosSimulator Condition="$(_Rid.StartsWith('iossimulator'))">true</_IosSimulator>
@@ -66,7 +73,7 @@
          piece (Mono included) into the executable there too — the simulator, which enforces no
          signing, keeps the dylib. -->
     <ZigStaticNative Condition="'$(_RidOS)' == 'ios' And '$(_IosSimulator)' != 'true'">true</ZigStaticNative>
-    <ZigBuildStep Condition="'$(ZigStaticNative)' == 'true'">static-lib</ZigBuildStep>
+    <ZigBuildStep Condition="'$(ZigStaticNative)' == 'true' Or '$(_RidOS)' == 'emscripten'">static-lib</ZigBuildStep>
     <ZigBuildStep Condition="'$(ZigBuildStep)' == ''">shared-lib</ZigBuildStep>
     <!-- With the engine linked into the app binary, DllImport must name "__Internal" (see
          NativeEngine.Lib). This is not merely cosmetic: the iOS SDK links with
@@ -74,6 +81,10 @@
          native symbol to that list when a P/Invoke names __Internal — anything else is stripped,
          however hard the archive is force-loaded. -->
     <DefineConstants Condition="'$(ZigStaticNative)' == 'true'">$(DefineConstants);ZIGOTE_STATIC_NATIVE</DefineConstants>
+    <!-- wasm32: 4-byte pointers. The binding generator lays the C# wire structs out to match. -->
+    <ZigotePointerSize Condition="'$(_RidOS)' == 'emscripten'">4</ZigotePointerSize>
+    <!-- The wasm SDK names a P/Invoke module after the archive's file name (libzigote). -->
+    <DefineConstants Condition="'$(_RidOS)' == 'emscripten'">$(DefineConstants);ZIGOTE_WEB</DefineConstants>
     <_RidArch Condition="$(_Rid.EndsWith('-arm64'))">aarch64</_RidArch>
     <_RidArch Condition="$(_Rid.EndsWith('-x64'))">x86_64</_RidArch>
 
@@ -94,7 +105,7 @@
          archive linked into the host binary (DllImport "__Internal" via ZIGOTE_STATIC_NATIVE). The
          dylib name here only keeps the copy step coherent until that step exists. -->
     <ZigNativeLib Condition="'$(ZigTargetOS)' == 'ios'">libzigote.dylib</ZigNativeLib>
-    <ZigNativeLib Condition="'$(ZigStaticNative)' == 'true'">libzigote.a</ZigNativeLib>
+    <ZigNativeLib Condition="'$(ZigStaticNative)' == 'true' Or '$(_RidOS)' == 'emscripten'">libzigote.a</ZigNativeLib>
 
     <!-- Zig installs Windows DLLs into zig-out/bin (import lib + others in zig-out/lib); .so/.dylib
          go to zig-out/lib. ZigOutDir is where the loadable lib for this target lands. -->
@@ -121,6 +132,7 @@
     <AndroidAbi Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' == 'x86_64'">x86_64</AndroidAbi>
     <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' != 'true'">$(_RidArch)-ios</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' == 'true'">$(_RidArch)-ios-simulator</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'emscripten'">wasm32-emscripten</_ZigTriple>
 
     <!-- iOS constraints: Debug/ReleaseSafe zig builds reference std.debug's
          _dyld_get_image_header_containing_address, absent from the iOS tbds — force ReleaseFast.
@@ -141,12 +153,20 @@
     <Enable3D Condition="'$(_RidOS)' == 'android'">false</Enable3D>
     <EnablePhysics3D Condition="'$(_RidOS)' == 'android'">false</EnablePhysics3D>
     <EnableEcs Condition="'$(_RidOS)' == 'android'">true</EnableEcs>
+    <!-- The browser: the 2D/UI set. ECS can go here, unlike iOS — ecs_stub.zig keeps the export
+         surface, so every generated P/Invoke still resolves at the emcc link. ReleaseFast: the
+         renderer is the hot path, and wasm is already the slow side. -->
+    <ZigOptimize Condition="'$(_RidOS)' == 'emscripten'">ReleaseFast</ZigOptimize>
+    <Enable3D Condition="'$(_RidOS)' == 'emscripten'">false</Enable3D>
+    <EnablePhysics3D Condition="'$(_RidOS)' == 'emscripten'">false</EnablePhysics3D>
+    <EnableEcs Condition="'$(_RidOS)' == 'emscripten'">false</EnableEcs>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
     <ZigCross Condition="'$(_RidOS)' == '$(_HostOS)' And '$(_RidArch)' != '' And '$(_RidArch)' != '$(_HostArch)'">true</ZigCross>
     <!-- An osx RID always passes the triple, for the OS floor above. -->
     <ZigCross Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">true</ZigCross>
+    <ZigCross Condition="'$(_RidOS)' == 'emscripten'">true</ZigCross>
     <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
     <!-- CPU floor. A native (non-cross) build lets zig DETECT the build machine's CPU, so libzigote.so
          comes out using whatever the developer's chip happens to have — AVX-512 on a Zen 4 laptop —
@@ -163,6 +183,7 @@
     <_ZigCpuArch Condition="'$(_RidArch)' == ''">$(_HostArch)</_ZigCpuArch>
     <_ZigCpuOS Condition="'$(_RidOS)' != ''">$(_RidOS)</_ZigCpuOS>
     <_ZigCpuOS Condition="'$(_RidOS)' == ''">$(_HostOS)</_ZigCpuOS>
+    <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_RidOS)' == 'emscripten'">baseline</ZigCpu>
     <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_ZigCpuArch)' == 'x86_64'">x86_64_v2</ZigCpu>
     <!-- arm64 macOS only runs on M1 and later, so apple_m1 excludes nobody. Generic aarch64 is ARMv8.0,
          which lacks LSE: every atomic (spin locks, image_lock) compiles to an LL/SC retry loop. -->
@@ -177,6 +198,10 @@
          container with an old glibc instead: publish.sh's container mode (build/Dockerfile.linux). -->
 
   </PropertyGroup>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="ZigotePointerSize" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Watch the engine's own Zig sources + build files for the up-to-date check. Exclude the
@@ -204,7 +229,7 @@
   <Target Name="ZigFlagsGuard" BeforeTargets="BuildZigEngine">
     <PropertyGroup>
       <_ZigFlags>$(ZigOptimize)|$(Enable3D)|$(EnablePhysics3D)|$(EnableEcs)|$(_ZigTriple)|$(ZigCross)|$(ZigCpuArg)|$(ZigStrip)</_ZigFlags>
-      <_ZigFlagsFile>$(ZigEngineDir)\zig-out\.zig-build-flags</_ZigFlagsFile>
+      <_ZigFlagsFile>$(ZigOutLib)\..\.zig-build-flags</_ZigFlagsFile>
       <_PrevZigFlags Condition="Exists('$(_ZigFlagsFile)')">$([System.IO.File]::ReadAllText('$(_ZigFlagsFile)').Trim())</_PrevZigFlags>
     </PropertyGroup>
     <!-- Delete ALL stale native libs on a flag flip, including the versioned variants build.zig emits
@@ -215,7 +240,7 @@
       <_StaleNativeLib Include="$(ZigOutLib)\libzigote*.dylib;$(ZigOutLib)\libzigote*.so*;$(ZigOutBin)\zigote*.dll" />
     </ItemGroup>
     <Delete Condition="'$(_PrevZigFlags)' != '$(_ZigFlags)'" Files="@(_StaleNativeLib)" />
-    <MakeDir Directories="$(ZigEngineDir)\zig-out" />
+    <MakeDir Directories="$(ZigOutLib)\.." />
     <WriteLinesToFile Condition="'$(_PrevZigFlags)' != '$(_ZigFlags)'"
                       File="$(_ZigFlagsFile)" Lines="$(_ZigFlags)" Overwrite="true" />
   </Target>
@@ -306,6 +331,32 @@
     </PropertyGroup>
   </Target>
 
+  <!-- The browser: zig ships no emscripten libc, so the headers come from the emsdk the .NET wasm
+       workload installed (`dotnet workload install wasm-tools`) — the same one that does the final
+       emcc link, so headers and libc agree. A zig libc file applies them to every compile, the
+       dependencies' included. zig 0.17 also hands the file to the build runner it compiles for
+       the HOST, and on a Linux host that rejects an empty cc_dir; the runner links no libc, so the
+       value only has to parse. The packs directory is also mounted into the build container. -->
+  <Target Name="ZigEmscriptenSysroot" BeforeTargets="BuildZigEngine" Condition="'$(ZigTargetOS)' == 'emscripten'">
+    <ItemGroup>
+      <_EmsdkSysroot Include="$([System.IO.Directory]::GetDirectories('$(NetCoreRoot)packs', 'Microsoft.NET.Runtime.Emscripten.*.Cache.*'))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_EmsdkCache>%(_EmsdkSysroot.Identity)</_EmsdkCache>
+      <_EmsdkSysrootDir Condition="'$(_EmsdkCache)' != ''">$([System.IO.Directory]::GetDirectories('$(_EmsdkCache)')[0])/tools/emscripten/cache/sysroot</_EmsdkSysrootDir>
+      <_ZigWebLibcFile>$(ZigEngineDir)/zig-out/web/.zig-libc-emscripten.txt</_ZigWebLibcFile>
+    </PropertyGroup>
+    <Error Condition="'$(_EmsdkSysrootDir)' == '' Or !Exists('$(_EmsdkSysrootDir)')"
+           Text="emsdk sysroot not found under $(NetCoreRoot)packs. Run: dotnet workload install wasm-tools" />
+    <MakeDir Directories="$(ZigEngineDir)/zig-out/web" />
+    <WriteLinesToFile File="$(_ZigWebLibcFile)" Overwrite="true"
+                      Lines="include_dir=$(_EmsdkSysrootDir)/include;sys_include_dir=$(_EmsdkSysrootDir)/include;crt_dir=$(_EmsdkSysrootDir)/lib/wasm32-emscripten;msvc_lib_dir=;kernel32_lib_dir=;cc_dir=$(_EmsdkSysrootDir)/lib;darwin_sdk_dir=" />
+    <PropertyGroup>
+      <ZigSysrootArg>-Dsysroot="$(_EmsdkSysrootDir)" --libc "$(_ZigWebLibcFile)"</ZigSysrootArg>
+      <_ZigContainerMounts>-v "$(NetCoreRoot)packs:$(NetCoreRoot)packs"</_ZigContainerMounts>
+    </PropertyGroup>
+  </Target>
+
   <!-- Packing the MANAGED packages must not drag in a native cross-compile: the whole point of
        shipping Zigote.Engine.runtime.<rid> packages is that a consumer (and a managed pack on CI)
        needs no Zig toolchain. build/pack.sh sets this for the managed half; the runtime package
@@ -322,18 +373,19 @@
       <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseFast'">fast</_ZigOptimizeArg>
       <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseSmall'">small</_ZigOptimizeArg>
     </PropertyGroup>
-    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
+    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg) $(ZigPrefixArg)" />
     <!-- Linux and Windows targets: the image has no Android NDK and no Apple SDK to hand zig. -->
     <PropertyGroup>
       <_ZigExec Condition="'$(ZigTargetOS)' == 'linux' Or '$(ZigTargetOS)' == 'windows'">$(ZigoteContainerExec)</_ZigExec>
+      <_ZigExec Condition="'$(ZigTargetOS)' == 'emscripten' And '$(ZigoteContainerExec)' != ''">$(ZigoteContainerExec) $(_ZigContainerMounts)</_ZigExec>
     </PropertyGroup>
-    <Exec Command="$(_ZigExec) zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
+    <Exec Command="$(_ZigExec) zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg) $(ZigPrefixArg)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode
          000. Repack each archive the only way that survives both: extract the objects, make them
          readable, and let libtool build a Darwin-format archive from the objects. -->
-    <Exec Condition="'$(ZigStaticNative)' == 'true'" WorkingDirectory="$(ZigOutLib)"
+    <Exec Condition="'$(ZigStaticNative)' == 'true' And '$(ZigTargetOS)' == 'ios'" WorkingDirectory="$(ZigOutLib)"
           Command="set -e; for a in *.a; do d=`mktemp -d`; cp &quot;$a&quot; &quot;$d/in.a&quot;; (cd &quot;$d&quot; &amp;&amp; ar x in.a &amp;&amp; rm in.a &amp;&amp; chmod 644 *.o &amp;&amp; libtool -static -o out.a *.o 2&gt;/dev/null); cp &quot;$d/out.a&quot; &quot;$a&quot;; rm -rf &quot;$d&quot;; done" />
   </Target>
 
@@ -348,7 +400,7 @@
          host actually probes. Packing it as content would ship the BUILD machine's architecture to
          every consumer — an artifact that restores everywhere and loads on one machine. -->
     <Content Include="$(ZigOutDir)\$(ZigNativeLib)"
-             Condition="'$(ZigStaticNative)' != 'true' And '$(ZigoteNativeContent)' != 'false'" Pack="false">
+             Condition="'$(ZigStaticNative)' != 'true' And '$(ZigTargetOS)' != 'emscripten' And '$(ZigoteNativeContent)' != 'false'" Pack="false">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>$(ZigNativeLib)</Link>
     </Content>

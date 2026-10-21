@@ -35,6 +35,12 @@
     <_SvgTriple Condition="'$(_SvgRid)' == 'win-x64' And !$([MSBuild]::IsOSPlatform('Windows'))">x86_64-pc-windows-gnu</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'android-arm64'">aarch64-linux-android</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'android-x64'">x86_64-linux-android</_SvgTriple>
+    <!-- The browser: a static archive (a wasm module cannot load a shared library), linked by the
+         web head into dotnet.native.wasm — see build/Zigote.Web.targets. The wasm SDK names its
+         P/Invoke module after the archive, hence ZIGOTE_WEB → "libzigote_svg" in SvgAsset. -->
+    <_SvgTriple Condition="$(_SvgRid.StartsWith('browser'))">wasm32-unknown-emscripten</_SvgTriple>
+    <_SvgStatic Condition="$(_SvgRid.StartsWith('browser'))">true</_SvgStatic>
+    <DefineConstants Condition="'$(_SvgStatic)' == 'true'">$(DefineConstants);ZIGOTE_WEB</DefineConstants>
     <!-- ponytail: no iOS. A cdylib cannot be loaded from an iOS app sandbox, so that target needs
          the staticlib + __Internal treatment the Zig engine already has (ZigStaticNative). Add it
          when an iOS app actually needs SVG. -->
@@ -45,6 +51,7 @@
 
     <_SvgLibName Condition="$(_SvgRid.StartsWith('win')) Or ('$(_SvgRid)' == '' And '$([MSBuild]::IsOSPlatform(`Windows`))' == 'true')">zigote_svg.dll</_SvgLibName>
     <_SvgLibName Condition="'$(_SvgLibName)' == '' And ($(_SvgRid.StartsWith('osx')) Or ('$(_SvgRid)' == '' And '$([MSBuild]::IsOSPlatform(`OSX`))' == 'true'))">libzigote_svg.dylib</_SvgLibName>
+    <_SvgLibName Condition="'$(_SvgStatic)' == 'true'">libzigote_svg.a</_SvgLibName>
     <_SvgLibName Condition="'$(_SvgLibName)' == ''">libzigote_svg.so</_SvgLibName>
   </PropertyGroup>
 
@@ -59,7 +66,11 @@
           Inputs="@(SvgCrateSources)" Outputs="$(_SvgOutDir)\$(_SvgLibName)">
     <!-- Linux and Windows targets: the ones the image carries a rust std and linker for. -->
     <PropertyGroup>
-      <_SvgExec Condition="'$(_SvgRid)' == '' Or $(_SvgRid.StartsWith('linux')) Or $(_SvgRid.StartsWith('win'))">$(ZigoteContainerExec)</_SvgExec>
+      <_SvgExec Condition="'$(_SvgRid)' == '' Or $(_SvgRid.StartsWith('linux')) Or $(_SvgRid.StartsWith('win')) Or '$(_SvgStatic)' == 'true'">$(ZigoteContainerExec)</_SvgExec>
+      <!-- Static: crate-type staticlib for this build only (desktop keeps its cdylib), and
+           panic=abort so no unwinding machinery reaches a link that does not provide it. -->
+      <_SvgCargoCommand Condition="'$(_SvgStatic)' == 'true'">env CARGO_PROFILE_RELEASE_PANIC=abort cargo rustc --release --lib --crate-type staticlib</_SvgCargoCommand>
+      <_SvgCargoCommand Condition="'$(_SvgCargoCommand)' == ''">cargo build --release</_SvgCargoCommand>
     </PropertyGroup>
     <Exec Command="$(_SvgExec) cargo --version" ContinueOnError="true" StandardOutputImportance="low"
           StandardErrorImportance="low" ConsoleToMSBuild="true">
@@ -77,7 +88,7 @@
     <Warning Condition="'$(_SvgPinnedRust)' != '' And '$(_SvgCargoVersion)' != '' And !$(_SvgCargoVersion.Contains('$(_SvgPinnedRust)'))"
              Text="cargo is '$(_SvgCargoVersion.Trim())' but native/zigote-svg/rust-toolchain.toml pins $(_SvgPinnedRust). Install rustup (https://rustup.rs) to get the pinned toolchain selected automatically." />
 
-    <Exec Command="$(_SvgExec) cargo build --release $(_SvgCargoTarget)"
+    <Exec Command="$(_SvgExec) $(_SvgCargoCommand) $(_SvgCargoTarget)"
           WorkingDirectory="$(SvgCrateDir)" IgnoreStandardErrorWarningFormat="true" />
   </Target>
 
@@ -91,7 +102,7 @@
            library built for the machine doing the packing — shipping it inside Zigote.UI would hand
            every consumer one host's binary. It travels in Zigote.Engine.runtime.<rid> instead,
            beside libzigote, where the RID is part of the identity. -->
-      <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)') And '$(ZigoteNativeContent)' != 'false'" Pack="false">
+      <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)') And '$(_SvgStatic)' != 'true' And '$(ZigoteNativeContent)' != 'false'" Pack="false">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <Link>$(_SvgLibName)</Link>
       </Content>

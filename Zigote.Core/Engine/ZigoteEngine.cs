@@ -190,6 +190,21 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Request the run loop to exit (e.g. from a Quit menu item).</summary>
     public void Quit() => ShouldQuit = true;
 
+    /// <summary>
+    ///     Browser only: call <paramref name="frame" /> once per animation frame for the life of the
+    ///     page. Returns immediately; the page keeps the app alive. No-op elsewhere.
+    /// </summary>
+    public static void RunBrowserFrameLoop(Action frame)
+    {
+        _browserFrame = frame;
+        NativeEngine.WebMainLoop(&BrowserFrameThunk);
+    }
+
+    private static Action? _browserFrame;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void BrowserFrameThunk() => _browserFrame?.Invoke();
+
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void LogThunk(int level, byte* msg)
     {
@@ -1034,17 +1049,18 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = bytes)
         fixed (byte* fp = familyBytes)
         {
-            result = NativeEngine.MeasureText(
+            NativeEngine.MeasureText(
                 text: p,
                 textLen: (uint)textLen,
                 fontSize: fontSize,
                 maxWidth: float.IsPositiveInfinity(maxWidth) ? 0f : maxWidth,
-                fontWeight: (ushort)weight,
-                fontStyle: (byte)style,
+                fontWeight: (uint)weight,
+                fontStyle: (uint)style,
                 letterSpacing: letterSpacing,
                 wordSpacing: wordSpacing,
                 fontFamily: fp,
-                fontFamilyLen: (uint)familyLen
+                fontFamilyLen: (uint)familyLen,
+                size: &result
             );
         }
 
@@ -2945,7 +2961,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SetRenderSettings3D(ZgRenderSettings3D settings)
     {
         EnsureReady();
-        NativeEngine.SetRenderSettings3D(settings: settings);
+        NativeEngine.SetRenderSettings3D(settings: &settings);
     }
 
     /// <summary>

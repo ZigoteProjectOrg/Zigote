@@ -52,16 +52,24 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             )
             .Collect();
 
+        // Pointer width of the target the engine is built for: 8, or 4 for wasm32 (set by
+        // build/Zigote.Native.targets). Wire-struct offsets depend on it — Zig lays them out for
+        // the target, so the C# mirror has to as well.
+        var pointerSize = context.AnalyzerConfigOptionsProvider.Select(static (o, _) =>
+            o.GlobalOptions.TryGetValue(key: "build_property.ZigotePointerSize", value: out string? v) &&
+            v == "4" ? 4 : 8);
+
         context.RegisterSourceOutput(
-            source: zigFiles,
-            action: static (spc, files) =>
+            source: zigFiles.Combine(pointerSize),
+            action: static (spc, input) =>
             {
+                (var files, int ptrSize) = input;
                 // Deterministic order (path-sorted) so the generated output is stable across builds.
                 var ordered = files
                     .Where(static f => !string.IsNullOrEmpty(f.Text))
                     .OrderBy(keySelector: static f => f.Path, comparer: StringComparer.Ordinal);
 
-                string? source = GenerateBindings(ordered);
+                string? source = GenerateBindings(files: ordered, pointerSize: ptrSize);
                 if (source is null) return;
                 spc.AddSource(
                     hintName: "NativeEngine.g.cs",
@@ -162,11 +170,11 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         }
     }
 
-    private static int SizeOfCsType(string t) => t switch {
+    private static int SizeOfCsType(string t, int pointerSize) => t switch {
         "byte" => 1, "sbyte" => 1,
         "ushort" => 2, "short" => 2,
         "uint" => 4, "int" => 4, "float" => 4,
-        "ulong" => 8, "long" => 8, "double" => 8, "byte*" => 8,
+        "ulong" => 8, "long" => 8, "double" => 8, "byte*" => pointerSize,
         _ => 4,
     };
 
@@ -296,7 +304,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         }
     }
 
-    private static string? GenerateBindings(IEnumerable<(string Path, string Text)> files)
+    private static string? GenerateBindings(IEnumerable<(string Path, string Text)> files, int pointerSize)
     {
         // Concatenate exports across files, first-wins dedup by entry point (an entry point must be
         // unique in the shared lib, so a duplicate would only ever be an authoring mistake).
@@ -388,7 +396,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             {
                 int size = nestedSizes.TryGetValue(key: f.Type, value: out int ns)
                     ? ns
-                    : SizeOfCsType(f.Type);
+                    : SizeOfCsType(t: f.Type, pointerSize: pointerSize);
                 int align = nestedAligns.TryGetValue(key: f.Type, value: out int na) ? na : size;
                 int count = f.ArrayLength == 0 ? 1 : f.ArrayLength;
                 if (f.ArrayLength > 0) align = 1; // byte arrays

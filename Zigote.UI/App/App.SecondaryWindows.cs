@@ -206,6 +206,8 @@ public partial class App
     private void PaceFrame()
     {
         if (FrameRateLimit < 0) return; // unpaced — see FrameRateLimit
+        // The browser paces with requestAnimationFrame, and its thread cannot sleep.
+        if (OperatingSystem.IsBrowser()) return;
         // With vsync on and no explicit cap, the present is already the pacer. Sleeping against a
         // second, wall-clock timebase here beats against the swapchain's and periodically pushes a
         // frame past its deadline — the pacing inconsistency IS the jank (Chrome's scroll work found

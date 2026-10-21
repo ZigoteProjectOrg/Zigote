@@ -17,7 +17,8 @@ public static class DebugStats
     private static readonly float[] FrameTimes = new float[FpsRing];
     private static float _fpsTimer;
 
-    private static readonly Process Proc = Process.GetCurrentProcess();
+    // Null in the browser, where there is no process to ask (GetCurrentProcess throws).
+    private static readonly Process? Proc = OperatingSystem.IsBrowser() ? null : Process.GetCurrentProcess();
     private static TimeSpan _lastCpu = SafeCpuTime();
     private static float _metricTimer = 1f; // force first-frame sample
     private static float _statTimer = 1f;
@@ -91,7 +92,7 @@ public static class DebugStats
     {
         try
         {
-            return Proc.TotalProcessorTime;
+            return Proc?.TotalProcessorTime ?? TimeSpan.Zero;
         }
         catch (Exception)
         {
@@ -186,6 +187,7 @@ public static class DebugStats
         _metricTimer += dt;
         if (_metricTimer >= 1f)
         {
+            if (Proc is not null)
             try
             {
                 Proc.Refresh();

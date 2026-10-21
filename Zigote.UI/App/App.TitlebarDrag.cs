@@ -266,11 +266,13 @@ public partial class App
     ///     Chromed windows (MacUnified especially) may have roots that don't cover the whole
     ///     window — e.g. content padded below the traffic-light band — which would violate the
     ///     renderer's opaque-full-screen-root contract and expose the renderer's debug clear
-    ///     color. Guarantee the contract by painting the window background under the root.
+    ///     color. Guarantee the contract by painting the window background under the root. The
+    ///     browser counts too: a page has no window frame, so its chrome is System, yet the canvas
+    ///     still needs a background under roots that leave it to the window.
     /// </summary>
     private void PaintChromeBackdrop()
     {
-        if (ChromeStyle == WindowChromeStyle.System) return;
+        if (ChromeStyle == WindowChromeStyle.System && !OperatingSystem.IsBrowser()) return;
         _paint.AddRect(
             bounds: new Rect(
                 x: 0f,

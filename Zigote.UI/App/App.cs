@@ -239,6 +239,7 @@ public partial class App : IDisposable
         // doesn't depend on system fonts. Inter is the default UI face; Iosevka is bundled
         // separately for code-oriented views in the editor. Falls back to caller path / default.
         string fontsDir = Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts");
+        if (OperatingSystem.IsBrowser()) UnpackBrowserFonts(fontsDir);
         string bundledMain = Path.Combine(path1: fontsDir, path2: "Inter-Regular.ttf");
         string? mainFont = fontPath ?? (File.Exists(bundledMain) ? bundledMain : null);
 
@@ -970,6 +971,24 @@ public partial class App : IDisposable
         RequestLayout();
         for (int i = 0; i < _secondaryWindows.Count; i++)
             _secondaryWindows[i].RequestLayout();
+    }
+
+    // The browser: a web head embeds the fonts as "Fonts/…" resources (build/Zigote.Web.targets),
+    // because the WebAssembly SDK leaves the virtual filesystem empty. Unpacked once, to where the
+    // engine reads them on every other platform.
+    private static void UnpackBrowserFonts(string fontsDir)
+    {
+        if (System.Reflection.Assembly.GetEntryAssembly() is not { } entry) return;
+        foreach (string name in entry.GetManifestResourceNames())
+        {
+            if (!name.StartsWith(value: "Fonts/", comparisonType: StringComparison.Ordinal)) continue;
+            string path = Path.Combine(path1: fontsDir, path2: name["Fonts/".Length..]);
+            if (File.Exists(path)) continue;
+            Directory.CreateDirectory(fontsDir);
+            using var src = entry.GetManifestResourceStream(name)!;
+            using var dst = File.Create(path);
+            src.CopyTo(dst);
+        }
     }
 
     private static Keymap CreateDefaultKeymap()
