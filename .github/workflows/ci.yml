@@ -1,0 +1,51 @@
+name: CI
+
+# The pull-request check: build the whole desktop solution and run the headless tests on Linux.
+# The native halves (Zig engine, Rust SVG renderer) are built here too, so a change that breaks the
+# generated bindings or the ABI mirror tests is caught before review. The three-OS coverage lives in
+# release.yml, which is what a tag runs.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  ZIG_VERSION: 0.17.0
+
+jobs:
+  build-and-test:
+    name: build & test (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Set up Rust
+        shell: bash
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+
+      - name: Build
+        run: dotnet build Zigote.sln -c Release
+
+      - name: Test
+        run: dotnet test Zigote.Tests/Zigote.Tests.csproj -c Release --no-build

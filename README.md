@@ -12,6 +12,7 @@ underneath, no XAML.
 [![Zig 0.17](https://img.shields.io/badge/Zig-0.17.0-F7A41D)](https://ziglang.org/)
 [![Rust 1.97](https://img.shields.io/badge/Rust-1.97.1-CE422B)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)](#platforms)
+[![Release](https://img.shields.io/github/v/release/ZigoteProjectOrg/Zigote?include_prereleases)](https://github.com/ZigoteProjectOrg/Zigote/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [Quick start](#quick-start) · [The two ideas](#the-two-ideas) · [What you get](#what-you-get) ·
@@ -74,6 +75,12 @@ No clone required for that: a generated app references the SDK by **version**
 arrives as `Zigote.Engine.runtime.<rid>` — so a phone build needs no Zig toolchain and no NDK. See
 [docs/sdk.md](docs/sdk.md) for the versioning and compatibility rules, and pass `--engine <path>`
 (or scaffold inside a checkout) to build against engine *sources* instead.
+
+Every release — the packages, the `zigote` tool, self-contained editor bundles per OS, and
+`SHA256SUMS` for all of it — is on the [Releases](https://github.com/ZigoteProjectOrg/Zigote/releases)
+page, built by CI from the tag; what changed is in [CHANGELOG.md](CHANGELOG.md). To pin an app to a
+release, set `<ZigoteSdkVersion>` in its project to that release's version. The engine is released
+from [Zigote.Engine](https://github.com/ZigoteProjectOrg/Zigote.Engine) under the same number.
 
 Or run something that already exists:
 
@@ -245,7 +252,7 @@ built from the kernel's primitives, sharing its theming, focus, semantics and ho
 </tr>
 </table>
 
-The Adwaita gallery is the spec — **49 live pages**, plus a headless self-test that constructs every
+The Adwaita gallery is the spec — **51 live pages**, plus a headless self-test that constructs every
 one of them:
 
 ```sh
@@ -279,6 +286,7 @@ the editor, and export.
 | **Linux** (x64, arm64) | Builds natively in CI (`linux-x64`) and cross-compiles from any host. arm64 is wired up but sees less exercise. |
 | **Windows** (x64) | Builds natively in CI (`win-x64`, MSVC ABI). Cross-compiling from macOS/Linux uses Zig's bundled MinGW (GNU ABI). |
 | **iOS / Android** | In bring-up. Touch, lifecycle, safe area and both native builds work; the gallery runs on the iOS simulator and the Android emulator. `zigote add android` scaffolds an Android head. See [`docs/mobile.md`](docs/mobile.md). |
+| **Web** (browser-wasm) | Experimental. A UI app compiles for `browser-wasm` with the engine linked into `dotnet.native.wasm` and rendering through WebGPU: `dotnet build Zigote.UI.HelloWorld.Web -p:ZigTargetRid=browser-wasm`. Needs a WebGPU browser; single-threaded; no video or network audio yet. See [`build/Zigote.Web.targets`](build/Zigote.Web.targets). |
 
 One SDL3 + wgpu code path everywhere. Self-contained per-OS bundles come from
 [`.github/workflows/release.yml`](.github/workflows/release.yml) or locally via
@@ -287,7 +295,8 @@ macOS — platform bug reports are very welcome.
 
 **Not here yet, stated up front:** no accessibility bridge (the semantics tree and `ISemanticsBridge`
 seam exist, but no AT-SPI / UIA / VoiceOver implementation does, so screen readers will not see your
-app), no web target, and no third-party widget ecosystem.
+app), no production web target (the browser build above is an experiment), and no third-party widget
+ecosystem.
 
 ---
 
@@ -320,6 +329,8 @@ tests.
 - **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 51 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.
+- **`Zigote.UI.HelloWorld.Web`** and **`Zigote.UI.Adwaita.Gallery.Web`** — the same two apps as
+  browser heads (`-p:ZigTargetRid=browser-wasm`), the page in each `wwwroot/`.
 - **`examples/PorscheDemo`** — a full 3D driving demo. It carries large binary assets, so it is
   **not committed here** and is distributed separately.
 
@@ -340,6 +351,7 @@ tests.
 | [`docs/mcp-server.md`](docs/mcp-server.md) | The MCP server — LLM agents launch, screenshot and drive a running app over the same inspect protocol. |
 | [`Zigote.Engine/docs/`](Zigote.Engine/docs/README.md) | The native Zig + wgpu backend: rendering, FFI, subsystems, building. |
 | [`docs/README.md`](docs/README.md) | The full index — including [`docs/notes/`](docs/README.md#engineering-notes), the design records and bring-up journals behind the decisions. |
+| [`CHANGELOG.md`](CHANGELOG.md) · [`RELEASING.md`](RELEASING.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) | What changed per release; how a release is cut across both repositories; how to build, test and send changes. |
 
 The XML doc comments are the reference manual, and most of them explain *why*, not just *what* —
 `Zigote.UI/Widgets/Widget.cs`, `Zigote.Core/State/Signal.cs` and `Zigote.UI/App/App.cs` are the three
@@ -403,7 +415,7 @@ dotnet run  --project Zigote.UI.Adwaita.Gallery -- --self-test  # every gallery 
 dotnet run  --project Zigote.SmokeTest                          # boots the real renderer (needs a GPU)
 ```
 
-`Zigote.Tests` is 169 files covering the kernel, the design systems, blocs, preferences and the
+`Zigote.Tests` is more than 200 files covering the kernel, the design systems, blocs, preferences and the
 reactive graph — and reaching well into the game stack (ECS, physics, graphs, runtime) — all
 without a window. `Zigote.SmokeTest` is the other half: it opens a real SDL3
 window and presents frames through wgpu, so it is deliberately **not** part of `dotnet test`.

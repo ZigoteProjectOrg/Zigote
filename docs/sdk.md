@@ -89,6 +89,13 @@ then one engine package per RID, then the Android support package. Everything la
 `artifacts/packages/` under a single `$(ZigoteVersion)` — the CLI included, so the tool and the
 packages it scaffolds against can never disagree.
 
+A published release goes through CI rather than a laptop: pushing a `vX.Y.Z` tag runs
+[`.github/workflows/release.yml`](../.github/workflows/release.yml), which packs the managed
+closure once and the engine on each desktop OS natively, attaches everything to the tag's GitHub
+release, and pushes to NuGet when the feed credentials and the signing certificate are configured
+as repository secrets. The order of operations across both repositories — the engine is tagged
+first, then pinned, then the SDK — is in [`RELEASING.md`](../RELEASING.md).
+
 ### Provenance: what a published artifact can prove about itself
 
 | Artifact | Carries |

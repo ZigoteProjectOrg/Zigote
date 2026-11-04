@@ -1,8 +1,17 @@
 name: Release
 
-# Per-OS matrix: each runner natively builds + publishes its own RID (the only reliable way to cover
-# Windows-MSVC, which doesn't cross-compile cleanly from other hosts). Produces self-contained,
-# non-trimmed editor bundles with the native libzigote and the app's fonts.
+# A `v*` tag produces everything a consumer can install, from CI, on the OS it is meant for:
+#
+#   * the self-contained editor bundle per desktop RID (`publish`) — each runner natively builds and
+#     publishes its own RID, the only reliable way to cover Windows-MSVC, which does not
+#     cross-compile cleanly from other hosts;
+#   * the SDK packages: the managed closure once (`pack-managed`, no Zig needed), and
+#     `Zigote.Engine.runtime.<rid>` per desktop RID (`pack-engine`), natively for the same reason;
+#   * the GitHub release carrying all of it, with SHA256SUMS and the changelog section as notes
+#     (`release`); and the signed push to NuGet when the secrets exist (`nuget`).
+#
+# The order of operations across the two repositories — the engine is tagged first and pinned
+# through the submodule — is in RELEASING.md.
 #
 # Fonts ship at full coverage: EnableFontStripping is off by default (build/Zigote.Fonts.targets) and
 # stays off here on purpose — the editor renders arbitrary filenames and file contents, so subsetting
@@ -18,9 +27,60 @@ on:
   push:
     tags: ['v*']
 
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  ZIG_VERSION: 0.17.0
+
 jobs:
+  # The tag, build/version.txt, the changelog and the pinned engine all have to name one version:
+  # the packages read version.txt, the release reads the tag, and a disagreement between them is
+  # the kind of mistake that is only found by whoever installs the result. A tag may add a
+  # prerelease suffix (v0.2.0-rc.1) that version.txt does not carry; it becomes ZigoteVersionSuffix.
+  verify:
+    name: verify version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      suffix: ${{ steps.v.outputs.suffix }}
+      full: ${{ steps.v.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - id: v
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < build/version.txt)"
+          suffix=""
+          echo "build/version.txt: $version"
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              tag="${GITHUB_REF_NAME#v}"
+              base="${tag%%-*}"
+              [ "$tag" != "$base" ] && suffix="${tag#*-}"
+              if [ "$base" != "$version" ]; then
+                echo "::error::tag $GITHUB_REF_NAME does not match build/version.txt ($version)"
+                exit 1
+              fi
+              grep -q "^## \[$version\]" CHANGELOG.md ||
+                { echo "::error::CHANGELOG.md has no '## [$version]' section"; exit 1; }
+              engine="$(sed -n 's/^ *\.version = "\([^"]*\)",.*/\1/p' Zigote.Engine/build.zig.zon)"
+              if [ "$engine" != "$version" ]; then
+                echo "::error::the pinned Zigote.Engine is version $engine, not $version — pin the engine tag first (RELEASING.md)"
+                exit 1
+              fi
+              ;;
+          esac
+          full="$version${suffix:+-$suffix}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "releasing $full"
+
   publish:
     name: publish ${{ matrix.rid }}
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -40,12 +100,18 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0
+          version: ${{ env.ZIG_VERSION }}
+
+      # rustup reads native/zigote-svg/rust-toolchain.toml on its own; installing the pinned
+      # toolchain explicitly keeps the first cargo call from doing it silently mid-build.
+      - name: Set up Rust
+        shell: bash
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
 
       - name: Publish
         shell: bash
@@ -58,32 +124,179 @@ jobs:
           path: artifacts/zigote-editor-${{ matrix.rid }}.zip
           if-no-files-found: error
 
+  # The managed half of the SDK: every package an app can reference, their closure, the CLI and the
+  # two mobile support packages. -p:ZigoteManagedPack=true (set by pack.sh) skips the engine build,
+  # so this needs no Zig; Rust it still needs, for zigote_svg.
+  pack-managed:
+    name: pack managed packages
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Set up Rust
+        shell: bash
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+      - name: Pack
+        shell: bash
+        run: |
+          args=(--managed-only)
+          [ -n "${{ needs.verify.outputs.suffix }}" ] && args+=(--suffix "${{ needs.verify.outputs.suffix }}")
+          build/pack.sh "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-managed
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          if-no-files-found: error
+
+  # The native half: one Zigote.Engine.runtime.<rid> per desktop RID, built on that OS. Mirrors the
+  # engine loop in build/pack.sh for one RID; the mobile RIDs are packed by hand for now, see
+  # RELEASING.md.
+  pack-engine:
+    name: pack engine ${{ matrix.rid }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rid: osx-arm64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Set up Rust
+        shell: bash
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+      - name: Pack
+        shell: bash
+        run: |
+          props=(-c Release -p:IsPackable=true "-p:ZigTargetRid=${{ matrix.rid }}"
+                 "-p:SourceRevisionId=$GITHUB_SHA" "-p:PackageOutputPath=$GITHUB_WORKSPACE/artifacts/packages")
+          [ -n "${{ needs.verify.outputs.suffix }}" ] && props+=("-p:ZigoteVersionSuffix=${{ needs.verify.outputs.suffix }}")
+          dotnet pack build/pack/Zigote.Engine.Runtime.csproj "${props[@]}" --nologo
+          ls -l artifacts/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-engine-${{ matrix.rid }}
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
   # Workflow artifacts expire after 90 days and need a GitHub login to download, so a tag build that
-  # stops there ships nothing anyone can actually get. Attach the same zips to the tag's release.
-  # Not gated on the whole matrix succeeding (fail-fast is off): a tag that only builds on two of the
-  # three OSes should still publish those two.
+  # stops there ships nothing anyone can actually get. Attach everything to the tag's release.
+  # Not gated on every leg succeeding (fail-fast is off): a tag that only builds on two of the three
+  # OSes should still publish those two, and the missing leg is re-run on the same tag.
   release:
-    needs: publish
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [verify, publish, pack-managed, pack-engine]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          version="${{ needs.verify.outputs.version }}"
+          # The section between this version's heading and the next one.
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { inside = 1; next }
+            /^## \[/ { inside = 0 }
+            inside { print }' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::no CHANGELOG.md section for $version"; exit 1; }
+          cat notes.md
 
       # create-then-upload rather than a one-shot create, so re-running the workflow on an existing
       # tag replaces the assets instead of failing on "release already exists".
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           shopt -s nullglob
-          zips=(dist/*.zip)
+          files=(dist/*.zip dist/*.nupkg dist/*.snupkg)
           # Every leg failed. Fail here rather than creating an empty release for the tag.
-          [ ${#zips[@]} -gt 0 ] || { echo "::error::no bundles were built for $GITHUB_REF_NAME"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes ||
+          [ ${#files[@]} -gt 0 ] || { echo "::error::nothing was built for $GITHUB_REF_NAME"; exit 1; }
+          ( cd dist && sha256sum ./*.zip ./*.nupkg ./*.snupkg 2>/dev/null | sed 's#\./##' > SHA256SUMS )
+          files+=(dist/SHA256SUMS)
+          prerelease=()
+          [ -n "${{ needs.verify.outputs.suffix }}" ] && prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" --title "Zigote $GITHUB_REF_NAME" \
+              --notes-file notes.md "${prerelease[@]}" ||
             echo "release $GITHUB_REF_NAME already exists — updating its assets"
-          gh release upload "$GITHUB_REF_NAME" "${zips[@]}" --clobber
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+
+  # The same rule as build/pack.sh --push: nothing goes to the feed unsigned. Without NUGET_API_KEY
+  # the job skips and the packages stay on the GitHub release, which is a complete release for a
+  # consumer with a local feed. With the key but no certificate it fails on purpose.
+  nuget:
+    name: push to NuGet
+    needs: [verify, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: packages
+          merge-multiple: true
+
+      - name: Sign and push
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          ZIGOTE_SIGN_CERT_B64: ${{ secrets.ZIGOTE_SIGN_CERT_B64 }}
+          ZIGOTE_SIGN_CERT_PASSWORD: ${{ secrets.ZIGOTE_SIGN_CERT_PASSWORD }}
+          ZIGOTE_TIMESTAMPER: ${{ vars.ZIGOTE_TIMESTAMPER || 'http://timestamp.digicert.com' }}
+        shell: bash
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::notice::NUGET_API_KEY is not set — the packages are on the GitHub release only."
+            exit 0
+          fi
+          if [ -z "$ZIGOTE_SIGN_CERT_B64" ]; then
+            echo "::error::refusing to push unsigned packages — set ZIGOTE_SIGN_CERT_B64 and ZIGOTE_SIGN_CERT_PASSWORD."
+            exit 2
+          fi
+          cert="$RUNNER_TEMP/zigote-release.pfx"
+          printf '%s' "$ZIGOTE_SIGN_CERT_B64" | base64 -d > "$cert"
+          for package in packages/*.nupkg; do
+            echo "==> sign $(basename "$package")"
+            dotnet nuget sign "$package" --certificate-path "$cert" \
+              --certificate-password "$ZIGOTE_SIGN_CERT_PASSWORD" --timestamper "$ZIGOTE_TIMESTAMPER"
+          done
+          # An unsigned package in the set is exactly the one that gets pushed by accident, and the
+          # feed rejects it only after the others are already public.
+          dotnet nuget verify packages/*.nupkg
+          for package in packages/*.nupkg; do
+            echo "==> push $(basename "$package")"
+            dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json \
+              --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
+          rm -f "$cert"

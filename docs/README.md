@@ -36,6 +36,14 @@ retained mode is the one idea everything else follows from.
 | [`../tools/rider/README.md`](../tools/rider/README.md) | The Rider plugin — widget preview, trees, colour swatches — and the inspect protocol behind it. |
 | [`../Zigote.UI.DevTools/README.md`](../Zigote.UI.DevTools/README.md) | The in-app DevTools overlay (<kbd>Shift</kbd>+<kbd>D</kbd>). |
 
+## Releases and contributing
+
+| Document | What is in it |
+|---|---|
+| [`../CHANGELOG.md`](../CHANGELOG.md) | What changed per release, and which engine version and ABI each one pairs with. |
+| [`../RELEASING.md`](../RELEASING.md) | How a release is cut, in order: the engine tag, the submodule pin, the SDK tag, what CI publishes, and the NuGet push. |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Building, testing and sending changes. |
+
 ## Engineering notes
 
 [`notes/`](notes/) holds design documents and bring-up journals — records of how decisions were
