@@ -42,7 +42,13 @@ jobs:
 
       - name: Set up Rust
         shell: bash
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+        run: |
+          pinned="$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)"
+          rustup toolchain install "$pinned" --profile minimal
+          # Default it too: the build's version probe runs outside the crate directory, where
+          # rust-toolchain.toml is not in scope and the runner's own toolchain would answer.
+          rustup default "$pinned"
+          cargo --version
 
       - name: Build
         run: dotnet build Zigote.sln -c Release

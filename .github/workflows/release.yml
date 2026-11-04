@@ -111,7 +111,13 @@ jobs:
       # toolchain explicitly keeps the first cargo call from doing it silently mid-build.
       - name: Set up Rust
         shell: bash
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+        run: |
+          pinned="$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)"
+          rustup toolchain install "$pinned" --profile minimal
+          # Default it too: the build's version probe runs outside the crate directory, where
+          # rust-toolchain.toml is not in scope and the runner's own toolchain would answer.
+          rustup default "$pinned"
+          cargo --version
 
       - name: Publish
         shell: bash
@@ -140,7 +146,13 @@ jobs:
           global-json-file: global.json
       - name: Set up Rust
         shell: bash
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+        run: |
+          pinned="$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)"
+          rustup toolchain install "$pinned" --profile minimal
+          # Default it too: the build's version probe runs outside the crate directory, where
+          # rust-toolchain.toml is not in scope and the runner's own toolchain would answer.
+          rustup default "$pinned"
+          cargo --version
       - name: Pack
         shell: bash
         run: |
@@ -184,7 +196,13 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       - name: Set up Rust
         shell: bash
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)" --profile minimal
+        run: |
+          pinned="$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)"
+          rustup toolchain install "$pinned" --profile minimal
+          # Default it too: the build's version probe runs outside the crate directory, where
+          # rust-toolchain.toml is not in scope and the runner's own toolchain would answer.
+          rustup default "$pinned"
+          cargo --version
       - name: Pack
         shell: bash
         run: |

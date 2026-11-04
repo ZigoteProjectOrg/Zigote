@@ -278,18 +278,25 @@ public class LiquidPaneTests
         Assert.Equal(expected: 1f, actual: clear.ColorR, precision: 3);
     }
 
+    /// <summary>
+    ///     A pane with no adaptive pull still carries its glass family on the sign of the Adapt
+    ///     field, as a signed epsilon (see <c>LiquidPane.Material</c>); the shader scales the pull
+    ///     by its magnitude, so anything this small is off.
+    /// </summary>
+    private const float NoAdapt = 1e-4f;
+
     [Fact]
     public void ClearDoesNotAdaptWhileRegularAnchorsForItsForeground()
     {
         var pane = LiquidPane.Clear(new SizedBox(width: 120f, height: 56f));
         // LineHeight is the debug view's projection of the glass command's Adapt field.
-        Assert.Equal(expected: 0f, actual: Lens(pane).LineHeight);
+        Assert.InRange(actual: MathF.Abs(Lens(pane).LineHeight), low: 0f, high: NoAdapt);
         pane.Tinted = 1f;
-        Assert.True(Lens(pane).LineHeight < 0f); // default dark theme carries white ink
+        Assert.True(Lens(pane).LineHeight < -NoAdapt); // default dark theme carries white ink
         pane.Tint = Color.White;
-        Assert.True(Lens(pane).LineHeight > 0f); // explicit light family carries dark ink
+        Assert.True(Lens(pane).LineHeight > NoAdapt); // explicit light family carries dark ink
         pane.Tinted = 0f;
-        Assert.Equal(expected: 0f, actual: Lens(pane).LineHeight);
+        Assert.InRange(actual: MathF.Abs(Lens(pane).LineHeight), low: 0f, high: NoAdapt);
     }
 
     [Fact]
@@ -314,7 +321,7 @@ public class LiquidPaneTests
                 predicate: c => c.Kind == ZgPaintOp.LiquidGlass
             );
             Assert.Equal(expected: 1, actual: group.PaneCount);
-            Assert.Equal(expected: strength == 0f, actual: lens.LineHeight == 0f);
+            Assert.Equal(expected: strength == 0f, actual: MathF.Abs(lens.LineHeight) <= NoAdapt);
         }
     }
 }
