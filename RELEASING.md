@@ -73,12 +73,17 @@ In this repository, on `main`:
 | `pack-managed` | ubuntu | Every managed package (`Zigote.UI`, `Zigote.UI.Adwaita`, …, `Zigote.Cli`) plus `Zigote.Android.Support` and `Zigote.iOS.Support`, with symbols. |
 | `pack-engine` | macOS, ubuntu, windows | `Zigote.Engine.runtime.osx-arm64`, `.linux-x64`, `.win-x64` — each built natively on its own OS, which is the only way to ship the MSVC ABI on Windows. |
 | `release` | ubuntu | The GitHub release for the tag: every zip and `.nupkg`, `SHA256SUMS`, and the changelog section as the notes. |
-| `nuget` | ubuntu | Signs and pushes the packages to nuget.org — only when the secrets below are set, and never unsigned. |
+| `nuget` | ubuntu | Signs and pushes the packages to nuget.org — only when the `ZIGOTE_PUBLISH_NUGET` variable is `true` and the secrets below are set, and never unsigned. |
 
 A tag of the form `vX.Y.Z-rc.1` is a prerelease: `build/version.txt` stays at `X.Y.Z`, the suffix
 is passed through as `$(ZigoteVersionSuffix)`, and the GitHub release is marked as a prerelease.
 
-### Secrets
+### Publishing to NuGet
+
+Off by default. The `nuget` job runs only when the repository **variable** `ZIGOTE_PUBLISH_NUGET`
+is set to `true` (Settings → Secrets and variables → Actions → Variables); until then a release is
+the GitHub release, with the `.nupkg` files attached, and an app consumes it through a local feed.
+Turning it on needs these secrets:
 
 | Secret | Used for |
 |---|---|

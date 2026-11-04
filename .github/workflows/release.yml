@@ -249,13 +249,15 @@ jobs:
             echo "release $GITHUB_REF_NAME already exists — updating its assets"
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
-  # The same rule as build/pack.sh --push: nothing goes to the feed unsigned. Without NUGET_API_KEY
-  # the job skips and the packages stay on the GitHub release, which is a complete release for a
-  # consumer with a local feed. With the key but no certificate it fails on purpose.
+  # Opt-in, by the repository variable ZIGOTE_PUBLISH_NUGET=true: a release is the GitHub release
+  # until someone decides the feed should carry it too, and a secret that happens to be set must not
+  # make that decision. The same rule as build/pack.sh --push once it runs: nothing goes to the
+  # feed unsigned. Without NUGET_API_KEY the job skips; with the key but no certificate it fails
+  # on purpose.
   nuget:
     name: push to NuGet
     needs: [verify, release]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    if: ${{ !cancelled() && needs.release.result == 'success' && vars.ZIGOTE_PUBLISH_NUGET == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-dotnet@v4
