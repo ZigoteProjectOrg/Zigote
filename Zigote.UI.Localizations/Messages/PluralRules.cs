@@ -334,7 +334,9 @@ public static class PluralRules
     {
         if (op.I == 1 && op.V == 0) return PluralCategory.One;
         long i100 = op.I % 100;
-        if (op.V != 0 || op.N == 0 || i100 is >= 2 and <= 19) return PluralCategory.Few;
+        // CLDR: v != 0 or n = 0 or n != 1 and n % 100 = 1..19 — the range starts at 1, so 101,
+        // 201 and 1001 are "few" (n = 1 itself has already returned "one").
+        if (op.V != 0 || op.N == 0 || i100 is >= 1 and <= 19) return PluralCategory.Few;
         return PluralCategory.Other;
     }
 
