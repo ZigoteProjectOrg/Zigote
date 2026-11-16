@@ -125,6 +125,7 @@ public class AreaMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
     {
         foreach (var p in Resolved)
         {
+            if (!p.IsPlottable) continue;
             double top = _spans.TryGetValue(key: (p.Series, p.X), value: out var span)
                 ? span.Top
                 : p.Y.Numeric;
@@ -214,21 +215,24 @@ public class AreaMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
         List<ResolvedPoint> points, Color color)
     {
         int[] order = OrderFor(series: series, points: points);
-        int n = order.Length;
-        if (n < 2) return;
-        if (_xs.Length < n)
+        if (order.Length < 2) return;
+        if (_xs.Length < order.Length)
         {
-            _xs = new float[n];
-            _topY = new float[n];
-            _botY = new float[n];
-            _topSlopes = new float[n];
-            _botSlopes = new float[n];
+            _xs = new float[order.Length];
+            _topY = new float[order.Length];
+            _botY = new float[order.Length];
+            _topSlopes = new float[order.Length];
+            _botSlopes = new float[order.Length];
         }
 
         // Project the top/bottom edges directly in x-sorted order (morph-aware) into reused buffers.
-        for (int k = 0; k < n; k++)
+        // A missing sample is left out, so the filled shape spans it between its neighbours: an
+        // area needs one contiguous outline, unlike a line, which can simply break.
+        int n = 0;
+        for (int k = 0; k < order.Length; k++)
         {
             var p = points[order[k]];
+            if (!p.IsPlottable) continue;
             var key = p.X;
             var span = _spans.TryGetValue(key: (series, key), value: out var s)
                 ? s
@@ -247,10 +251,13 @@ public class AreaMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
                 bottom = old.Bottom + ((bottom - old.Bottom) * ctx.DataProgress);
             }
 
-            _xs[k] = ctx.MapX(p.X);
-            _topY[k] = ctx.MapYNumeric(top);
-            _botY[k] = ctx.MapYNumeric(bottom);
+            _xs[n] = ctx.MapX(p.X);
+            _topY[n] = ctx.MapYNumeric(top);
+            _botY[n] = ctx.MapYNumeric(bottom);
+            n++;
         }
+
+        if (n < 2) return;
 
         var xs = _xs.AsSpan(start: 0, length: n);
         var topY = _topY.AsSpan(start: 0, length: n);
