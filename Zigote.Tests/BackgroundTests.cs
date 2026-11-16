@@ -86,7 +86,12 @@ public class BackgroundTests
                     await Task.Delay(millisecondsDelay: Timeout.Infinite, cancellationToken: ct);
                 }
             );
-            Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(
+                started.Wait(
+                    timeout: TimeSpan.FromSeconds(5),
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            );
             background.Dispose();
             Assert.True(Settle(background));
             Assert.Empty(reported);
