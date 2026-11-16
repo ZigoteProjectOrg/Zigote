@@ -42,6 +42,62 @@ public class BackgroundTests
     }
 
     [Fact]
+    public void A_cancellation_the_scope_did_not_ask_for_is_reported()
+    {
+        // An HttpClient timeout surfaces as TaskCanceledException. Nothing was superseded and the
+        // scope is not closing, so it is a failure like any other, not "ordinary".
+        using var background = Background.Manual();
+        var reported = new List<Exception>();
+        var previous = Background.OnError;
+        Background.OnError = (ex, _) =>
+        {
+            lock (reported) reported.Add(ex);
+        };
+
+        try
+        {
+            background.RunAsync(_ => throw new TaskCanceledException("timeout"));
+            Assert.True(Settle(background));
+            Assert.IsType<TaskCanceledException>(Assert.Single(reported));
+        }
+        finally
+        {
+            Background.OnError = previous;
+        }
+    }
+
+    [Fact]
+    public void A_cancellation_caused_by_the_scope_closing_is_not_reported()
+    {
+        var background = Background.Manual();
+        var reported = new List<Exception>();
+        var previous = Background.OnError;
+        Background.OnError = (ex, _) =>
+        {
+            lock (reported) reported.Add(ex);
+        };
+
+        try
+        {
+            using var started = new ManualResetEventSlim();
+            background.RunAsync(async ct =>
+                {
+                    started.Set();
+                    await Task.Delay(millisecondsDelay: Timeout.Infinite, cancellationToken: ct);
+                }
+            );
+            Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+            background.Dispose();
+            Assert.True(Settle(background));
+            Assert.Empty(reported);
+        }
+        finally
+        {
+            Background.OnError = previous;
+        }
+    }
+
+    [Fact]
     public void A_failing_scope_does_not_stop_its_siblings_or_its_parent()
     {
         using var background = Background.Manual();

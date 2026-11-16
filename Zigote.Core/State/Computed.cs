@@ -127,10 +127,14 @@ public sealed class Computed<T> : Reaction, IReadableSignal<T>, IDisposable
         }
     }
 
-    private protected override void OnScheduled()
+    private protected override void OnScheduled(bool fromSourceWrite)
     {
         // A computed does not schedule itself; it propagates "maybe-dirty" to its own observers.
-        MarkObservers(NodeState.Check);
+        // The source-write flag travels with it: an effect that writes a signal upstream of a
+        // computed it has already read this run must re-run, exactly as if it read the signal
+        // directly. Without it the running effect drops the Check, settles Clean over a stale
+        // computed, and that computed (still Dirty) never propagates another change.
+        MarkObservers(state: NodeState.Check, fromSourceWrite: fromSourceWrite);
     }
 
     private protected override string DescribeBody() => Reactive.Describe(_named);

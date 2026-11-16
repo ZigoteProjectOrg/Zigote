@@ -486,6 +486,152 @@ public class ReactiveTests
     }
 
     [Fact]
+    public void An_effect_writing_upstream_of_a_computed_it_reads_keeps_reacting()
+    {
+        // Regression (HIGH): the self-write re-run only triggered for a signal the effect read
+        // directly. Through a computed the running effect dropped the Check, settled Clean over a
+        // computed left Dirty, and that computed never propagated another change — the effect went
+        // deaf after its first correction.
+        var s = new Signal<int>(1);
+        var doubled = Computed.From(() => s.Value * 2);
+        using var clamp = new Effect(() =>
+            {
+                if (doubled.Value > 10) s.Value = 5;
+            }
+        );
+
+        s.Value = 100;
+        Assert.Equal(expected: 5, actual: s.Value);
+        s.Value = 100;
+        Assert.Equal(expected: 5, actual: s.Value);
+        Assert.Equal(expected: 10, actual: doubled.Value);
+    }
+
+    [Fact]
+    public void A_failing_effect_does_not_cost_listeners_their_notification()
+    {
+        // With no OnError installed the drain rethrows to the writer. The value is committed by
+        // then, so a listener skipped by the unwind would hold a stale value for good.
+        var previous = Reactive.OnError;
+        Reactive.OnError = null;
+        try
+        {
+            var s = new Signal<int>(0);
+            int seen = -1;
+            int invalidated = 0;
+            using var sub = s.Subscribe(v => seen = v);
+            s.Invalidated += () => invalidated++;
+            using var bad = new Effect(() =>
+                {
+                    if (s.Value == 1) throw new InvalidOperationException("boom");
+                }
+            );
+
+            Assert.Throws<InvalidOperationException>(() => s.Value = 1);
+            Assert.Equal(expected: 1, actual: s.Peek());
+            Assert.Equal(expected: 1, actual: seen);
+            Assert.Equal(expected: 1, actual: invalidated);
+        }
+        finally
+        {
+            Reactive.OnError = previous;
+        }
+    }
+
+    [Fact]
+    public void An_effect_that_disposes_itself_still_runs_the_cleanup_of_that_run()
+    {
+        int cleanups = 0;
+        Effect? self = null;
+        var s = new Signal<int>(0);
+        self = new Effect(() =>
+            {
+                if (s.Value == 1) self!.Dispose();
+                return () => cleanups++;
+            }
+        );
+
+        s.Value = 1; // cleanup of run 1 (before the body), then of run 2 (the one that disposed)
+        Assert.Equal(expected: 2, actual: cleanups);
+        self.Dispose();
+        Assert.Equal(expected: 2, actual: cleanups);
+    }
+
+    [Fact]
+    public void A_throwing_cleanup_is_spent_and_the_effect_runs_again()
+    {
+        var previous = Reactive.OnError;
+        Reactive.OnError = _ => { };
+        try
+        {
+            var s = new Signal<int>(0);
+            int runs = 0;
+            using var e = new Effect(() =>
+                {
+                    int v = s.Value;
+                    runs++;
+                    return () =>
+                    {
+                        if (v == 0) throw new InvalidOperationException("cleanup");
+                    };
+                }
+            );
+
+            s.Value = 1; // the cleanup of run 1 throws: reported, and this run is lost
+            s.Value = 2; // ...but the cleanup must not throw again in front of every later run
+            Assert.Equal(expected: 2, actual: runs);
+        }
+        finally
+        {
+            Reactive.OnError = previous;
+        }
+    }
+
+    [Fact]
+    public void Deferred_effects_that_write_each_other_trip_the_guard()
+    {
+        // The deferred drain had no convergence guard: this spun until the queue exhausted memory.
+        var a = new Signal<int>(0);
+        var b = new Signal<int>(0);
+        using var ab = new Effect(body: () => b.Value = a.Value + 1, affinity: EffectAffinity.Deferred);
+        using var ba = new Effect(body: () => a.Value = b.Value + 1, affinity: EffectAffinity.Deferred);
+
+        a.Value = 10;
+        Assert.Throws<InvalidOperationException>(Reactive.DrainDeferred);
+    }
+
+    [Fact]
+    public void An_effect_dropped_by_an_aborted_drain_reacts_to_the_next_change()
+    {
+        // When the guard aborts a drain, effects still queued are stale with nothing scheduled.
+        // They must be rescheduled by the next change rather than read as "a run is coming".
+        var a = new Signal<int>(0);
+        var b = new Signal<int>(0);
+        var x = new Signal<int>(0);
+        int seen = -1;
+        using var bystander = new Effect(() => seen = x.Value);
+
+        var ab = new Effect(() =>
+            {
+                b.Value = a.Value + 1;
+                x.Value = b.Peek();
+            }
+        );
+        var ba = new Effect(() =>
+            {
+                a.Value = b.Value + 1;
+                x.Value = a.Peek();
+            }
+        );
+        Assert.Throws<InvalidOperationException>(() => a.Value = 1_000);
+        ab.Dispose();
+        ba.Dispose();
+
+        x.Value = -7;
+        Assert.Equal(expected: -7, actual: seen);
+    }
+
+    [Fact]
     public void A_divergent_self_writing_effect_trips_the_guard()
     {
         var s = new Signal<int>(0);
