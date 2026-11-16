@@ -65,7 +65,8 @@ public static class ScriptCompiler
         }
 
         if (!force && fingerprint != null && ReadCache(cachePath) is { } cached &&
-            cached.Fingerprint == fingerprint && cached.Dll is { } dll && File.Exists(dll))
+            cached.Fingerprint == fingerprint && cached.Dll is { } dll &&
+            IsBuildOutput(projectPath: projectPath, dll: dll) && File.Exists(dll))
         {
             return new ScriptBuildResult {
                 Success = true,
@@ -74,15 +75,17 @@ public static class ScriptCompiler
             };
         }
 
-        var psi = new ProcessStartInfo(
-            fileName: "dotnet",
-            arguments: $"build \"{projectPath}\" -c {config} --nologo"
-        ) {
+        var psi = new ProcessStartInfo("dotnet") {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        psi.ArgumentList.Add("build");
+        psi.ArgumentList.Add(projectPath);
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add(config);
+        psi.ArgumentList.Add("--nologo");
 
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
@@ -361,6 +364,26 @@ public static class ScriptCompiler
         }
 
         return list;
+    }
+
+    /// <summary>
+    ///     Whether a cached assembly path is one this project's own build could have produced: a
+    ///     file under the project's <c>bin</c> directory. The cache file travels with the project,
+    ///     so without this a downloaded project could name any DLL on the machine (or a network
+    ///     share) and have it loaded without a build ever running.
+    /// </summary>
+    internal static bool IsBuildOutput(string projectPath, string dll)
+    {
+        string bin = Path.GetFullPath(
+            Path.Combine(path1: Path.GetDirectoryName(Path.GetFullPath(projectPath))!, path2: "bin")
+        );
+        string full = Path.GetFullPath(dll);
+        return full.StartsWith(
+            value: bin + Path.DirectorySeparatorChar,
+            comparisonType: OperatingSystem.IsLinux()
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase
+        );
     }
 
     // ── Cache file ────────────────────────────────────────────────────────────

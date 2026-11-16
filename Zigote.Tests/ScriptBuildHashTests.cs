@@ -188,4 +188,39 @@ public class ScriptBuildHashTests : IDisposable
             actual: ScriptCompiler.ComputeBuildFingerprint(projectPath: proj, config: "Release")
         );
     }
+
+    [Fact]
+    public void A_cached_assembly_is_trusted_only_inside_the_projects_own_bin()
+    {
+        // The cache file ships with the project. It used to be able to name any DLL — absolute,
+        // via "..", or on a network share — and have it loaded without a build running.
+        string project = Path.Combine(path1: _root, path2: "Scripts", path3: "Game.csproj");
+        string bin = Path.Combine(path1: _root, path2: "Scripts", path3: "bin");
+
+        Assert.True(
+            ScriptCompiler.IsBuildOutput(
+                projectPath: project,
+                dll: Path.Combine(path1: bin, path2: "Debug", path3: "Game.dll")
+            )
+        );
+        Assert.False(
+            ScriptCompiler.IsBuildOutput(
+                projectPath: project,
+                dll: Path.Combine(path1: _root, path2: "evil.dll")
+            )
+        );
+        Assert.False(
+            ScriptCompiler.IsBuildOutput(
+                projectPath: project,
+                dll: Path.Combine(path1: bin, path2: "..", path3: "..", path4: "evil.dll")
+            )
+        );
+        Assert.False(
+            ScriptCompiler.IsBuildOutput(
+                projectPath: project,
+                dll: Path.Combine(path1: Path.GetTempPath(), path2: "evil.dll")
+            )
+        );
+        Assert.False(ScriptCompiler.IsBuildOutput(projectPath: project, dll: bin + "-evil/Game.dll"));
+    }
 }

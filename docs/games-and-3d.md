@@ -49,10 +49,16 @@ The manifest is small and diffable (`Zigote.Runtime.Scene.ZigoteProject`):
 | `Name` | Display name; also the exported executable name. |
 | `AssetRoot` | Asset directory, relative to the manifest. Default `assets`. |
 | `StartupScene` | Scene loaded on open and on launch. Default `assets/main.scene`. |
-| `ScriptProject` | Optional path to your gameplay `.csproj`. The editor builds it on startup and rebuilds on change. |
+| `ScriptProject` | Optional path to your gameplay `.csproj`. The editor builds it on startup and rebuilds on change — see the warning below. |
 | `RenderSettings` | A full `ZgRenderSettings3D` — environment, post-processing, shadows. Start from `RenderDefaults.Settings3D()`. Debug-only fields are deliberately not persisted. |
 | `WindowWidth` / `WindowHeight` | Standalone player window size. The editor sizes its own. |
 | `DevToolsEnabled` | Ship the <kbd>Shift</kbd>+<kbd>D</kbd> overlay with the exported game. Off by default. |
+
+> **Opening a project runs its code.** The editor builds the project's `ScriptProject` with
+> `dotnet build` as soon as the project opens — which evaluates its `.csproj` and any
+> `Directory.Build.props` / `.targets` beside it — and loads the resulting assembly. It reopens the
+> last project on launch and does the same again. There is no trust prompt yet, so treat a project
+> like any other source checkout: open one only if you would be willing to build and run it.
 
 Open one:
 
