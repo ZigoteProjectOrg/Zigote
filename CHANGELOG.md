@@ -14,6 +14,23 @@ version are two halves of one ABI; mixing versions fails at startup by design (s
 
 ## [Unreleased]
 
+### Fixed
+- `Zigote.Core`: an effect that wrote a signal upstream of a `Computed` it read stopped reacting
+  after its first run; a failing effect no longer costs `Subscribe` / `Changed` listeners their
+  notification; an effect disposed from inside its own body runs that run's cleanup; mutually
+  writing `Deferred` effects trip a convergence guard instead of spinning; `Background` reports a
+  cancellation it did not cause (an HTTP timeout) instead of swallowing it.
+- `Zigote.Persistence`: `JsonFileKeyValueStore` never replaces a file it could not read. A sharing
+  violation at startup used to be handled as corruption and cost every stored key on the next save.
+- `Zigote.UI.Adwaita`: committing an IME composition over a selection no longer strands the caret
+  (the next keystroke threw); an obscured `AdwTextField` reports a mask through semantics, does not
+  copy or cut to the clipboard, and masks the IME pre-edit and multi-line text; assigning
+  `AdwCodeEditor.Text` after layout no longer throws on the next paint; `AdwNumberInput` scrubs
+  with `Decimals` above 6.
+- `Zigote.UI.Charts`: a `NaN` sample no longer throws from line, area, point and bar marks, or
+  blanks a stack; axis tick generation terminates for values beyond double precision.
+- `Zigote.UI.Localizations`: Romanian 101, 201, 1001… select `few`.
+
 ## [0.1.0] - 2026-11-04
 
 First public release. Pairs with Zigote.Engine 0.1.0, ABI version 100.
