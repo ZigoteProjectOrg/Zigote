@@ -103,6 +103,15 @@ public static class InspectServer
     // request instead of hanging the panel.
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
+    // A command is one short line. The cap is what keeps a peer that never sends the newline from
+    // growing a string until the process dies; the longest legitimate line is an `input text …`.
+    internal const int MaxCommandBytes = 16 * 1024;
+
+    // A panel, a stream and a script or two. Each connection is a thread, so the bound is what
+    // keeps a peer that opens sockets and says nothing from exhausting them.
+    private const int MaxClients = 16;
+    private static int _clients;
+
     /// <summary>
     ///     Start listening if <c>ZIGOTE_INSPECT</c> asks for it. <paramref name="setPreview" /> is invoked
     ///     on the UI thread to swap the shown widget; null disables the <c>preview</c> command.
@@ -183,6 +192,13 @@ public static class InspectServer
             // panel watches, and a single serial loop would let one stream starve every other
             // command. Plain threads rather than the pool — a stream blocks for minutes, which is
             // exactly what pool threads are not for, and there are at most a few clients ever.
+            if (Interlocked.Increment(ref _clients) > MaxClients)
+            {
+                Interlocked.Decrement(ref _clients);
+                client.Dispose();
+                continue;
+            }
+
             new Thread(() =>
                 {
                     using (client)
@@ -200,6 +216,16 @@ public static class InspectServer
                         {
                             // The panel closed the socket mid-answer; nothing to do and nothing worth logging.
                         }
+                        catch (Exception e)
+                        {
+                            // Nothing a peer sends may end the app: an exception escaping a thread
+                            // is fatal to the process, and this one is debugging plumbing.
+                            DebugLog.Error($"zigote inspect: request failed — {e.Message}");
+                        }
+                        finally
+                        {
+                            Interlocked.Decrement(ref _clients);
+                        }
                     }
                 }
             ) {
@@ -214,20 +240,13 @@ public static class InspectServer
     {
         using var stream = client.GetStream();
         stream.ReadTimeout = (int)Timeout.TotalMilliseconds;
-        using var reader = new StreamReader(
-            stream: stream,
-            encoding: Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            bufferSize: 1024,
-            leaveOpen: true
-        );
         using var writer =
             new StreamWriter(
                 stream: stream,
                 encoding: new UTF8Encoding(false)
             ) { AutoFlush = true };
 
-        string? line = reader.ReadLine();
+        string? line = ReadCommandLine(stream: stream, budget: Timeout);
         if (line is null) return;
 
         // `@ID command …` addresses one OS window by the id `windows` reports; without it, the
@@ -300,6 +319,35 @@ public static class InspectServer
         string answer = OnUiThread(app: app, work: Work, afterFrame: command is "shot" or "input");
         writer.Write(answer);
         writer.Write('\n');
+    }
+
+    /// <summary>
+    ///     The request: one UTF-8 line, at most <see cref="MaxCommandBytes" /> long, received within
+    ///     <paramref name="budget" /> in total. Null when the peer hangs up first, sends more than
+    ///     that without a newline, or trickles bytes past the budget — the stream's own read timeout
+    ///     is per read, so on its own it lets one byte every few seconds hold a thread for ever.
+    /// </summary>
+    internal static string? ReadCommandLine(Stream stream, TimeSpan budget)
+    {
+        byte[] buffer = new byte[MaxCommandBytes];
+        int length = 0;
+        long deadline = Environment.TickCount64 + (long)budget.TotalMilliseconds;
+        while (length < buffer.Length)
+        {
+            int read = stream.Read(buffer: buffer, offset: length, count: buffer.Length - length);
+            if (read <= 0) return length > 0 ? Decode(length) : null;
+
+            int newline = Array.IndexOf(array: buffer, value: (byte)'\n', startIndex: length, count: read);
+            if (newline >= 0) return Decode(newline);
+
+            length += read;
+            if (Environment.TickCount64 > deadline) return null;
+        }
+
+        return null;
+
+        string Decode(int count) =>
+            Encoding.UTF8.GetString(bytes: buffer, index: 0, count: count).TrimEnd('\r');
     }
 
     /// <summary>The verbs that act on one window's tree, and so honour an <c>@ID</c> prefix.</summary>
@@ -522,9 +570,10 @@ public static class InspectServer
     }
 
     /// <summary>
-    ///     <c>profile [frames] [path]</c> — capture the next N frames (default 120, max 600) of
-    ///     <see cref="Profiler" /> scopes, write the Chrome-Trace JSON to <c>path</c> (default: a
-    ///     file in the temp dir), and answer with the per-scope self/total table averaged per frame
+    ///     <c>profile [frames]</c> — capture the next N frames (default 120, max 600) of
+    ///     <see cref="Profiler" /> scopes, write the Chrome-Trace JSON to a fresh file in the temp
+    ///     dir (named in the reply — the peer does not choose where this process writes), and
+    ///     answer with the per-scope self/total table averaged per frame
     ///     — the from-outside version of the devtools Profiler panel's "hottest scopes". Blocks the
     ///     socket (not the app) until the capture flushes; frames keep turning even when the app is
     ///     idle, since the loop wakes at its event-wait cadence.
@@ -539,12 +588,11 @@ public static class InspectServer
         if (parts.Length > 0 &&
             (!int.TryParse(s: parts[0], result: out frames) || frames is < 1 or > 600))
             return Error($"profile wants a frame count in 1..600, got '{argument}'");
-        string path = parts.Length > 1
-            ? parts[1]
-            : Path.Combine(
-                path1: Path.GetTempPath(),
-                path2: $"zigote_profile_{Environment.ProcessId}.json"
-            );
+        if (parts.Length > 1) return Error("profile takes a frame count and nothing else");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote_profile_{Environment.ProcessId}_{Guid.NewGuid():N}.json"
+        );
 
         var done = new TaskCompletionSource<(int Frames, List<DebugProfiler.ScopeAggregate>)>(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -886,7 +934,7 @@ public static class InspectServer
 
         string path = Path.Combine(
             path1: Path.GetTempPath(),
-            path2: $"zigote-shot-{Environment.ProcessId}.bmp"
+            path2: $"zigote-shot-{Environment.ProcessId}-{Guid.NewGuid():N}.bmp"
         );
         try
         {
@@ -1111,7 +1159,7 @@ public static class InspectServer
         stream.WriteTimeout = (int)Timeout.TotalMilliseconds; // a wedged client fails, not hangs
         string path = Path.Combine(
             path1: Path.GetTempPath(),
-            path2: $"zigote-stream-{Environment.ProcessId}-{Environment.CurrentManagedThreadId}.bmp"
+            path2: $"zigote-stream-{Environment.ProcessId}-{Guid.NewGuid():N}.bmp"
         );
         byte[]? last = null;
         byte[] lengthPrefix = new byte[4];
