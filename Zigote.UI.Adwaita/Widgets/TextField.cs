@@ -158,7 +158,26 @@ public class AdwTextField : Widget, ITextInputClient
     }
 
     /// <summary>What the field actually renders/measures — the masked form when <see cref="Obscure" />.</summary>
-    private string Visible => Obscure ? new string(c: '•', count: Text.Length) : Text;
+    private string Visible => Mask(Text);
+
+    /// <summary>
+    ///     <paramref name="text" /> as an obscured field may show it: one bullet per UTF-16 unit,
+    ///     so every index into the real text is an index into the mask. Line breaks survive, because
+    ///     the multi-line layout is built from them.
+    /// </summary>
+    private string Mask(string text)
+    {
+        if (!Obscure || text.Length == 0) return text;
+        if (!_multiline || !text.Contains('\n')) return new string(c: '•', count: text.Length);
+        return string.Create(
+            length: text.Length,
+            state: text,
+            action: static (span, source) =>
+            {
+                for (int i = 0; i < span.Length; i++) span[i] = source[i] == '\n' ? '\n' : '•';
+            }
+        );
+    }
 
     public string Hint
     {
@@ -271,13 +290,16 @@ public class AdwTextField : Widget, ITextInputClient
     {
         config.Role = SemanticsRole.TextField;
         config.Label = SemanticsLabel ?? (Hint.Length > 0 ? Hint : null);
-        config.Value = Text;
+        // An obscured field reports its mask: the semantics tree is read by assistive tech, the
+        // inspect socket and DevTools, none of which may see what the screen hides.
+        config.Value = Visible;
         config.Actions = SemanticsAction.Focus |
                          (ReadOnly ? SemanticsAction.None : SemanticsAction.SetValue);
         config.AddFlag(SemanticsFlags.Focusable)
             .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
             .AddFlag(flag: SemanticsFlags.ReadOnly, on: ReadOnly)
-            .AddFlag(flag: SemanticsFlags.Multiline, on: Multiline);
+            .AddFlag(flag: SemanticsFlags.Multiline, on: Multiline)
+            .AddFlag(flag: SemanticsFlags.Obscured, on: Obscure);
     }
 
     private void ClearSelection() => _selectionAnchor = -1;
@@ -489,14 +511,17 @@ public class AdwTextField : Widget, ITextInputClient
 
     // ── Clipboard actions ─────────────────────────────────────────────────────
 
+    // An obscured field never puts its text on the clipboard: Copy and Cut are inert, as in every
+    // platform's password entry. (Cut does not delete either — a cut that loses the text is worse.)
     private void CopyAction()
     {
-        if (HasSelection)
+        if (HasSelection && !Obscure)
             ZigoteEngine.Instance?.SetClipboard(SelectedText);
     }
 
     private void CutAction()
     {
+        if (Obscure) return;
         if (ReadOnly)
         {
             CopyAction(); // readonly: behave as Copy
@@ -654,7 +679,8 @@ public class AdwTextField : Widget, ITextInputClient
 
         if (_compositionText.Length > 0)
         {
-            string display = Text[.._compositionStart] + _compositionText + Text[_compositionEnd..];
+            string preedit = Mask(_compositionText);
+            string display = Visible[.._compositionStart] + preedit + Visible[_compositionEnd..];
             paint.AddText(
                 text: display,
                 baselineX: bx,
@@ -663,7 +689,7 @@ public class AdwTextField : Widget, ITextInputClient
                 fontSize: fs
             );
             float compositionX = bx + CaretX(_compositionStart);
-            float compositionWidth = TextMeasure.Width(text: _compositionText, fontSize: fs);
+            float compositionWidth = TextMeasure.Width(text: preedit, fontSize: fs);
             paint.AddRect(
                 bounds: new Rect(
                     x: compositionX,
@@ -830,10 +856,14 @@ public class AdwTextField : Widget, ITextInputClient
 
         // Splice the active IME pre-edit into the rendered string; the caret index follows the
         // composition's selected end so the candidate window anchors correctly.
+        // Built from the masked text throughout, so an obscured multi-line field measures, paints
+        // and hit-tests the same bullets.
         bool composing = _compositionText.Length > 0;
+        string shown = Visible;
+        string preedit = Mask(_compositionText);
         string display = composing
-            ? Text[.._compositionStart] + _compositionText + Text[_compositionEnd..]
-            : Text;
+            ? shown[.._compositionStart] + preedit + shown[_compositionEnd..]
+            : shown;
 
         int caretDisplay;
         if (composing)
@@ -894,7 +924,7 @@ public class AdwTextField : Widget, ITextInputClient
                  ln <= Math.Min(val1: lastVisible, val2: eLine);
                  ln++)
             {
-                string lt = DisplayLine(s: Text, line: ln);
+                string lt = DisplayLine(s: shown, line: ln);
                 int c0 = ln == sLine ? sCol : 0;
                 int c1 = ln == eLine ? eCol : lt.Length;
                 float x0 = innerX - _scrollX + TextMeasure.Width(
@@ -955,7 +985,7 @@ public class AdwTextField : Widget, ITextInputClient
                 text: clt[..Math.Min(val1: cCol, val2: clt.Length)],
                 fontSize: fs
             );
-            float uw = TextMeasure.Width(text: _compositionText, fontSize: fs);
+            float uw = TextMeasure.Width(text: preedit, fontSize: fs);
             float uy = innerTop + (cLine * lineH) - _scrollY + lineH - 2f;
             paint.AddRect(
                 bounds: new Rect(
@@ -1026,7 +1056,7 @@ public class AdwTextField : Widget, ITextInputClient
         float lineH = LineHeightPx(fs);
         float relY = p.Y - (Bounds.Y + Spacing.Xs) + _scrollY;
         int line = Math.Clamp(value: (int)(relY / lineH), min: 0, max: LineCount - 1);
-        string lt = DisplayLine(s: Text, line: line);
+        string lt = DisplayLine(s: Visible, line: line);
         float relX = p.X - (Bounds.X + Spacing.Sm) + _scrollX;
         return LineStartIndex(line) + ColAtX(line: lt, x: relX, fs: fs);
     }
@@ -1372,8 +1402,12 @@ public class AdwTextField : Widget, ITextInputClient
         if (ReadOnly) return;
         if (_compositionText.Length > 0)
         {
-            Text = Text[.._compositionStart] + text + Text[_compositionEnd..];
-            _cursorPos = _compositionStart + text.Length;
+            // Captured first: the Text setter cancels the composition and rewrites its range to
+            // the (clamped) caret, which is not where a composition over a selection started.
+            int start = _compositionStart;
+            int end = _compositionEnd;
+            Text = Text[..start] + text + Text[end..];
+            _cursorPos = start + text.Length;
             _compositionText = string.Empty;
             ClearSelection();
         }

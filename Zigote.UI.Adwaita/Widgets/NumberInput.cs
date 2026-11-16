@@ -187,9 +187,11 @@ public sealed class AdwNumberInput : Widget
     private void Scrub(float v)
     {
         float clamped = Math.Clamp(value: v, min: Min, max: Max);
+        // 6 is MathF.Round's own limit (a float carries ~7 significant digits); 15 is the limit of
+        // the double overload, and passing it here throws.
         float rounded = MathF.Round(
             x: clamped,
-            digits: Math.Clamp(value: Decimals, min: 0, max: 15)
+            digits: Math.Clamp(value: Decimals, min: 0, max: 6)
         );
         if (MathF.Abs(rounded - Value) < 1e-9f) return;
         _editingText = false;
