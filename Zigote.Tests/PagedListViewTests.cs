@@ -42,6 +42,42 @@ public class PagedListViewTests
     }
 
     [Fact]
+    public void NoTickerRunsOnceThereIsNothingToWaitFor()
+    {
+        // A ticker left running keeps the frame loop from ever idling and forces a full repaint
+        // every frame — for as long as the list is on screen, even after its last page.
+        var list = Mount((page, _) =>
+            Task.FromResult<IReadOnlyList<int>>(page == 0 ? [1, 2] : [])
+        );
+        Pump(list: list, rounds: 6);
+
+        Assert.True(list.Ended);
+        Assert.False(Ticker.AnyActive);
+        list.Detach();
+    }
+
+    [Fact]
+    public void ARemountedListLoadsAgain()
+    {
+        int asked = 0;
+        var list = Mount((_, _) =>
+            {
+                asked++;
+                return Task.FromResult<IReadOnlyList<int>>([]);
+            }
+        );
+        Pump(list);
+        list.Detach();
+
+        list.Attach(owner: null!, parent: null);
+        list.Refresh();
+        Pump(list);
+
+        Assert.Equal(expected: 2, actual: asked);
+        list.Detach();
+    }
+
+    [Fact]
     public void PagesLoadInOrderAndStopOnAnEmptyPage()
     {
         List<int> asked = [];
