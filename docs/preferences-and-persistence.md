@@ -99,7 +99,7 @@ Contract rules every implementation must honor:
 | Backend | File(s) | Semantics |
 | --- | --- | --- |
 | `InMemoryKeyValueStore` | none | Dictionary + lock. Tests, ephemeral runs, previews. |
-| `JsonFileKeyValueStore` | one JSON object file | Ordinal-sorted keys, indented — diff-friendly. Atomic write: `.tmp` then `File.Move(overwrite: true)`, same as `SaveStore`. `autoFlush: true` (default) persists on every mutation; `false` buffers until `Flush`/`Dispose`. A corrupt file is copied aside to `<path>.corrupt` and the store starts empty — data is quarantined, never silently destroyed, and loading never throws. |
+| `JsonFileKeyValueStore` | one JSON object file | Ordinal-sorted keys, indented — diff-friendly. Atomic write: `.tmp` then `File.Move(overwrite: true)`, same as `SaveStore`. `autoFlush: true` (default) persists on every mutation; `false` buffers until `Flush`/`Dispose`. A corrupt file is copied aside to `<path>.corrupt` and the store starts empty — data is quarantined, never silently destroyed, and loading never throws. A file that exists but cannot be *read* (sharing violation, permissions) is not corruption: the store starts empty, retries the read on later calls and merges the file under any changes made meanwhile; a save while it is still unreadable throws `IOException` instead of replacing it. |
 
 ## Zigote.Persistence.SQLite
 

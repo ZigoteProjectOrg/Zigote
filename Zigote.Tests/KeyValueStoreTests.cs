@@ -130,6 +130,82 @@ public sealed class JsonFileKeyValueStoreTests : KeyValueStoreContractTests
     }
 
     [Fact]
+    public void UnreadableFile_IsNotCorruption_KeysSurviveTheNextSave()
+    {
+        // A sharing violation at startup (a scanner, a backup, a second instance) used to be handled
+        // like corruption: the store started empty and the first Set replaced the intact file.
+        File.WriteAllText(path: FilePath, contents: """{"a":"1","b":"2"}""");
+
+        JsonFileKeyValueStore store;
+        using (new FileStream(
+                   path: FilePath,
+                   mode: FileMode.Open,
+                   access: FileAccess.ReadWrite,
+                   share: FileShare.None
+               ))
+        {
+            store = new JsonFileKeyValueStore(FilePath);
+            Assert.False(store.TryGet(key: "a", value: out _));
+
+            // Still locked: the save refuses rather than overwrite what it could not read.
+            Assert.Throws<IOException>(() => store.Set(key: "c", value: "3"));
+        }
+
+        using (store)
+        {
+            Assert.True(store.Remove("b"));
+            store.Set(key: "d", value: "4");
+        }
+
+        Assert.False(File.Exists(FilePath + ".corrupt"));
+        using var reopened = new JsonFileKeyValueStore(FilePath);
+        Assert.Equal(expected: ["a", "c", "d"], actual: reopened.Keys());
+        Assert.True(reopened.TryGet(key: "a", value: out string value));
+        Assert.Equal(expected: "1", actual: value);
+    }
+
+    [Fact]
+    public void UnreadableFile_BecomesVisibleOnceItCanBeRead()
+    {
+        File.WriteAllText(path: FilePath, contents: """{"a":"1"}""");
+
+        JsonFileKeyValueStore store;
+        using (new FileStream(
+                   path: FilePath,
+                   mode: FileMode.Open,
+                   access: FileAccess.ReadWrite,
+                   share: FileShare.None
+               ))
+            store = new JsonFileKeyValueStore(FilePath);
+
+        using (store)
+        {
+            Assert.True(store.TryGet(key: "a", value: out string value));
+            Assert.Equal(expected: "1", actual: value);
+        }
+    }
+
+    [Fact]
+    public void Clear_WhileTheFileIsUnreadable_ReplacesItOnceItCanBeWritten()
+    {
+        File.WriteAllText(path: FilePath, contents: """{"a":"1"}""");
+
+        JsonFileKeyValueStore store;
+        using (new FileStream(
+                   path: FilePath,
+                   mode: FileMode.Open,
+                   access: FileAccess.ReadWrite,
+                   share: FileShare.None
+               ))
+            store = new JsonFileKeyValueStore(path: FilePath, autoFlush: false);
+
+        using (store) store.Clear();
+
+        using var reopened = new JsonFileKeyValueStore(FilePath);
+        Assert.Empty(reopened.Keys());
+    }
+
+    [Fact]
     public void CorruptFile_IsQuarantined_StoreStartsEmpty()
     {
         File.WriteAllText(path: FilePath, contents: "{ not json ]");
