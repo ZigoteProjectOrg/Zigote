@@ -267,6 +267,8 @@ for rid in "${RIDS[@]}"; do
        ${ZIG_CPU:+-p:ZigCpu=$ZIG_CPU} \
        ${FONT_SUBSET_TOOL:+-p:FontSubsetTool=$FONT_SUBSET_TOOL} \
        -o "$dest"; then
+    # The bundle is a binary distribution of everything in the notices; they travel with it.
+    cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY-NOTICES.md" "$dest/"
     if ( cd "$OUT" && rm -f "$NAME-$rid.zip" && archive "$NAME-$rid.zip" "$(basename "$dest")" ); then
       echo "  ✅ $rid → $OUT/$NAME-$rid.zip"
     else

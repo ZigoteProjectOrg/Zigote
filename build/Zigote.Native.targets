@@ -120,7 +120,12 @@
          NativeAOT's own floor. -->
     <ZigMacosMin Condition="'$(ZigMacosMin)' == ''">12.0</ZigMacosMin>
     <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos.$(ZigMacosMin)</_ZigTriple>
-    <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
+    <!-- Linux floor: the same shape of problem. Without a version zig links whatever glibc the
+         build machine has, and the .so then refuses to load on anything older — a library built
+         on a current CI runner is unusable on the previous Debian and Ubuntu LTS releases. 2.36
+         is the floor the engine's own release archives are built to (Debian 12). -->
+    <ZigGlibcMin Condition="'$(ZigGlibcMin)' == ''">2.36</ZigGlibcMin>
+    <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu.$(ZigGlibcMin)</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
     <!-- The API suffix is mandatory: without it zig defaults Android to API 29, which disagrees
          with the NDK library directory the sysroot paths point at. -->
@@ -166,6 +171,9 @@
     <ZigCross Condition="'$(_RidOS)' == '$(_HostOS)' And '$(_RidArch)' != '' And '$(_RidArch)' != '$(_HostArch)'">true</ZigCross>
     <!-- An osx RID always passes the triple, for the OS floor above. -->
     <ZigCross Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">true</ZigCross>
+    <!-- And so does a linux RID, for the glibc floor. A build with no RID at all (dotnet build on
+         a developer machine) still links the host's glibc: that binary is not going anywhere. -->
+    <ZigCross Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">true</ZigCross>
     <ZigCross Condition="'$(_RidOS)' == 'emscripten'">true</ZigCross>
     <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
     <!-- CPU floor. A native (non-cross) build lets zig DETECT the build machine's CPU, so libzigote.so
@@ -190,12 +198,10 @@
     <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_ZigCpuArch)' == 'aarch64' And '$(_ZigCpuOS)' == 'macos'">apple_m1</ZigCpu>
     <ZigCpu Condition="'$(ZigCpu)' == ''">baseline</ZigCpu>
     <ZigCpuArg>-Dcpu=$(ZigCpu)</ZigCpuArg>
-    <!-- NOTE on glibc: a host-arch Linux build links the BUILD MACHINE's glibc, so libzigote.so
-         refuses to load on anything older — including every Flatpak runtime, whose glibc is by
-         definition not the newest. It surfaces as a DllNotFoundException naming a version symbol, so
-         it reads like a packaging mistake rather than an ABI floor. NativeAOT has the same problem for
-         the managed binary and no -Dtarget to fix it with, so the floor is set by building in a
-         container with an old glibc instead: publish.sh's container mode (build/Dockerfile.linux). -->
+    <!-- NOTE on glibc: libzigote.so gets its floor from the versioned triple above whenever a
+         linux RID is named. NativeAOT has the same problem for the MANAGED binary and no -Dtarget
+         to fix it with, so an AOT build still takes its floor from the machine it is built on:
+         publish.sh's container mode (build/Dockerfile.linux) is the answer there. -->
 
   </PropertyGroup>
 
