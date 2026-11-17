@@ -63,7 +63,7 @@ public class ZigoteProject
     public void Save(string path)
     {
         string json = JsonSerializer.Serialize(value: this, options: JsonOptions);
-        File.WriteAllText(path: path, contents: json);
+        Zigote.Core.IO.AtomicFile.WriteAllText(path: path, contents: json);
     }
 
     /// <summary>

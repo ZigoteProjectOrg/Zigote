@@ -489,8 +489,19 @@ public sealed class EditorLayout : Widget
         );
     }
 
+    // While the game runs, the scene graph holds the running game's state — moved bodies, spawned
+    // nodes — not the authored scene, which is restored on Stop. Saving it, or stepping the edit
+    // history under it, would put play-time state on disk or replay edits against the wrong tree.
+    private bool RefuseWhilePlaying(string what)
+    {
+        if (!State.IsPlaying) return false;
+        _app.ShowSnackbar($"Stop the game to {what}.");
+        return true;
+    }
+
     private void SaveScene()
     {
+        if (RefuseWhilePlaying("save the scene")) return;
         State.Scene.Save(State.ScenePath);
         State.SaveAssets();
         State.SaveProjectSettings(); // persist render settings (minus debug) into the .zigoteproj
@@ -499,6 +510,7 @@ public sealed class EditorLayout : Widget
 
     private void SaveSceneAs()
     {
+        if (RefuseWhilePlaying("save the scene")) return;
         ProjectDialogs.ShowSaveSceneAs(
             app: _app,
             currentPath: State.ScenePath,
@@ -560,6 +572,7 @@ public sealed class EditorLayout : Widget
             return;
         }
 
+        if (RefuseWhilePlaying("undo scene edits")) return;
         State.History.Undo();
         State.NotifySceneChanged();
     }
@@ -572,6 +585,7 @@ public sealed class EditorLayout : Widget
             return;
         }
 
+        if (RefuseWhilePlaying("redo scene edits")) return;
         State.History.Redo();
         State.NotifySceneChanged();
     }

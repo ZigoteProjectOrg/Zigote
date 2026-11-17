@@ -41,6 +41,12 @@ version are two halves of one ABI; mixing versions fails at startup by design (s
 - `UrlLauncher`: only absolute URLs with an allowed scheme are opened (`http`, `https`, `mailto`,
   `tel`, `sms` unless the caller names others).
 - `zigote`: a prerelease tool writes its full version (`0.2.0-rc.1`) into a new project.
+- `Zigote.UI`: `Navigator.Push` releases keyboard focus held by the route it covers (Space and
+  Enter kept firing the hidden control), and a route popped before its first frame is removed at
+  once instead of flashing in and fading out.
+- Editor: scenes, projects, prefabs and the asset registry are written atomically (new
+  `Zigote.Core.IO.AtomicFile`), and Save, Save As, Undo and Redo are refused while the game is
+  playing — a save used to write the running game's state over the authored scene.
 
 ### Changed
 - The prebuilt Linux engine targets glibc 2.36 instead of whatever the build machine had.
