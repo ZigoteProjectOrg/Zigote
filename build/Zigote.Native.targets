@@ -385,7 +385,37 @@
       <_ZigExec Condition="'$(ZigTargetOS)' == 'linux' Or '$(ZigTargetOS)' == 'windows'">$(ZigoteContainerExec)</_ZigExec>
       <_ZigExec Condition="'$(ZigTargetOS)' == 'emscripten' And '$(ZigoteContainerExec)' != ''">$(ZigoteContainerExec) $(_ZigContainerMounts)</_ZigExec>
     </PropertyGroup>
-    <Exec Command="$(_ZigExec) zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg) $(ZigPrefixArg)"
+    <PropertyGroup>
+      <_ZigBuildCommand>$(_ZigExec) zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg) $(ZigPrefixArg)</_ZigBuildCommand>
+      <!-- The FreeType build wrapper downloads the release tarball from savannah.gnu.org, and
+           zig's HTTPS client fails against that host and its mirror (TlsInitializationFailed),
+           which takes every build — CI and a release included — with it. When the build fails,
+           the same tarball is downloaded with curl, unpacked, and offered to `zig fetch`, which
+           hashes it itself and files it in the cache under that hash: a tarball that is not
+           byte-for-byte the one the wrapper pins simply never matches, and the retry fails as
+           before. (The unpacked directory, not the archive: `zig fetch` on a local archive
+           caches it with its top-level folder, which the build then rejects as a mismatch.) -->
+      <_FreeTypeTarball>freetype-2.14.3.tar.xz</_FreeTypeTarball>
+      <_FreeTypeLocal>$(ZigEngineDir)/zig-out/$(_FreeTypeTarball)</_FreeTypeLocal>
+      <_FreeTypeSource>$(ZigEngineDir)/zig-out/freetype-source</_FreeTypeSource>
+      <_FreeTypeDownload>curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/$(_FreeTypeTarball) || curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://download.savannah.gnu.org/releases/freetype/$(_FreeTypeTarball)</_FreeTypeDownload>
+    </PropertyGroup>
+    <Exec Command="$(_ZigBuildCommand)" WorkingDirectory="$(ZigEngineDir)"
+          IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_ZigExitCode" />
+    </Exec>
+    <Message Condition="'$(_ZigExitCode)' != '0'" Importance="high"
+             Text="Zigote native: the build failed — offering zig the FreeType source from a mirror and retrying once." />
+    <MakeDir Condition="'$(_ZigExitCode)' != '0'" Directories="$(_FreeTypeSource)" />
+    <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_FreeTypeDownload)"
+          WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
+    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(_FreeTypeLocal)')"
+          Command="tar -xf &quot;$(_FreeTypeLocal)&quot; -C &quot;$(_FreeTypeSource)&quot; --strip-components=1"
+          WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
+    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(_FreeTypeLocal)')"
+          Command="$(_ZigExec) zig fetch &quot;$(_FreeTypeSource)&quot;"
+          WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
+    <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_ZigBuildCommand)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode
