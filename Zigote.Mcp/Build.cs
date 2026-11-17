@@ -32,8 +32,12 @@ public static partial class Tools
 
     private static JsonObject Build(JsonObject args)
     {
+        // Rooted before it reaches the command line: the project is a bare positional, so a value
+        // such as "-p:PreBuildEvent=…" would otherwise be parsed as an MSBuild switch and run a
+        // command against whatever project sits in the working directory.
+        string project = Path.GetFullPath(StrOpt(args: args, name: "project") ?? ".");
         var argv = new List<string> {
-            "build", StrOpt(args: args, name: "project") ?? ".",
+            "build", project,
             "-nologo", "-v", "q", "-tl:off", "-clp:NoSummary", "-p:GenerateFullPaths=true",
         };
         if (StrOpt(args: args, name: "configuration") is { } config) argv.AddRange(["-c", config]);

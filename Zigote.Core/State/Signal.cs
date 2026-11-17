@@ -206,12 +206,20 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         // Cascade BEFORE firing Changed/Invalidated: a user handler is allowed to re-enter and
         // subscribe/dispose an observer of this same signal, which would otherwise mutate the observer
         // list in the middle of the walk.
-        NotifyWrite();
-
-        // A write can land mid-run (a self-writing reaction) — suspend tracking so handler reads
-        // don't become phantom dependencies of whatever reaction is executing.
-        Reactive.UntrackedInvoke(handler: Changed, value: value);
-        Reactive.UntrackedInvoke(Invalidated);
+        // The finally matters when no Reactive.OnError is installed: the drain then rethrows a
+        // failing effect to the writer, and the value is already committed — listeners that missed
+        // the notification would hold a stale value for good.
+        try
+        {
+            NotifyWrite();
+        }
+        finally
+        {
+            // A write can land mid-run (a self-writing reaction) — suspend tracking so handler
+            // reads don't become phantom dependencies of whatever reaction is executing.
+            Reactive.UntrackedInvoke(handler: Changed, value: value);
+            Reactive.UntrackedInvoke(Invalidated);
+        }
     }
 
     private sealed class Unsubscriber(Action dispose) : IDisposable
@@ -249,8 +257,16 @@ public sealed class Trigger : Source, ISignal
     {
         using (Reactive.Hold())
         {
-            NotifyWrite();
-            Reactive.UntrackedInvoke(Invalidated);
+            // Same contract as Signal.Write: a failing effect rethrown by the drain must not
+            // cost the listeners their notification.
+            try
+            {
+                NotifyWrite();
+            }
+            finally
+            {
+                Reactive.UntrackedInvoke(Invalidated);
+            }
         }
     }
 

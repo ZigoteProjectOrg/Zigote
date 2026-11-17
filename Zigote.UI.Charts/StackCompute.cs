@@ -72,6 +72,7 @@ public static class StackCompute
             for (int i = 0; i < points.Count; i++)
             {
                 (string series, var key, double value) = points[i];
+                if (!double.IsFinite(value)) continue; // a missing sample has no span
                 result[(series, key)] =
                     value >= 0
                         ? new StackedSpan(Bottom: 0, Top: value)
@@ -94,6 +95,9 @@ public static class StackCompute
         for (int i = 0; i < points.Count; i++)
         {
             (string series, var key, double value) = points[i];
+            // A missing sample is left out of its column: one NaN would otherwise poison the
+            // running sums and blank every series stacked with it.
+            if (!double.IsFinite(value)) continue;
             if (!byX.TryGetValue(key: key, value: out var column))
                 byX[key] = column = scratch?.RentColumn() ?? new Dictionary<string, double>();
             column[series] = value;

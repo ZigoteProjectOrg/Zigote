@@ -386,6 +386,7 @@ public sealed unsafe class PaintList
         _offsetX = _offsetY = 0;
         _clipDepth = _opacityDepth = _rtDepth = _transformDepth = 0;
         FreeQuadHandles();
+        ReleasePixelPins();
     }
 
     private Color ScaleAlpha(Color c) =>
@@ -960,12 +961,15 @@ public sealed unsafe class PaintList
     ///     Used by the render graph submit API. Pins the backing array of <see cref="_commands" />
     ///     directly (no per-frame copy). Cache blobs (see <see cref="EncodeUtf8" />) live on the
     ///     pinned object heap, so their address is taken without a handle; only caller-supplied
-    ///     pixel blobs are pinned, and only for the call's duration.
+    ///     pixel blobs are pinned here. Those pins are held until the list is cleared or submitted
+    ///     again, not just for the call: the renderer keeps the pointer it was handed and reads the
+    ///     pixels when it draws the frame, after this returns. Freed in between, a compacting GC
+    ///     moved the array and the renderer hashed and uploaded whatever was at the old address.
     /// </summary>
     internal void PinAndCall(PinCallback callback)
     {
+        ReleasePixelPins();
         var handles = _pinHandles;
-        handles.Clear();
         try
         {
             // Only the sparse blob entries need pointers — glyph-run commands set TextPtr at Add time
@@ -1007,11 +1011,32 @@ public sealed unsafe class PaintList
 
             fixed (byte* ptr = _buffer) callback(stream: ptr, length: (nuint)_length);
         }
-        finally
+        catch
         {
-            foreach (var h in handles) h.Free();
-            handles.Clear();
+            // Nothing was handed over (or the submit failed): there is no reader to keep them for.
+            ReleasePixelPins();
+            throw;
         }
+    }
+
+    /// <summary>The number of caller-supplied pixel arrays currently held pinned for the renderer.</summary>
+    internal int PinnedPixelBlobs => _pinHandles.Count;
+
+    // A list dropped between a submit and its next Clear would otherwise leave its pixel arrays
+    // pinned for the life of the process.
+    ~PaintList()
+    {
+        foreach (var h in _pinHandles)
+        {
+            if (h.IsAllocated)
+                h.Free();
+        }
+    }
+
+    private void ReleasePixelPins()
+    {
+        foreach (var h in _pinHandles) h.Free();
+        _pinHandles.Clear();
     }
 
     /// <summary>

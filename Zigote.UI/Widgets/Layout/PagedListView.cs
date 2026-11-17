@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 using Zigote.UI.Widgets.Controls;
 
 namespace Zigote.UI.Widgets.Layout;
@@ -21,7 +22,7 @@ namespace Zigote.UI.Widgets.Layout;
 /// <typeparam name="T">The item type the pages are made of.</typeparam>
 public sealed class PagedListView<T> : ComposedWidget
 {
-    private readonly CancellationTokenSource _cancellation = new();
+    private CancellationTokenSource _cancellation = new();
     private readonly Func<int, CancellationToken, Task<IReadOnlyList<T>>> _fetchPage;
     private readonly Func<T, int, Widget> _itemBuilder;
     private readonly List<T> _items = [];
@@ -30,6 +31,10 @@ public sealed class PagedListView<T> : ComposedWidget
     private Exception? _error;
     private int _page;
     private Task<IReadOnlyList<T>>? _pending;
+    private Ticker? _poll;
+
+    /// <summary>Whether the page ticker is running — only ever while a page is in flight.</summary>
+    internal bool IsPolling => _poll is { IsRunning: true };
 
     /// <param name="fetchPage">Loads page <c>n</c> (zero-based). Return an empty page to end the list.</param>
     /// <param name="itemBuilder">Builds the row for an item and its index.</param>
@@ -97,7 +102,10 @@ public sealed class PagedListView<T> : ComposedWidget
 
     protected override void OnMount()
     {
-        CreateTicker(_ => Poll()).Start();
+        // A retained instance can be mounted again: the token cancelled by the last Detach would
+        // otherwise leave it unable to load anything, ever.
+        if (_cancellation.IsCancellationRequested) _cancellation = new CancellationTokenSource();
+        _poll = CreateTicker(_ => Poll());
         LoadNextPage();
     }
 
@@ -146,6 +154,9 @@ public sealed class PagedListView<T> : ComposedWidget
         try
         {
             _pending = _fetchPage(arg1: _page, arg2: _cancellation.Token);
+            // Runs only while a page is in flight: a ticker left running keeps the frame loop from
+            // idling and forces a full repaint every frame.
+            _poll?.Start();
         }
         catch (Exception e)
         {
@@ -163,11 +174,12 @@ public sealed class PagedListView<T> : ComposedWidget
     {
         if (_pending is not { IsCompleted: true } finished) return;
         _pending = null;
+        _poll?.Stop();
 
         if (finished.IsFaulted)
             _error = finished.Exception?.InnerException ?? finished.Exception;
         else if (finished.IsCanceled)
-            _end = true; // cancelled with the widget; nothing more will arrive
+            return; // cancelled with the widget: not the end of the data, a remount resumes here
         else
         {
             var page = finished.Result;

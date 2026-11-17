@@ -280,5 +280,17 @@ public abstract class SeriesMark<T> : ChartMark
     protected internal readonly record struct ResolvedPoint(
         ChartValue X,
         ChartValue Y,
-        string Series);
+        string Series)
+    {
+        /// <summary>
+        ///     False when a numeric coordinate is NaN or infinite — a missing sample, which has no
+        ///     position on either axis. Marks skip such points instead of projecting them: the
+        ///     scales already keep them out of the domain, and a non-finite coordinate in a paint
+        ///     command is a hard tripwire. (The point stays in <see cref="Resolved" /> so indices
+        ///     keep lining up with <see cref="Data" />.)
+        /// </summary>
+        public bool IsPlottable =>
+            (X.Kind == ChartValueKind.Category || double.IsFinite(X.Numeric)) &&
+            (Y.Kind == ChartValueKind.Category || double.IsFinite(Y.Numeric));
+    }
 }

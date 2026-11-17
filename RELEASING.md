@@ -69,14 +69,20 @@ In this repository, on `main`:
 | Job | Runs on | Produces |
 |---|---|---|
 | `verify` | ubuntu | Nothing — fails the run early if the tag, `build/version.txt`, the changelog or the pinned engine's `build.zig.zon` disagree. |
+| `test` | ubuntu | Nothing — builds the solution and runs every test project at the tagged commit. The release is not created unless it passes. |
 | `publish` | macOS, ubuntu, windows | `zigote-editor-<rid>.zip`, a self-contained editor bundle per desktop RID. |
 | `pack-managed` | ubuntu | Every managed package (`Zigote.UI`, `Zigote.UI.Adwaita`, …, `Zigote.Cli`) plus `Zigote.Android.Support` and `Zigote.iOS.Support`, with symbols. |
 | `pack-engine` | macOS, ubuntu, windows | `Zigote.Engine.runtime.osx-arm64`, `.linux-x64`, `.win-x64` — each built natively on its own OS, which is the only way to ship the MSVC ABI on Windows. |
-| `release` | ubuntu | The GitHub release for the tag: every zip and `.nupkg`, `SHA256SUMS`, and the changelog section as the notes. |
-| `nuget` | ubuntu | Signs and pushes the packages to nuget.org — only when the `ZIGOTE_PUBLISH_NUGET` variable is `true` and the secrets below are set, and never unsigned. |
+| `release` | ubuntu | The GitHub release for the tag: every zip and `.nupkg` (author-signed when the certificate secrets are set), `SHA256SUMS` computed after signing, and the changelog section as the notes. |
+| `nuget` | ubuntu | Pushes the release's own packages to nuget.org — only when the `ZIGOTE_PUBLISH_NUGET` variable is `true`, every build leg succeeded, and every package verifies as signed. |
 
 A tag of the form `vX.Y.Z-rc.1` is a prerelease: `build/version.txt` stays at `X.Y.Z`, the suffix
 is passed through as `$(ZigoteVersionSuffix)`, and the GitHub release is marked as a prerelease.
+Tag the engine with the same prerelease tag first; its `build.zig.zon` also stays at `X.Y.Z`, and
+both workflows compare the base version only.
+
+Before the first tag of a new workflow revision, run **Release** by hand (Actions → Release → Run
+workflow) on the branch: without a tag it builds, tests and packs everything and publishes nothing.
 
 ### Publishing to NuGet
 
@@ -88,7 +94,7 @@ Turning it on needs these secrets:
 | Secret | Used for |
 |---|---|
 | `NUGET_API_KEY` | Pushing to nuget.org. Without it the `nuget` job logs that it skipped and succeeds; the packages are still on the GitHub release. |
-| `ZIGOTE_SIGN_CERT_B64` | The author-signing certificate, a PKCS#12 file as base64 (`base64 -w0 zigote-release.pfx`). |
+| `ZIGOTE_SIGN_CERT_B64` | The author-signing certificate, a PKCS#12 file as base64 (`base64 -w0 zigote-release.pfx`). Read by the `release` job, which signs before it hashes and uploads. |
 | `ZIGOTE_SIGN_CERT_PASSWORD` | Its password. |
 
 Pushing refuses to run without the certificate — the same rule as `build/pack.sh --push`. A

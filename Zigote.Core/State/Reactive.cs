@@ -259,7 +259,7 @@ public abstract class Reaction : Source
     private protected virtual void BeforeExecute() { }
 
     /// <summary>Invoked the first time this reaction is flagged stale in a cascade (was Clean).</summary>
-    private protected abstract void OnScheduled();
+    private protected abstract void OnScheduled(bool fromSourceWrite);
 
     /// <summary>Record <paramref name="source" /> as a dependency of the reaction currently running.</summary>
     internal void AddSource(Source source)
@@ -324,8 +324,15 @@ public abstract class Reaction : Source
         bool wasClean = State == NodeState.Clean || _failed;
         _failed = false;
         if (newState > State) State = newState;
-        if (wasClean) OnScheduled();
+        if (wasClean) OnScheduled(fromSourceWrite);
     }
+
+    /// <summary>
+    ///     Dropped from a drain queue without running (the drain aborted). The node is stale and
+    ///     nothing is scheduled to run it — the same position a throwing run leaves it in — so the
+    ///     next change must reschedule it rather than read the stale state as "a run is coming".
+    /// </summary>
+    internal void AbandonScheduledRun() => _failed = true;
 
     /// <summary>
     ///     Resolve to a current value/state, recomputing iff a dependency <em>actually</em> changed
@@ -918,13 +925,32 @@ public static class Reactive
             if (Deferred.Count == 0) return;
 
             Exception? firstError = null;
+            int i = 0;
+            int round = Deferred.Count; // end of the current wave, as in the inline drain
+            int guard = 0;
             // Run under a batch so writes made by these bodies coalesce into one inline drain at the end.
             EnterBatch();
             try
             {
                 // Index-based: a body may queue further deferred effects, which this same pass picks up.
-                for (int i = 0; i < Deferred.Count; i++)
+                for (; i < Deferred.Count; i++)
                 {
+                    // The inline drain's guard, for the same reason: two deferred effects that write
+                    // each other's source re-queue forever, and this loop would spin on the host's
+                    // thread, holding the graph lock, until the list exhausts memory.
+                    if (i == round)
+                    {
+                        if (++guard > MaxDrain)
+                        {
+                            throw new InvalidOperationException(
+                                $"Reactive: deferred effects did not converge after {MaxDrain} iterations — " +
+                                "a dependency cycle (an effect that writes a signal it reads)?"
+                            );
+                        }
+
+                        round = Deferred.Count;
+                    }
+
                     var e = Deferred[i];
                     e.QueuedDeferred = false;
                     try
@@ -940,6 +966,14 @@ public static class Reactive
             }
             finally
             {
+                // Aborted mid-queue (the guard, or a throwing OnError): what did not run is stale
+                // with nothing scheduled, and would otherwise never be queued again.
+                for (int k = i; k < Deferred.Count; k++)
+                {
+                    Deferred[k].QueuedDeferred = false;
+                    Deferred[k].AbandonScheduledRun();
+                }
+
                 Deferred.Clear();
                 Volatile.Write(location: ref _deferredCount, value: 0);
                 LeaveBatch();
@@ -1122,6 +1156,8 @@ public static class Reactive
         }
         finally
         {
+            // Aborted mid-queue (the guard, or a throwing OnError): see DrainDeferred.
+            for (int k = i; k < Effects.Count; k++) Effects[k].AbandonScheduledRun();
             Effects.Clear();
         }
 

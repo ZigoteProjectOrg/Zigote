@@ -8,6 +8,8 @@
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
         <OutputType>Exe</OutputType>
+        <!-- PaintListPinTests drives the pointer-taking submit callback directly. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,9 +22,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Pure-logic units under test. Referencing Core triggers the Zig build (it is the native
-             host), but the tests here are CPU-only: ABI layout, math, layout, undo, reconciliation —
-             none load the native library at runtime. -->
+        <!-- Mostly pure-logic units: ABI layout, math, layout, undo, reconciliation. About a
+             hundred tests (ECS, World, Scene, SVG, file dialogs) do call into libzigote and
+             zigote_svg, so the suite needs the native build that referencing Core triggers; without
+             it those fail with DllNotFoundException and the rest still run. -->
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
         <ProjectReference Include="..\Zigote.Cli\Zigote.Cli.csproj"/>
         <ProjectReference Include="..\Zigote.Bloc\Zigote.Bloc.csproj"/>

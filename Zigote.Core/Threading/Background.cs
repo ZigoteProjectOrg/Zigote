@@ -606,9 +606,12 @@ public sealed class Background : IDisposable
                 {
                     await body(work);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (work.IsCancellationRequested ||
+                                                         _lifetime.IsCancellationRequested)
                 {
-                    // Superseded, or the scope is closing. Both are ordinary.
+                    // Superseded, or the scope is closing. Both are ordinary. Any other cancellation
+                    // is the work's own failure (an HttpClient timeout surfaces as
+                    // TaskCanceledException) and is reported below like every other.
                 }
                 catch (Exception ex)
                 {

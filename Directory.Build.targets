@@ -26,4 +26,17 @@
       same file through $(ZigoteRoot) — see Templates.AndroidCsproj.
     -->
     <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Android.targets"/>
+    <!--
+      Every package carries the licence and the third-party notices at its root. The notices say of
+      themselves that they must accompany a binary distribution — FreeType, Assimp, libwebp,
+      tiny-skia and resvg (MPL-2.0) are compiled into the native libraries, and the managed
+      packages embed the fonts — so a package without them is not one we are entitled to ship.
+      Here rather than in Zigote.Pack.props: that file is imported before the project body, where a
+      csproj that sets IsPackable itself has not done so yet.
+    -->
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md" Pack="true" PackagePath=""
+              Visible="false"/>
+    </ItemGroup>
 </Project>

@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 namespace Zigote.UI.Widgets;
 
 /// <summary>The lifecycle phase of the async computation a <see cref="FutureBuilder{T}" /> watches.</summary>
@@ -37,6 +38,10 @@ public readonly struct AsyncSnapshot<T>(ConnectionState connectionState, T? data
 /// </summary>
 public sealed class FutureBuilder<T> : ComposedWidget
 {
+    private Ticker? _poll;
+
+    /// <summary>Whether the completion ticker is running — only ever while the task is pending.</summary>
+    internal bool IsPolling => _poll is { IsRunning: true };
     private bool _settled;
 
     public FutureBuilder(Task<T>? future, Func<BuildContext, AsyncSnapshot<T>, Widget> builder)
@@ -51,7 +56,12 @@ public sealed class FutureBuilder<T> : ComposedWidget
     protected override void OnMount()
     {
         _settled = Future is null or { IsCompleted: true };
-        CreateTicker(OnTick).Start();
+        // Only while there is something to wait for: a running ticker keeps the frame loop from
+        // idling and forces a repaint every frame, so one left running costs a full frame at
+        // vsync for as long as the widget is mounted.
+        if (_settled) return;
+        _poll = CreateTicker(OnTick);
+        _poll.Start();
     }
 
     protected override Widget Build(BuildContext context) =>
@@ -109,6 +119,7 @@ public sealed class FutureBuilder<T> : ComposedWidget
         if (Future is { IsCompleted: true })
         {
             _settled = true;
+            _poll?.Stop();
             MarkNeedsBuild();
         }
     }

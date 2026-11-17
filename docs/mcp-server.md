@@ -101,6 +101,17 @@ that is already running under a debugger, or one built with flags `launch` does 
 
 ## Boundaries worth knowing
 
+- **This server runs code as you.** `launch` and `build` compile and run whatever project they are
+  pointed at, `build`'s `args` are MSBuild arguments and `launch`'s `env` is the app's environment
+  — either can execute a command — and `raw_command` sends a line to any loopback port. That is the
+  job, not a flaw, but it means the agent driving the server has your shell: do not connect it to a
+  model that is reading content you do not trust, and review a `launch` or `build` whose project,
+  `args` or `env` you did not ask for.
+- **The inspect socket is not authenticated.** While an app runs with `ZIGOTE_INSPECT` set, any
+  process on the machine that finds the port can read its UI (obscured fields report a mask) and
+  inject input. It is a development switch: do not set it for an app handling data that other
+  local users or processes must not reach, and never in a shipped build's environment.
+
 - **Loopback only.** The inspect socket exposes the app's entire UI state and accepts synthetic
   input, so `InspectServer` binds `127.0.0.1` and nothing else. The MCP server inherits that: it
   can only drive apps on the same machine.

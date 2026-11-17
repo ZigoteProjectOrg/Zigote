@@ -43,6 +43,41 @@ public class NavigatorTests
     }
 
     [Fact]
+    public void Push_ReleasesFocusHeldByTheRouteItCovers()
+    {
+        // Covered routes stay attached, so a focused button underneath kept receiving Space and
+        // Enter after the push — firing an action on a page the user could no longer see.
+        var app = AnimatedBuilderTickTests.FakeApp();
+        var handlers = typeof(Zigote.UI.Host.App).GetField(
+            name: "_backHandlers",
+            bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+        )!;
+        handlers.SetValue(obj: app, value: Activator.CreateInstance(handlers.FieldType));
+        var home = new SizedBox(width: 10, height: 10);
+        var nav = new Navigator { Home = home };
+        nav.Attach(owner: app, parent: null);
+        var state = Mount(nav);
+        app.RequestFocus(home);
+        Assert.Same(expected: home, actual: app.FocusedWidget);
+
+        state.Push(Page<object?>());
+
+        Assert.Null(app.FocusedWidget);
+    }
+
+    [Fact]
+    public void PushThenPopBeforeTheFirstTick_RemovesTheRouteAtOnce()
+    {
+        var state = Mount(new Navigator { Home = new SizedBox(width: 10, height: 10) });
+
+        state.Push(new SizedBox(width: 10, height: 10)); // an animated route, never ticked
+        Assert.Equal(expected: 2, actual: state.History.Count);
+        state.Pop();
+
+        Assert.Single(state.History);
+    }
+
+    [Fact]
     public void Push_AddsRoute_AndBecomesCurrent()
     {
         var state = Mount(new Navigator { Home = new SizedBox(width: 10, height: 10) });

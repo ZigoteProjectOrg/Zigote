@@ -70,6 +70,10 @@ zigote create MyApp
 cd MyApp && zigote run          # the attached device if there is one, else this machine
 ```
 
+(Until the packages are on nuget.org, download the `.nupkg` files from the
+[release](https://github.com/ZigoteProjectOrg/Zigote/releases) and point a local feed at them
+first: `dotnet nuget add source <folder> -n zigote-local`.)
+
 No clone required for that: a generated app references the SDK by **version**
 (`PackageReference Include="Zigote.UI" Version="$(ZigoteSdkVersion)"`), and the native engine
 arrives as `Zigote.Engine.runtime.<rid>` — so a phone build needs no Zig toolchain and no NDK. See
@@ -282,9 +286,9 @@ the editor, and export.
 
 | Platform | Status |
 | --- | --- |
-| **macOS** (arm64, x64) | Primary development platform — built, run and tested daily. |
-| **Linux** (x64, arm64) | Builds natively in CI (`linux-x64`) and cross-compiles from any host. arm64 is wired up but sees less exercise. |
-| **Windows** (x64) | Builds natively in CI (`win-x64`, MSVC ABI). Cross-compiling from macOS/Linux uses Zig's bundled MinGW (GNU ABI). |
+| **macOS** (arm64, x64) | Primary development platform — built, run and tested daily. Prebuilt packages: `osx-arm64`; x64 builds from source. |
+| **Linux** (x64, arm64) | Built and tested in CI (`linux-x64`, glibc 2.36 or newer for the prebuilt engine) and cross-compiles from any host. arm64 is wired up, sees less exercise, and builds from source. |
+| **Windows** (x64) | Built natively at release time (`win-x64`, MSVC ABI); not yet covered by a test run. Cross-compiling from macOS/Linux uses Zig's bundled MinGW (GNU ABI). |
 | **iOS / Android** | In bring-up. Touch, lifecycle, safe area and both native builds work; the gallery runs on the iOS simulator and the Android emulator. `zigote add android` scaffolds an Android head. See [`docs/mobile.md`](docs/mobile.md). |
 | **Web** (browser-wasm) | Experimental. A UI app compiles for `browser-wasm` with the engine linked into `dotnet.native.wasm` and rendering through WebGPU: `dotnet build Zigote.UI.HelloWorld.Web -p:ZigTargetRid=browser-wasm`. Needs a WebGPU browser; single-threaded; no video or network audio yet. See [`build/Zigote.Web.targets`](build/Zigote.Web.targets). |
 

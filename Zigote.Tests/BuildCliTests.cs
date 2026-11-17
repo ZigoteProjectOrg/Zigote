@@ -219,4 +219,18 @@ public class DefaultIconTests
 
     private static byte Alpha(Png icon, int x, int y) =>
         icon.Pixels[(((y * icon.Width) + x) * 4) + 3];
+
+    [Theory]
+    [InlineData("0.2.0-rc.1+3f2a9c0", "0.2.0-rc.1")]
+    [InlineData("0.1.0+abcdef", "0.1.0")]
+    [InlineData("0.1.0", "0.1.0")]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void SdkVersion_KeepsThePrereleaseSuffixAndDropsTheCommit(string? informational,
+        string? expected) =>
+        Assert.Equal(expected: expected, actual: Sdk.FromInformational(informational));
+
+    [Fact]
+    public void SdkVersion_IsAVersionAGeneratedProjectCanCarry() =>
+        Assert.Equal(expected: Sdk.Version, actual: Sdk.ValidateVersion(Sdk.Version));
 }

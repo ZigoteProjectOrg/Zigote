@@ -142,8 +142,26 @@ public sealed class Scaffolder
 /// </summary>
 public static class Sdk
 {
-    public static string Version { get; } =
-        typeof(Sdk).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+    public static string Version { get; } = FromInformational(
+        System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
+                typeof(Sdk).Assembly
+            )?.InformationalVersion
+    ) ?? typeof(Sdk).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+
+    /// <summary>
+    ///     The package version inside an informational version (<c>0.2.0-rc.1+3f2a…</c> →
+    ///     <c>0.2.0-rc.1</c>). The assembly version cannot carry a prerelease suffix, so a prerelease
+    ///     tool that read it wrote <c>0.2.0</c> into a new project — a version that does not exist
+    ///     on any feed while only the prerelease does.
+    /// </summary>
+    internal static string? FromInformational(string? informational)
+    {
+        if (string.IsNullOrWhiteSpace(informational)) return null;
+        int build = informational.IndexOf('+');
+        string version = (build < 0 ? informational : informational[..build]).Trim();
+        return version.Length > 0 ? version : null;
+    }
 
     /// <summary>
     ///     A NuGet version the generated csproj can carry: digits and dots, optionally a

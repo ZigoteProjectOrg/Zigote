@@ -78,6 +78,7 @@ public class PointMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, 
     {
         foreach (var p in Resolved)
         {
+            if (!p.IsPlottable) continue;
             ctx.HoverPoints.Add(
                 new ChartDataPoint(
                     screenX: ctx.MapX(p.X),
@@ -104,6 +105,7 @@ public class PointMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, 
         for (int i = 0; i < Resolved.Count; i++)
         {
             var p = Resolved[i];
+            if (!p.IsPlottable) continue;
             float cx = ctx.MapX(p.X);
             float cy = p.Y.Kind == ChartValueKind.Category
                 ? ctx.MapY(p.Y)

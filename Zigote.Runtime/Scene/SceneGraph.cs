@@ -29,7 +29,7 @@ public sealed class SceneGraph
                 value: this,
                 options: MathJson.SceneOptions(true)
             );
-            File.WriteAllText(path: path, contents: json);
+            Zigote.Core.IO.AtomicFile.WriteAllText(path: path, contents: json);
         }
         finally
         {

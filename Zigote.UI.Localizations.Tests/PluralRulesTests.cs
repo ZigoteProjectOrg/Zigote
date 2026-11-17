@@ -179,7 +179,12 @@ public class PluralRulesCardinalTests
     [InlineData(2, PluralCategory.Few)]
     [InlineData(19, PluralCategory.Few)]
     [InlineData(20, PluralCategory.Other)]
-    [InlineData(101, PluralCategory.Other)]
+    [InlineData(100, PluralCategory.Other)]
+    // CLDR: n != 1 and n % 100 = 1..19 — the range starts at 1 ("101 lei", but "120 de lei").
+    [InlineData(101, PluralCategory.Few)]
+    [InlineData(119, PluralCategory.Few)]
+    [InlineData(120, PluralCategory.Other)]
+    [InlineData(1001, PluralCategory.Few)]
     [InlineData(0, PluralCategory.Few)]
     public void Romanian(int n, PluralCategory expected) => Assert.Equal(
         expected: expected,

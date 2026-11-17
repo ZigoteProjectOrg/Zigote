@@ -114,6 +114,7 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
         for (int i = 0; i < Resolved.Count; i++)
         {
             var p = Resolved[i];
+            if (!p.IsPlottable) continue;
             var (rect, _) = BarRect(ctx: ctx, p: p);
             if (rect.IsEmpty && rect.Width <= 0 && rect.Height <= 0) continue;
             var value = _horizontal ? p.X : p.Y;
@@ -141,6 +142,7 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
         for (int i = 0; i < Resolved.Count; i++)
         {
             var p = Resolved[i];
+            if (!p.IsPlottable) continue;
             var (rect, roundedEnd) = BarRect(ctx: ctx, p: p);
             if (rect.Width <= 0.01f || rect.Height <= 0.01f) continue;
 

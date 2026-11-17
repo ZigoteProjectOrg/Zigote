@@ -92,7 +92,7 @@ public static class Run
         if (options.Inspect)
         {
             Console.WriteLine(
-                "  inspect on: the app prints its port as `[inspect] listening on …` — attach the "
+                "  inspect on: the app prints its port as `zigote inspect: 127.0.0.1:PORT` — attach the "
             );
             Console.WriteLine(
                 "  Rider plugin or the MCP server to it, or Shift+D for the in-app overlay."

@@ -247,4 +247,32 @@ public class InspectServerTests
             actual: doc.RootElement.GetProperty("tree").ValueKind
         );
     }
+
+    // ── the request line ───────────────────────────────────────────────────────
+
+    private static string? Read(byte[] bytes) =>
+        InspectServer.ReadCommandLine(stream: new MemoryStream(bytes), budget: TimeSpan.FromSeconds(1));
+
+    [Fact]
+    public void A_request_is_the_first_line_and_nothing_after_it()
+    {
+        Assert.Equal(expected: "input text héllo", actual: Read("input text héllo\r\nignored\n"u8.ToArray()));
+        Assert.Equal(expected: "widgets", actual: Read("widgets"u8.ToArray())); // hung up without a newline
+        Assert.Null(Read([]));
+    }
+
+    [Fact]
+    public void A_line_longer_than_the_cap_is_refused_rather_than_buffered()
+    {
+        // The line used to be read without a limit: a peer that never sent the newline grew a
+        // string until the app ran out of memory.
+        byte[] endless = new byte[InspectServer.MaxCommandBytes * 4];
+        Array.Fill(array: endless, value: (byte)'a');
+        Assert.Null(Read(endless));
+
+        byte[] atTheCap = new byte[InspectServer.MaxCommandBytes];
+        Array.Fill(array: atTheCap, value: (byte)'a');
+        atTheCap[^1] = (byte)'\n';
+        Assert.Equal(expected: InspectServer.MaxCommandBytes - 1, actual: Read(atTheCap)!.Length);
+    }
 }

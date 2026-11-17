@@ -107,6 +107,7 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
             foreach (int i in order)
             {
                 var p = points[i];
+                if (!p.IsPlottable) continue;
                 ctx.HoverPoints.Add(
                     new ChartDataPoint(
                         screenX: ctx.MapX(p.X),
@@ -224,6 +225,7 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
                 float r = SymbolSize / 2f;
                 for (int i = 0; i < count; i++)
                 {
+                    if (!float.IsFinite(sx[i]) || !float.IsFinite(sy[i])) continue;
                     paint.AddRect(
                         bounds: new Rect(
                             x: sx[i] - r,
@@ -263,13 +265,42 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
         return count;
     }
 
-    /// <summary>Stroke a projected polyline with the chosen interpolation. Shared with AreaMark.</summary>
+    /// <summary>
+    ///     Stroke a projected polyline with the chosen interpolation. Shared with AreaMark. A
+    ///     non-finite point (a missing sample) is a gap: each run of finite points is stroked on
+    ///     its own, as <see cref="FunctionLineMark" /> does for an undefined function value.
+    /// </summary>
     internal static void StrokePolyline(ChartRenderContext ctx, ReadOnlySpan<float> sx,
         ReadOnlySpan<float> sy,
         Color color, float width, ChartInterpolation interpolation, float dash = 0f,
         float dashGap = 4f)
     {
-        if (sx.Length < 2) return;
+        int start = 0;
+        for (int i = 0; i <= sx.Length; i++)
+        {
+            if (i < sx.Length && float.IsFinite(sx[i]) && float.IsFinite(sy[i])) continue;
+            if (i - start >= 2)
+            {
+                StrokeRun(
+                    ctx: ctx,
+                    sx: sx[start..i],
+                    sy: sy[start..i],
+                    color: color,
+                    width: width,
+                    interpolation: interpolation,
+                    dash: dash,
+                    dashGap: dashGap
+                );
+            }
+
+            start = i + 1;
+        }
+    }
+
+    private static void StrokeRun(ChartRenderContext ctx, ReadOnlySpan<float> sx,
+        ReadOnlySpan<float> sy,
+        Color color, float width, ChartInterpolation interpolation, float dash, float dashGap)
+    {
 
         switch (interpolation)
         {

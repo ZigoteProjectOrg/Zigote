@@ -37,6 +37,9 @@ public sealed class Ticker : IDisposable
     public Ticker(Action<float> onTick) => _onTick = onTick;
 
     /// <summary>When true the ticker does not fire its callback even while running.</summary>
+    /// <summary>True between <see cref="Start" /> and <see cref="Stop" /> (muted or not).</summary>
+    public bool IsRunning => _running;
+
     public bool Muted
     {
         get => _muted;

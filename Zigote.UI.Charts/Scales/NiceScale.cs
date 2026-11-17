@@ -50,19 +50,34 @@ public static class NiceScale
         return (niceMin, niceMax, step);
     }
 
+    /// <summary>The most values <see cref="Ticks" /> returns; an axis never shows more.</summary>
+    public const int MaxTicks = 1000;
+
     /// <summary>
     ///     Tick values from <paramref name="min" /> to <paramref name="max" /> inclusive at
-    ///     <paramref name="step" />
-    ///     intervals.
+    ///     <paramref name="step" /> intervals — distinct, ascending, and at most
+    ///     <see cref="MaxTicks" /> of them. Empty for a non-positive step or non-finite bounds.
     /// </summary>
     public static List<double> Ticks(double min, double max, double step)
     {
         var result = new List<double>();
-        if (step <= 0) return result;
+        if (!(step > 0) || !double.IsFinite(step) || !double.IsFinite(min) || !double.IsFinite(max))
+            return result;
         // Snap to the step grid to avoid 0.30000000000000004-style labels.
         double start = Math.Ceiling((min / step) - 1e-9) * step;
-        for (double v = start; v <= max + (step * 1e-9); v += step)
-            result.Add(Math.Abs(v) < step * 1e-9 ? 0 : v);
+        double limit = max + (step * 1e-9);
+        // Counted by index, not accumulated: `v += step` stops advancing once the step is below
+        // the spacing of doubles at this magnitude (2^53 + 1 == 2^53), and the loop then ran until
+        // the list exhausted memory. The same rounding yields repeats here, which are dropped.
+        for (int i = 0; i < MaxTicks; i++)
+        {
+            double v = start + (i * step);
+            if (v > limit) break;
+            if (Math.Abs(v) < step * 1e-9) v = 0;
+            if (result.Count > 0 && v <= result[^1]) continue;
+            result.Add(v);
+        }
+
         return result;
     }
 

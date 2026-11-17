@@ -231,6 +231,91 @@ public class TextEditingTests
         Assert.Equal(expected: "文", actual: editor.Text);
     }
 
+    [Fact]
+    public void ImeComposition_CommittedOverASelection_LeavesTheCaretAfterTheCommit()
+    {
+        // Regression: the commit read the composition start after the Text setter had rewritten it
+        // to the clamped caret, so the caret landed past the end and the next keystroke threw.
+        var field = new AdwTextField { Text = "hello" };
+        field.SelectAll();
+        field.OnTextComposition(text: "に", selectionStart: 1, selectionLength: 0);
+        field.OnTextInput("に");
+        Assert.Equal(expected: "に", actual: field.Text);
+
+        field.OnTextInput("x");
+        Assert.Equal(expected: "にx", actual: field.Text);
+    }
+
+    [Fact]
+    public void ImeComposition_CommittedOverAPartialSelection_InsertsWhereTheSelectionWas()
+    {
+        // The caret sits at the END of the selection here, which is the case that used to leave
+        // it stranded mid-text ("! worl?d") instead of after the committed text.
+        var field = new AdwTextField { Text = "hello world" };
+        field.SelectAll();
+        field.OnKey(keyChar: '\0', scancode: (uint)KeyCode.Left, down: true, mods: Modifiers.None);
+        for (int i = 0; i < 5; i++) // Shift+Right ×5 selects "hello"
+            field.OnKey(keyChar: '\0', scancode: (uint)KeyCode.Right, down: true, mods: Modifiers.Shift);
+
+        field.OnTextComposition(text: "!", selectionStart: 1, selectionLength: 0);
+        field.OnTextInput("!");
+        field.OnTextInput("?");
+        Assert.Equal(expected: "!? world", actual: field.Text);
+    }
+
+    // ── Obscured (password) AdwTextField ───────────────────────────────────────────
+
+    [Fact]
+    public void ObscuredField_ReportsItsMaskThroughSemantics()
+    {
+        var field = new AdwTextField(obscureText: true) { Text = "hunter2" };
+        var config = new Zigote.UI.Semantics.SemanticsConfiguration();
+        field.DescribeSemantics(config);
+
+        Assert.Equal(expected: "•••••••", actual: config.Value);
+        Assert.True(config.Flags.HasFlag(Zigote.UI.Semantics.SemanticsFlags.Obscured));
+    }
+
+    [Fact]
+    public void ObscuredField_PaintsOnlyBullets_IncludingTheImePreEdit()
+    {
+        var field = new AdwTextField(obscureText: true) { Text = "hunter2" };
+        field.Measure(Constraints.Loose(width: 240f, height: 60f));
+        field.Layout(Offset.Zero);
+        field.OnTextComposition(text: "xyz", selectionStart: 3, selectionLength: 0);
+
+        var paint = new PaintList();
+        field.Paint(paint);
+        var runs = paint.DebugTextRuns();
+        Assert.NotEmpty(runs);
+        Assert.All(collection: runs, action: run => Assert.All(run.Text, c => Assert.Equal('•', c)));
+    }
+
+    [Fact]
+    public void ObscuredMultilineField_PaintsOnlyBullets()
+    {
+        var field = new AdwTextField(maxLines: null, obscureText: true) { Text = "top\nsecret" };
+        field.Measure(Constraints.Loose(width: 240f, height: 200f));
+        field.Layout(Offset.Zero);
+
+        var paint = new PaintList();
+        field.Paint(paint);
+        var runs = paint.DebugTextRuns();
+        Assert.Equal(expected: 2, actual: runs.Count);
+        Assert.All(collection: runs, action: run => Assert.All(run.Text, c => Assert.Equal('•', c)));
+    }
+
+    [Fact]
+    public void ObscuredField_CutIsInert()
+    {
+        // Copy and Cut never put an obscured field's text on the clipboard; a Cut that deleted
+        // without copying would lose it, so it does nothing at all.
+        var field = new AdwTextField(obscureText: true) { Text = "hunter2" };
+        field.SelectAll();
+        field.OnKey(keyChar: 'x', scancode: (uint)KeyCode.X, down: true, mods: Modifiers.Cmd);
+        Assert.Equal(expected: "hunter2", actual: field.Text);
+    }
+
     // ── Multi-line AdwTextField ────────────────────────────────────────────────────
 
     [Fact]
@@ -390,6 +475,37 @@ public class TextEditingTests
             condition: textCommands >= 3,
             userMessage: $"expected wrapped row draws plus gutter, got {textCommands}"
         );
+    }
+
+    [Fact]
+    public void CodeEditor_TextAssignedAfterLayout_PaintsTheNewDocument()
+    {
+        // Regression: assigning Text only requested a repaint, so the next Paint walked the visual
+        // rows of the previous document and indexed past the new one.
+        var editor = new AdwCodeEditor("alpha\nbeta\ngamma\ndelta");
+        editor.Measure(Constraints.Tight(width: 600f, height: 400f));
+        editor.Layout(Offset.Zero);
+        editor.Paint(new PaintList());
+
+        editor.Text = "x";
+        var paint = new PaintList();
+        editor.Paint(paint);
+
+        var texts = paint.DebugTextRuns().Select(run => run.Text).ToList();
+        Assert.Contains(expected: "x", collection: texts);
+        Assert.DoesNotContain(expected: "delta", collection: texts);
+    }
+
+    [Fact]
+    public void CodeEditor_ShorterLineAssignedAfterLayout_PaintsWithoutStaleRowRanges()
+    {
+        var editor = new AdwCodeEditor("a considerably longer first line");
+        editor.Measure(Constraints.Tight(width: 600f, height: 400f));
+        editor.Layout(Offset.Zero);
+        editor.Paint(new PaintList());
+
+        editor.Text = "short";
+        editor.Paint(new PaintList()); // a stale row would slice "short"[0..32]
     }
 
     // ── AdwCodeEditor undo / redo / save ───────────────────────────────────────────

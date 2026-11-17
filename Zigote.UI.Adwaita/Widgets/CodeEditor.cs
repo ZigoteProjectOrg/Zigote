@@ -286,9 +286,29 @@ public sealed partial class AdwCodeEditor : Widget, ITextInputClient, IKeyboardT
         _find = null;
         ClampCaret();
         ClearSelection();
+        // Both popups are anchored to a position in the document that was just replaced.
+        CloseCompletion();
+        CloseSignature();
         _scrollX = _scrollY = _targetX = _targetY = 0f; // new document starts at the top
         _scrollTicker?.Stop();
-        MarkNeedsPaint();
+        RebuildRowsIfLaidOut();
+        MarkNeedsLayout();
+    }
+
+    /// <summary>
+    ///     The visual rows index into <see cref="_lines" />, so they are rebuilt the moment the lines
+    ///     change rather than at the next Measure: Paint and hit-testing can run before it, and rows
+    ///     of the previous document index past the new one.
+    /// </summary>
+    private void RebuildRowsIfLaidOut()
+    {
+        if (Bounds.Width <= 0f) return;
+        RebuildVisualRows(
+            MathF.Max(x: _charWidth, y: Bounds.Width - _gutterWidth - (Pad * 2f))
+        );
+        _contentWidth = 0f;
+        foreach (var row in _visualRows)
+            _contentWidth = MathF.Max(x: _contentWidth, y: row.Width);
     }
 
     private void ClearSelection() => _anchorLine = -1;
@@ -519,15 +539,7 @@ public sealed partial class AdwCodeEditor : Widget, ITextInputClient, IKeyboardT
         _lineStates.Clear();
         _findLabel = null;
         if (_tokenCache.Count > (_lines.Count * 2) + 64) _tokenCache.Clear();
-        if (Bounds.Width > 0f)
-        {
-            RebuildVisualRows(
-                MathF.Max(x: _charWidth, y: Bounds.Width - _gutterWidth - (Pad * 2f))
-            );
-            _contentWidth = 0f;
-            foreach (var row in _visualRows)
-                _contentWidth = MathF.Max(x: _contentWidth, y: row.Width);
-        }
+        RebuildRowsIfLaidOut();
 
         OnChanged?.Invoke(Text);
         EnsureCaretVisible();

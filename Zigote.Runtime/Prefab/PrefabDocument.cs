@@ -22,7 +22,7 @@ public sealed class PrefabDocument
 
     [JsonInclude] public SceneNode Template { get; set; } = new("Prefab");
 
-    public void Save(string path) => File.WriteAllText(
+    public void Save(string path) => Zigote.Core.IO.AtomicFile.WriteAllText(
         path: path,
         contents: JsonSerializer.Serialize(value: this, options: MathJson.SceneOptions(true))
     );

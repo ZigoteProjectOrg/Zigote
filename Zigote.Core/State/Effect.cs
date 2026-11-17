@@ -122,15 +122,18 @@ public sealed class Effect : Reaction, IDisposable
         }
     }
 
-    private protected override void OnScheduled() => Reactive.ScheduleEffect(this);
+    private protected override void OnScheduled(bool fromSourceWrite) =>
+        Reactive.ScheduleEffect(this);
 
     private protected override string DescribeBody() => Reactive.Describe(_named);
 
     private protected override void BeforeExecute()
     {
-        // Untracked teardown of the previous run before the new one tracks.
-        _cleanup();
+        // Untracked teardown of the previous run before the new one tracks. Cleared first: a
+        // cleanup that throws has still been spent, and must not run again before every later body.
+        var cleanup = _cleanup;
         _cleanup = Noop;
+        cleanup();
     }
 
     private protected override void Execute()
@@ -141,7 +144,7 @@ public sealed class Effect : Reaction, IDisposable
         if (Affinity == EffectAffinity.Inline && Environment.CurrentManagedThreadId != _homeThread)
         {
             long t0 = Stopwatch.GetTimestamp();
-            _cleanup = _body() ?? Noop;
+            RunBody();
             double us = (Stopwatch.GetTimestamp() - t0) * 1e6 /
                         Stopwatch.Frequency;
             if (us > SlowCrossThreadUs)
@@ -156,7 +159,16 @@ public sealed class Effect : Reaction, IDisposable
             return;
         }
 #endif
-        _cleanup = _body() ?? Noop;
+        RunBody();
+    }
+
+    private void RunBody()
+    {
+        var cleanup = _body() ?? Noop;
+        // Disposed from inside its own body: Dispose already ran the previous cleanup and nothing
+        // will run this one later, so it runs now. Untracked for the same reason as in Dispose.
+        if (Disposed) Reactive.UntrackedInvoke(cleanup);
+        else _cleanup = cleanup;
     }
 
     /// <summary>

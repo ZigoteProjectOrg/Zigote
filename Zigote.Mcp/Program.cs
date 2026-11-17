@@ -107,7 +107,7 @@ public static class Program
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
             ["serverInfo"] = new JsonObject {
                 ["name"] = "zigote",
-                ["version"] = "0.2.0",
+                ["version"] = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
             },
             ["instructions"] =
                 "Drives a running Zigote app. Start one with `launch` (watch=true adds hot reload " +

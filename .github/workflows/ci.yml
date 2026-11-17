@@ -53,5 +53,11 @@ jobs:
       - name: Build
         run: dotnet build Zigote.sln -c Release
 
+      # Every test project the solution builds, not only the largest: the localization, functional
+      # and F# suites compiled here on every push and were never run.
       - name: Test
-        run: dotnet test Zigote.Tests/Zigote.Tests.csproj -c Release --no-build
+        shell: bash
+        run: |
+          for project in Zigote.Tests Zigote.UI.Localizations.Tests Zigote.UI.Functional.Tests Zigote.UI.FSharp.Tests; do
+            dotnet test "$project" -c Release --no-build
+          done

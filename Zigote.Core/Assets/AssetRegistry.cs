@@ -97,7 +97,9 @@ public sealed class AssetRegistry
             keySelector: kvp => kvp.Key.ToString(),
             elementSelector: kvp => kvp.Value
         );
-        File.WriteAllText(
+        // Atomic: Load answers a truncated file with an empty registry, and the next Save would
+        // then make that permanent — every asset reference in the project left dangling.
+        IO.AtomicFile.WriteAllText(
             path: registryPath,
             contents: JsonSerializer.Serialize(value: dict, options: JsonOpts)
         );
