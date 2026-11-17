@@ -78,6 +78,38 @@ jobs:
           echo "full=$full" >> "$GITHUB_OUTPUT"
           echo "releasing $full"
 
+  # The same build and tests as ci.yml, at the tagged commit. A tag can be pushed from a commit CI
+  # never saw (or saw red); nothing below publishes unless this passes.
+  test:
+    name: build & test (linux-x64)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Set up Rust
+        shell: bash
+        run: |
+          pinned="$(sed -n 's/^channel = "\(.*\)"/\1/p' native/zigote-svg/rust-toolchain.toml)"
+          rustup toolchain install "$pinned" --profile minimal
+          rustup default "$pinned"
+          cargo --version
+      - name: Build
+        run: dotnet build Zigote.sln -c Release
+      - name: Test
+        shell: bash
+        run: |
+          for project in Zigote.Tests Zigote.UI.Localizations.Tests Zigote.UI.Functional.Tests Zigote.UI.FSharp.Tests; do
+            dotnet test "$project" -c Release --no-build
+          done
+
   publish:
     name: publish ${{ matrix.rid }}
     needs: verify
@@ -155,9 +187,11 @@ jobs:
           cargo --version
       - name: Pack
         shell: bash
+        env:
+          SUFFIX: ${{ needs.verify.outputs.suffix }}
         run: |
           args=(--managed-only)
-          [ -n "${{ needs.verify.outputs.suffix }}" ] && args+=(--suffix "${{ needs.verify.outputs.suffix }}")
+          [ -n "$SUFFIX" ] && args+=(--suffix "$SUFFIX")
           build/pack.sh "${args[@]}"
       - uses: actions/upload-artifact@v4
         with:
@@ -205,10 +239,12 @@ jobs:
           cargo --version
       - name: Pack
         shell: bash
+        env:
+          SUFFIX: ${{ needs.verify.outputs.suffix }}
         run: |
           props=(-c Release -p:IsPackable=true "-p:ZigTargetRid=${{ matrix.rid }}"
                  "-p:SourceRevisionId=$GITHUB_SHA" "-p:PackageOutputPath=$GITHUB_WORKSPACE/artifacts/packages")
-          [ -n "${{ needs.verify.outputs.suffix }}" ] && props+=("-p:ZigoteVersionSuffix=${{ needs.verify.outputs.suffix }}")
+          [ -n "$SUFFIX" ] && props+=("-p:ZigoteVersionSuffix=$SUFFIX")
           dotnet pack build/pack/Zigote.Engine.Runtime.csproj "${props[@]}" --nologo
           ls -l artifacts/packages
       - uses: actions/upload-artifact@v4
@@ -220,15 +256,20 @@ jobs:
   # Workflow artifacts expire after 90 days and need a GitHub login to download, so a tag build that
   # stops there ships nothing anyone can actually get. Attach everything to the tag's release.
   # Not gated on every leg succeeding (fail-fast is off): a tag that only builds on two of the three
-  # OSes should still publish those two, and the missing leg is re-run on the same tag.
+  # OSes should still publish those two, and the missing leg is re-run on the same tag. It IS gated
+  # on the tests, and the NuGet push further down is gated on every leg.
   release:
-    needs: [verify, publish, pack-managed, pack-engine]
-    if: ${{ !cancelled() && needs.verify.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [verify, test, publish, pack-managed, pack-engine]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.test.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
       - uses: actions/download-artifact@v4
         with:
@@ -237,8 +278,10 @@ jobs:
 
       - name: Release notes from CHANGELOG.md
         shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          version="${{ needs.verify.outputs.version }}"
+          version="$VERSION"
           # The section between this version's heading and the next one.
           awk -v heading="## [$version]" '
             index($0, heading) == 1 { inside = 1; next }
@@ -249,9 +292,35 @@ jobs:
 
       # create-then-upload rather than a one-shot create, so re-running the workflow on an existing
       # tag replaces the assets instead of failing on "release already exists".
+      # Sign first, then hash (the rule build/pack.sh states): SHA256SUMS has to describe the bytes
+      # that are published, signature included, and the packages on the release have to be the
+      # same files that reach the feed. Without a certificate the release carries unsigned
+      # packages and the nuget job below refuses to push them.
+      - name: Sign packages
+        env:
+          ZIGOTE_SIGN_CERT_B64: ${{ secrets.ZIGOTE_SIGN_CERT_B64 }}
+          ZIGOTE_SIGN_CERT_PASSWORD: ${{ secrets.ZIGOTE_SIGN_CERT_PASSWORD }}
+          ZIGOTE_TIMESTAMPER: ${{ vars.ZIGOTE_TIMESTAMPER || 'http://timestamp.digicert.com' }}
+        shell: bash
+        run: |
+          if [ -z "$ZIGOTE_SIGN_CERT_B64" ]; then
+            echo "::notice::no signing certificate configured — the release carries unsigned packages."
+            exit 0
+          fi
+          cert="$RUNNER_TEMP/zigote-release.pfx"
+          trap 'rm -f "$cert"' EXIT
+          printf '%s' "$ZIGOTE_SIGN_CERT_B64" | base64 -d > "$cert"
+          shopt -s nullglob
+          for package in dist/*.nupkg; do
+            echo "==> sign $(basename "$package")"
+            dotnet nuget sign "$package" --certificate-path "$cert" \
+              --certificate-password "$ZIGOTE_SIGN_CERT_PASSWORD" --timestamper "$ZIGOTE_TIMESTAMPER"
+          done
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          SUFFIX: ${{ needs.verify.outputs.suffix }}
         shell: bash
         run: |
           shopt -s nullglob
@@ -261,7 +330,7 @@ jobs:
           ( cd dist && sha256sum ./*.zip ./*.nupkg ./*.snupkg 2>/dev/null | sed 's#\./##' > SHA256SUMS )
           files+=(dist/SHA256SUMS)
           prerelease=()
-          [ -n "${{ needs.verify.outputs.suffix }}" ] && prerelease=(--prerelease)
+          [ -n "$SUFFIX" ] && prerelease=(--prerelease)
           gh release create "$GITHUB_REF_NAME" --title "Zigote $GITHUB_REF_NAME" \
               --notes-file notes.md "${prerelease[@]}" ||
             echo "release $GITHUB_REF_NAME already exists — updating its assets"
@@ -274,49 +343,47 @@ jobs:
   # on purpose.
   nuget:
     name: push to NuGet
-    needs: [verify, release]
-    if: ${{ !cancelled() && needs.release.result == 'success' && vars.ZIGOTE_PUBLISH_NUGET == 'true' }}
+    needs: [verify, publish, pack-managed, pack-engine, release]
+    # Every leg, not just the release job: a push cannot be taken back, and a feed that has the
+    # managed packages of a version but not one of its engine packages is broken for that platform.
+    if: >-
+      ${{ !cancelled() && vars.ZIGOTE_PUBLISH_NUGET == 'true'
+          && needs.release.result == 'success' && needs.publish.result == 'success'
+          && needs.pack-managed.result == 'success' && needs.pack-engine.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: packages-*
-          path: packages
-          merge-multiple: true
+      # The release's own assets, not the workflow artifacts: they were signed before SHA256SUMS
+      # was written, so what is pushed here is byte-for-byte what the release lists.
+      - name: Download the released packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.nupkg' --pattern 'SHA256SUMS' --dir packages
+          ( cd packages && sha256sum --check --ignore-missing SHA256SUMS )
 
-      - name: Sign and push
+      - name: Verify and push
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-          ZIGOTE_SIGN_CERT_B64: ${{ secrets.ZIGOTE_SIGN_CERT_B64 }}
-          ZIGOTE_SIGN_CERT_PASSWORD: ${{ secrets.ZIGOTE_SIGN_CERT_PASSWORD }}
-          ZIGOTE_TIMESTAMPER: ${{ vars.ZIGOTE_TIMESTAMPER || 'http://timestamp.digicert.com' }}
         shell: bash
         run: |
           if [ -z "$NUGET_API_KEY" ]; then
             echo "::notice::NUGET_API_KEY is not set — the packages are on the GitHub release only."
             exit 0
           fi
-          if [ -z "$ZIGOTE_SIGN_CERT_B64" ]; then
-            echo "::error::refusing to push unsigned packages — set ZIGOTE_SIGN_CERT_B64 and ZIGOTE_SIGN_CERT_PASSWORD."
+          # An unsigned package in the set is exactly the one that gets pushed by accident, and the
+          # feed rejects it only after the others are already public. verify fails on any of them.
+          if ! dotnet nuget verify packages/*.nupkg; then
+            echo "::error::refusing to push — the released packages are not all signed. Set ZIGOTE_SIGN_CERT_B64 and ZIGOTE_SIGN_CERT_PASSWORD and re-run the release."
             exit 2
           fi
-          cert="$RUNNER_TEMP/zigote-release.pfx"
-          printf '%s' "$ZIGOTE_SIGN_CERT_B64" | base64 -d > "$cert"
-          for package in packages/*.nupkg; do
-            echo "==> sign $(basename "$package")"
-            dotnet nuget sign "$package" --certificate-path "$cert" \
-              --certificate-password "$ZIGOTE_SIGN_CERT_PASSWORD" --timestamper "$ZIGOTE_TIMESTAMPER"
-          done
-          # An unsigned package in the set is exactly the one that gets pushed by accident, and the
-          # feed rejects it only after the others are already public.
-          dotnet nuget verify packages/*.nupkg
           for package in packages/*.nupkg; do
             echo "==> push $(basename "$package")"
             dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json \
               --api-key "$NUGET_API_KEY" --skip-duplicate
           done
-          rm -f "$cert"
