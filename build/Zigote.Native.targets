@@ -390,9 +390,13 @@
       <!-- The FreeType build wrapper downloads the release tarball from savannah.gnu.org, which
            goes away for hours at a time and takes every build — CI and a release included — with
            it. A package is identified by the hash of its content, not by where it came from, so
-           the same tarball fetched from a mirror satisfies the build. -->
+           the same tarball obtained from a mirror satisfies the build. -->
       <_FreeTypeTarball>freetype-2.14.3.tar.xz</_FreeTypeTarball>
-      <_FreeTypeMirrors>zig fetch https://download-mirror.savannah.gnu.org/releases/freetype/$(_FreeTypeTarball) || zig fetch https://sourceforge.net/projects/freetype/files/freetype2/2.14.3/$(_FreeTypeTarball)/download</_FreeTypeMirrors>
+      <_FreeTypeLocal>$(ZigEngineDir)/zig-out/$(_FreeTypeTarball)</_FreeTypeLocal>
+      <!-- Downloaded with curl, then handed to zig as a file: zig's own HTTPS client is what
+           fails against savannah (TlsInitializationFailed), mirrors included, and it will not
+           take a SourceForge URL that does not end in the archive's extension. -->
+      <_FreeTypeDownload>curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/$(_FreeTypeTarball) || curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://download.savannah.gnu.org/releases/freetype/$(_FreeTypeTarball) || curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://download-mirror.savannah.gnu.org/releases/freetype/$(_FreeTypeTarball)</_FreeTypeDownload>
     </PropertyGroup>
     <Exec Command="$(_ZigBuildCommand)" WorkingDirectory="$(ZigEngineDir)"
           IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true">
@@ -402,7 +406,11 @@
          from its mirrors and build once more. A genuine compile error simply fails again, fast. -->
     <Message Condition="'$(_ZigExitCode)' != '0'" Importance="high"
              Text="Zigote native: the build failed — fetching FreeType from a mirror and retrying once." />
-    <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_ZigExec) $(_FreeTypeMirrors)"
+    <MakeDir Condition="'$(_ZigExitCode)' != '0'" Directories="$(ZigEngineDir)/zig-out" />
+    <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_FreeTypeDownload)"
+          WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
+    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(_FreeTypeLocal)')"
+          Command="$(_ZigExec) zig fetch &quot;$(_FreeTypeLocal)&quot;"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
     <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_ZigBuildCommand)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
