@@ -75,7 +75,7 @@ public static class Program
         if (errorList.IsVersion())
         {
             Console.Out.WriteLine(
-                $"zigote {typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}"
+                $"zigote {Sdk.Version}"
             );
             return 0;
         }
