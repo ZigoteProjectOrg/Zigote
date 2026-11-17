@@ -514,8 +514,25 @@ public sealed class Navigator : ComposedWidget
         r.OnExitComplete = () => RemoveInstant(r);
     }
 
+    /// <summary>
+    ///     Give up keyboard focus held by a widget inside this navigator. Called before a route is
+    ///     pushed over the current one: covered routes stay attached, so a focused control there
+    ///     kept receiving keys — Space or Enter went on firing a button the user could no longer see.
+    /// </summary>
+    private void ReleaseFocusInside()
+    {
+        if (_body.Owner is not { FocusedWidget: { } focused } app) return;
+        for (Widget? w = focused; w is not null; w = w.Parent)
+        {
+            if (!ReferenceEquals(objA: w, objB: _body)) continue;
+            app.ClearFocus();
+            return;
+        }
+    }
+
     private void AddPushed(Route route)
     {
+        ReleaseFocusInside();
         Install(route);
         _pushed.Add(route);
         RebuildHistory();

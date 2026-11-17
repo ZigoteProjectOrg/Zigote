@@ -125,7 +125,10 @@ public abstract class Route
     internal void StartExit()
     {
         Status = RouteStatus.Popping;
-        if (TransitionDuration <= 0f)
+        // Never shown: popped before its enter transition advanced a single tick. Reverse() treats
+        // a controller at 0 as "start from the end", which painted a route nobody had seen at full
+        // opacity and then took the whole duration to remove it.
+        if (TransitionDuration <= 0f || Transition.Progress <= 0f)
         {
             Transition.Dismiss();
             OnExitComplete?.Invoke();
