@@ -14,7 +14,7 @@ Reference `Zigote.UI.DevTools` and press **Shift+D**:
 
 ## The inspect protocol
 
-Set `ZIGOTE_INSPECT=1` and the app opens a loopback socket with one-word verbs: `widgets`, `semantics`, `props`, `shot`, `stats`, `input`, `theme`, `locale`, `preview`, `window`. It can read the live trees, capture frames and inject real input. Two clients ship:
+Set `ZIGOTE_INSPECT=0` (a port number; `0` lets the OS pick one, which the app prints) and the app opens a loopback socket with one-word verbs: `widgets`, `semantics`, `props`, `shot`, `stats`, `input`, `theme`, `locale`, `preview`, `window`. It can read the live trees, capture frames and inject real input. Two clients ship:
 
 - **The Rider plugin.** Live previews of any `[Preview]` widget, with device sizes, themes and locales.
 - **The MCP server** (`Zigote.Mcp`). Lets AI agents launch an app, look at it, tap, type and scroll.
@@ -27,7 +27,7 @@ Mark a widget with `[Preview]` and the IDE renders it on its own, without naviga
 
 | Variable | Effect |
 |---|---|
-| `ZIGOTE_INSPECT=1` | Open the inspect socket |
+| `ZIGOTE_INSPECT=0` | Open the inspect socket |
 | `ZIGOTE_DEBUG_DAMAGE=1` | Flash repainted regions |
 | `ZIGOTE_CONTINUOUS=1` | Render every frame, even when idle (for meaningful frame timings) |
 | `ZIGOTE_PLAYGROUND_PAGE=Layout` | Open this app on a given page |

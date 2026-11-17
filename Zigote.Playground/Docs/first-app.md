@@ -73,4 +73,4 @@ Try it:
 
 - `dotnet run` starts the app. `dotnet watch` adds **hot reload**: edit a `Build` method, save, and the live window updates while every widget keeps its state.
 - **Shift+D** opens DevTools if you reference `Zigote.UI.DevTools`. It shows the widget tree, layout bounds, frame timings and rebuild counters.
-- Set `ZIGOTE_INSPECT=1` and tools such as the Rider plugin or the MCP server can drive the running app (see *Tooling*).
+- Set `ZIGOTE_INSPECT=0` and tools such as the Rider plugin or the MCP server can drive the running app (see *Tooling*).

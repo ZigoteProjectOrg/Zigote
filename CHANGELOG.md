@@ -30,6 +30,24 @@ version are two halves of one ABI; mixing versions fails at startup by design (s
 - `Zigote.UI.Charts`: a `NaN` sample no longer throws from line, area, point and bar marks, or
   blanks a stack; axis tick generation terminates for values beyond double precision.
 - `Zigote.UI.Localizations`: Romanian 101, 201, 1001… select `few`.
+- `Zigote.UI`: `FutureBuilder` and `PagedListView` stop their polling ticker when nothing is
+  pending — either one used to keep the frame loop awake and repainting for as long as it was
+  mounted — and a re-attached `PagedListView` loads again.
+- `Zigote.Core`: inline image pixels stay pinned until the renderer has drawn them; a compacting GC
+  between submit and draw could move them (colour picker, gradient editor).
+- Inspect socket: `profile` no longer writes to a path chosen by the peer, the request line is
+  bounded, and a failing request cannot end the app.
+- `Zigote.Scripting`: a cached script assembly is loaded only from the project's own `bin`.
+- `UrlLauncher`: only absolute URLs with an allowed scheme are opened (`http`, `https`, `mailto`,
+  `tel`, `sms` unless the caller names others).
+- `zigote`: a prerelease tool writes its full version (`0.2.0-rc.1`) into a new project.
+
+### Changed
+- The prebuilt Linux engine targets glibc 2.36 instead of whatever the build machine had.
+- Every package and editor bundle carries `LICENSE` and `THIRD-PARTY-NOTICES.md`.
+- Releases: the tagged commit is built and tested before anything is published; packages are
+  signed before `SHA256SUMS` is written; the NuGet push takes the release's own files and needs
+  every build leg to have succeeded. CI runs every test project.
 
 ## [0.1.0] - 2026-11-04
 
@@ -84,6 +102,10 @@ First public release. Pairs with Zigote.Engine 0.1.0, ABI version 100.
   doubles as the spec and has a headless `--self-test`.
 
 ### Libraries around the kernel
+Packaged in this release: `Zigote.UI.Charts`, `Zigote.UI.DevTools` and `Zigote.UI.BottomSheet`.
+The other libraries in this section are in the repository and build with it, but are not published
+as packages yet — reference them from a clone.
+
 - `Zigote.UI.Charts`, `Zigote.UI.Localizations` (locales, plural rules, typed messages from ARB),
   `Zigote.UI.DevTools` (<kbd>Shift</kbd>+<kbd>D</kbd> overlay), `Zigote.UI.BottomSheet`,
   `Zigote.UI.Functional` (`View`), `Zigote.UI.FSharp` (`signal` / `computed` / `watch`),
@@ -99,7 +121,7 @@ First public release. Pairs with Zigote.Engine 0.1.0, ABI version 100.
 - `Zigote.Cli` (`dotnet tool install -g Zigote.Cli`): `zigote create`, `zigote add android|ios`,
   `zigote run` (attached device or simulator if there is one, else this machine; `--widget`,
   `--inspect`), `zigote build apk|aab|ipa|exe|app|appimage` with icons, one version and signing,
-  `zigote test --update-goldens`, `zigote logs`, `zigote doctor --fix`.
+  `zigote test`, `zigote logs`, `zigote doctor --fix`.
 - `Zigote.Mcp`: an MCP server over stdio through which an LLM agent launches, drives, screenshots,
   measures, builds and audits a running app over the inspect protocol.
 - `Zigote.Playground`: the documentation as an app — 32 pages with live examples compiled
@@ -113,8 +135,8 @@ First public release. Pairs with Zigote.Engine 0.1.0, ABI version 100.
   backend-agnostic render graph, in the native engine.
 - `Zigote.Runtime`, `Zigote.Game` (fixed-timestep loop), `Zigote.Scripting` (component lifecycle,
   C# hot reload), `Zigote.ECS` / `Zigote.World` / `Zigote.Save` over flecs, `Zigote.Physics2D`,
-  `Zigote.Render2D`, `Zigote.Vfx`, `Zigote.Cinematics`, and the `Zigote.Graphs.*` node graphs that
-  compile to WGSL.
+  `Zigote.Render2D`, `Zigote.Vfx`, `Zigote.Cinematics`, and the `Zigote.Graphs.*` node graphs (the
+  generated WGSL is shown in the editor; materials render through the fixed PBR pipeline for now).
 - `Zigote.Editor` with hierarchy, inspector, asset browser, viewport, timeline, a graph editor, a
   command palette and a docked code editor; glTF materials import as authored. `Zigote.Player`
   runs an exported bundle, JIT or AOT.
@@ -135,6 +157,8 @@ First public release. Pairs with Zigote.Engine 0.1.0, ABI version 100.
 
 ### Platforms
 - macOS (arm64, x64), Linux (x64, arm64) and Windows (x64) from one SDL3 + wgpu code path.
+  Prebuilt engine packages and editor bundles ship for **osx-arm64, linux-x64 and win-x64**; on an
+  Intel Mac or arm64 Linux the engine builds from source (a clone with the submodule, Zig and Rust).
 - iOS and Android in bring-up: touch, lifecycle, safe area and both native builds work; the
   gallery runs on the iOS simulator and the Android emulator.
 - The browser, experimental: a Zigote UI app compiles for `browser-wasm`, with the engine linked
