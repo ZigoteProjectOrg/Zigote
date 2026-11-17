@@ -33,6 +33,9 @@ public sealed class PagedListView<T> : ComposedWidget
     private Task<IReadOnlyList<T>>? _pending;
     private Ticker? _poll;
 
+    /// <summary>Whether the page ticker is running — only ever while a page is in flight.</summary>
+    internal bool IsPolling => _poll is { IsRunning: true };
+
     /// <param name="fetchPage">Loads page <c>n</c> (zero-based). Return an empty page to end the list.</param>
     /// <param name="itemBuilder">Builds the row for an item and its index.</param>
     /// <param name="itemHeight">Row height — the list virtualises against it.</param>

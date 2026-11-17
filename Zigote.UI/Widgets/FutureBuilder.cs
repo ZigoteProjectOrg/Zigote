@@ -39,6 +39,9 @@ public readonly struct AsyncSnapshot<T>(ConnectionState connectionState, T? data
 public sealed class FutureBuilder<T> : ComposedWidget
 {
     private Ticker? _poll;
+
+    /// <summary>Whether the completion ticker is running — only ever while the task is pending.</summary>
+    internal bool IsPolling => _poll is { IsRunning: true };
     private bool _settled;
 
     public FutureBuilder(Task<T>? future, Func<BuildContext, AsyncSnapshot<T>, Widget> builder)

@@ -52,7 +52,7 @@ public class PagedListViewTests
         Pump(list: list, rounds: 6);
 
         Assert.True(list.Ended);
-        Assert.False(Ticker.AnyActive);
+        Assert.False(list.IsPolling);
         list.Detach();
     }
 
