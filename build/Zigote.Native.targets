@@ -396,8 +396,10 @@
            before. (The unpacked directory, not the archive: `zig fetch` on a local archive
            caches it with its top-level folder, which the build then rejects as a mismatch.) -->
       <_FreeTypeTarball>freetype-2.14.3.tar.xz</_FreeTypeTarball>
-      <_FreeTypeLocal>$(ZigEngineDir)/zig-out/$(_FreeTypeTarball)</_FreeTypeLocal>
-      <_FreeTypeSource>$(ZigEngineDir)/zig-out/freetype-source</_FreeTypeSource>
+      <!-- Relative to the engine directory, which is where the commands run: the tar on a
+           Windows runner is GNU tar, and it reads the colon in "D:\…" as a remote host. -->
+      <_FreeTypeLocal>zig-out/$(_FreeTypeTarball)</_FreeTypeLocal>
+      <_FreeTypeSource>zig-out/freetype-source</_FreeTypeSource>
       <_FreeTypeDownload>curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/$(_FreeTypeTarball) || curl -fsSL --retry 2 -o "$(_FreeTypeLocal)" https://download.savannah.gnu.org/releases/freetype/$(_FreeTypeTarball)</_FreeTypeDownload>
     </PropertyGroup>
     <Exec Command="$(_ZigBuildCommand)" WorkingDirectory="$(ZigEngineDir)"
@@ -406,13 +408,13 @@
     </Exec>
     <Message Condition="'$(_ZigExitCode)' != '0'" Importance="high"
              Text="Zigote native: the build failed — offering zig the FreeType source from a mirror and retrying once." />
-    <MakeDir Condition="'$(_ZigExitCode)' != '0'" Directories="$(_FreeTypeSource)" />
+    <MakeDir Condition="'$(_ZigExitCode)' != '0'" Directories="$(ZigEngineDir)/$(_FreeTypeSource)" />
     <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_FreeTypeDownload)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
-    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(_FreeTypeLocal)')"
+    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(ZigEngineDir)/$(_FreeTypeLocal)')"
           Command="tar -xf &quot;$(_FreeTypeLocal)&quot; -C &quot;$(_FreeTypeSource)&quot; --strip-components=1"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
-    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(_FreeTypeLocal)')"
+    <Exec Condition="'$(_ZigExitCode)' != '0' And Exists('$(ZigEngineDir)/$(_FreeTypeLocal)')"
           Command="$(_ZigExec) zig fetch &quot;$(_FreeTypeSource)&quot;"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" IgnoreExitCode="true" />
     <Exec Condition="'$(_ZigExitCode)' != '0'" Command="$(_ZigBuildCommand)"
